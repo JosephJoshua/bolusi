@@ -7,7 +7,9 @@ import { Hono } from 'hono';
 import { DEFAULT_KDF_PARAMS, utf8ToBytes, verifyPinAgainst, type PinVerifier } from '@bolusi/core';
 import {
   PERSON_SESSION_HEADER,
+  zDecisionSessionRequest,
   zPersonSessionRequest,
+  type DecisionSessionResponse,
   zPullRequest,
   zPushRequest,
   type PersonSessionResponse,
@@ -23,6 +25,11 @@ import {
   personOfSession,
   usableOnDevice,
 } from '../auth/person-sessions.js';
+import {
+  approvalPinMatches,
+  DECISION_SESSION_TTL_MS,
+  hasApprovalPin,
+} from '../auth/approval-pins.js';
 import { ApiError } from '../errors.js';
 import { toVerifier } from '../identity/bundle.js';
 import { enforce, IDENTITY_LIMITS } from '../identity/rate-limits.js';
@@ -188,6 +195,45 @@ export function createSyncRouter(deps: ServerDeps) {
           );
           return { token: session.token, expiresAt: session.expiresAt, readSet: [...readSet] };
         });
+        return c.json(result);
+      })
+      // A decision session (auth/approval-pins.ts): the proof a push needs for an owner's or
+      // manager's decision on this device, opened only on the person's approval PIN.
+      .post('/decision-session', zJson(zDecisionSessionRequest), async (c) => {
+        const device = c.get('device');
+        const body = c.req.valid('json');
+        const t = deps.now();
+        enforce(
+          deps.identityRateStore.hit(
+            `person-pin-device:${device.deviceId}`,
+            IDENTITY_LIMITS.personPinPerDevice.limit,
+            IDENTITY_LIMITS.personPinPerDevice.windowMs,
+            t,
+          ),
+        );
+        const result: DecisionSessionResponse = await deps.forTenant(
+          device.tenantId,
+          async (db) => {
+            const usable = await usableOnDevice(db, device, body.userId);
+            const personal = await personalUserOf(db, device.deviceId);
+            if (!usable || (personal !== null && personal !== body.userId)) {
+              throw new ApiError('AUTH_INVALID_CREDENTIALS');
+            }
+            if (!(await hasApprovalPin(db, body.userId))) {
+              throw new ApiError('APPROVAL_PIN_NOT_SET');
+            }
+            if (!(await approvalPinMatches(deps, db, body.userId, body.approvalPin, t))) {
+              throw new ApiError('AUTH_INVALID_CREDENTIALS');
+            }
+            return mintPersonSession(db, {
+              tenantId: device.tenantId,
+              deviceId: device.deviceId,
+              userId: body.userId,
+              now: t,
+              decision: { ttlMs: DECISION_SESSION_TTL_MS },
+            });
+          },
+        );
         return c.json(result);
       })
       .delete('/person-session', async (c) => {

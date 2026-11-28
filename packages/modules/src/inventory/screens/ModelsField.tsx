@@ -3,7 +3,7 @@
  * letters, tap the model. A phone the catalog does not know can still be added as typed. Picked
  * models list above the search, each with a way to take it off.
  */
-import { ListRow, SearchField, TextButton, color, space, type, Text } from '@bolusi/ui';
+import { ListRow, SearchField, TextButton, color, space, type, Text, Rows } from '@bolusi/ui';
 import { StyleSheet, View } from 'react-native';
 import { useState } from 'react';
 
@@ -40,21 +40,23 @@ export function ModelsField({
   return (
     <View testID={testID}>
       <Text style={styles.label}>{label}</Text>
-      {value.map((fit, i) => (
-        <ListRow
-          key={fitKey(fit)}
-          primaryText={fitLabel(fit)}
-          trailing={
-            <TextButton
-              label={ti('inventory.form.removeFit')}
-              accessibilityLabel={`${ti('inventory.form.removeFit')} ${fitLabel(fit)}`}
-              onPress={() => onChange(value.filter((_, j) => j !== i))}
-              testID={`${testID}.remove.${String(i)}`}
-            />
-          }
-          testID={`${testID}.picked.${String(i)}`}
-        />
-      ))}
+      <Rows>
+        {value.map((fit, i) => (
+          <ListRow
+            key={fitKey(fit)}
+            primaryText={fitLabel(fit)}
+            trailing={
+              <TextButton
+                label={ti('inventory.form.removeFit')}
+                accessibilityLabel={`${ti('inventory.form.removeFit')} ${fitLabel(fit)}`}
+                onPress={() => onChange(value.filter((_, j) => j !== i))}
+                testID={`${testID}.remove.${String(i)}`}
+              />
+            }
+            testID={`${testID}.picked.${String(i)}`}
+          />
+        ))}
+      </Rows>
       {full ? null : (
         <View style={value.length === 0 ? null : styles.search}>
           <SearchField
@@ -67,23 +69,25 @@ export function ModelsField({
           />
         </View>
       )}
-      {suggestions.map((option) => (
-        <ListRow
-          key={option.key}
-          primaryText={option.model}
-          secondaryText={option.caption}
-          onPress={() => add(option)}
-          testID={`${testID}.option.${option.key}`}
-        />
-      ))}
-      {offerTyped && !full ? (
-        <ListRow
-          primaryText={ti('inventory.form.addTyped', { model: typed })}
-          secondaryText={hasCatalog ? ti('inventory.form.notInCatalog') : undefined}
-          onPress={() => add({ brand: '', model: typed })}
-          testID={`${testID}.typed`}
-        />
-      ) : null}
+      <Rows>
+        {suggestions.map((option) => (
+          <ListRow
+            key={option.key}
+            primaryText={option.model}
+            secondaryText={option.caption}
+            onPress={() => add(option)}
+            testID={`${testID}.option.${option.key}`}
+          />
+        ))}
+        {offerTyped && !full ? (
+          <ListRow
+            primaryText={ti('inventory.form.addTyped', { model: typed })}
+            secondaryText={hasCatalog ? ti('inventory.form.notInCatalog') : undefined}
+            onPress={() => add({ brand: '', model: typed })}
+            testID={`${testID}.typed`}
+          />
+        ) : null}
+      </Rows>
     </View>
   );
 }

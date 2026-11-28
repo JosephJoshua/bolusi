@@ -599,6 +599,61 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     ),
   },
 
+  // Approval PINs: only one's own is set, so any other person, of this tenant or another, is
+  // refused alike (apps/server/test/integration/sync/approval-pin.test.ts).
+  'PUT /v1/users/:userId/approval-pin': {
+    crossTenant: { kind: 'denied', verdict: PERMISSION_DENIED, rule: RULE_CROSS_TENANT },
+    crossTenantRequest: (ctx) => ({
+      path: `/v1/users/${ctx.tenantBUserId}/approval-pin`,
+      init: {
+        method: 'PUT',
+        headers: actingHeaders(ctx, ctx.tenantAUserId),
+        body: JSON.stringify({ pin: '730264' }),
+      },
+      foreignId: ctx.tenantBUserId,
+    }),
+    unassignedStore: { kind: 'denied', verdict: PERMISSION_DENIED, rule: RULE_UNASSIGNED_STORE },
+    unassignedStoreRequest: (ctx) => ({
+      path: `/v1/users/${ctx.tenantAStore2UserId}/approval-pin`,
+      init: {
+        method: 'PUT',
+        headers: actingHeaders(ctx, ctx.tenantAUserId),
+        body: JSON.stringify({ pin: '730264' }),
+      },
+    }),
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg(
+      'PUT',
+      (ctx) => `/v1/users/${ctx.tenantBUserId}/approval-pin`,
+    ),
+  },
+  'POST /v1/users/:userId/approval-pin/clear': {
+    crossTenant: { kind: 'denied', verdict: NOT_FOUND, rule: RULE_CROSS_TENANT },
+    crossTenantRequest: (ctx) => ({
+      path: `/v1/users/${ctx.tenantBUserId}/approval-pin/clear`,
+      init: {
+        method: 'POST',
+        headers: actingHeaders(ctx, ctx.tenantAUserId),
+        body: JSON.stringify({ pin: '730264' }),
+      },
+      foreignId: ctx.tenantBUserId,
+    }),
+    unassignedStore: { kind: 'denied', verdict: PERMISSION_DENIED, rule: RULE_UNASSIGNED_STORE },
+    unassignedStoreRequest: (ctx) => ({
+      path: `/v1/users/${ctx.tenantAStore2UserId}/approval-pin/clear`,
+      init: {
+        method: 'POST',
+        headers: actingHeaders(ctx, ctx.tenantAUserId),
+        body: JSON.stringify({ pin: '730264' }),
+      },
+    }),
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg(
+      'POST',
+      (ctx) => `/v1/users/${ctx.tenantBUserId}/approval-pin/clear`,
+    ),
+  },
+
   // ── tenant ────────────────────────────────────────────────────────────────────────────────────
   'PATCH /v1/tenant/settings': {
     crossTenant: { kind: 'denied', verdict: ACTING_USER_INVALID, rule: RULE_CROSS_TENANT },
@@ -660,6 +715,19 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     },
     unauthenticated: UNAUTH_DENIED,
     unauthenticatedRequest: unauthLeg('POST', () => '/v1/sync/person-session'),
+  },
+  'POST /v1/sync/decision-session': {
+    crossTenant: {
+      kind: 'dedicated',
+      assertion:
+        'decision-session: a person who does not work at the device’s store, in any tenant, answers AUTH_INVALID_CREDENTIALS like a wrong approval PIN',
+    },
+    unassignedStore: {
+      kind: 'dedicated',
+      assertion: 'same leg — store membership is checked first',
+    },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg('POST', () => '/v1/sync/decision-session'),
   },
   'DELETE /v1/sync/person-session': {
     crossTenant: {

@@ -9,7 +9,6 @@ import { t, translateErrorCode } from '@bolusi/i18n';
 import {
   ActionChip,
   AppShell,
-  border,
   Button,
   ChipRow,
   color,
@@ -297,6 +296,7 @@ export function PartList({
         keyExtractor={(row) => row.id}
         onEndReached={loaded?.hasMore === true ? () => setPages((n) => n + 1) : undefined}
         renderRow={renderRow}
+        edgeToEdge
         testID={`${testID}.items`}
       />
     </AppShell>
@@ -380,8 +380,6 @@ const styles = StyleSheet.create({
     marginHorizontal: -space.lg,
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   rowText: { flex: 1 },
   name: { ...type.bodyBold, color: color.text },

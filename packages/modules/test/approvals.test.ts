@@ -4,10 +4,11 @@
 // its control: the same step by someone allowed, or before the servisan moved on.
 import { afterEach, beforeAll, describe, expect, test } from 'vitest';
 
-import { DomainError, refusalKeyOf } from '@bolusi/core';
+import { bindModulePort, DomainError, refusalKeyOf } from '@bolusi/core';
 import { formatMoney, initI18n } from '@bolusi/i18n';
 
 import { describeRepairApproval } from '../src/repair/approval-copy.js';
+import { repairModule } from '../src/repair/manifest.js';
 import { cancelFeeRequest } from '../src/repair/cancel-fee-ask.js';
 import { tn } from '../src/repair/i18n.js';
 import {
@@ -229,6 +230,59 @@ describe('a discount asked for by the counter', () => {
       ),
       'approvals.refusal.notNeeded',
     );
+  });
+});
+
+describe('the approval PIN prompt', () => {
+  const portOf = (userId: string) =>
+    bindModulePort(repairModule, h!.runtime, {
+      tenantId: h!.tenantId,
+      storeId: h!.storeId,
+      deviceId: h!.deviceId,
+      userId,
+    });
+
+  test('a refused decision asks its maker once, and saves once their PIN opened a session', async () => {
+    let proven = false;
+    const asked: string[] = [];
+    h = await openRepairHarness(9511, undefined, {
+      decisionProven: () => proven,
+      askDecision: (userId) => {
+        asked.push(userId);
+        proven = true;
+        return Promise.resolve(true);
+      },
+    });
+    const ticketId = await openTicket(h);
+    await portOf(h.ownerId).run('cancelTicket', { ticketId, reason: 'Batal' });
+    expect(asked).toEqual([h.ownerId]);
+    // Within the session's minutes the next decision does not ask again.
+    const second = await openTicket(h);
+    await portOf(h.ownerId).run('cancelTicket', { ticketId: second, reason: 'Batal' });
+    expect(asked).toEqual([h.ownerId]);
+  });
+
+  test('a prompt closed without the PIN, or a session that did not open, leaves it refused', async () => {
+    let answer = false;
+    const asked: string[] = [];
+    h = await openRepairHarness(9512, undefined, {
+      decisionProven: () => false,
+      askDecision: (userId) => {
+        asked.push(userId);
+        return Promise.resolve(answer);
+      },
+    });
+    const ticketId = await openTicket(h);
+    for (const opened of [false, true]) {
+      answer = opened;
+      await refused(
+        portOf(h.ownerId).run('cancelTicket', { ticketId, reason: 'Batal' }),
+        'platform.refusal.decisionNeedsPin',
+        'PERMISSION_DENIED',
+      );
+    }
+    // Asked once per try: a second refusal is not asked again.
+    expect(asked).toEqual([h.ownerId, h.ownerId]);
   });
 });
 

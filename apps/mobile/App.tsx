@@ -17,6 +17,7 @@ import {
   space,
   useViewport,
   type TabBarTab,
+  Rows,
 } from '@bolusi/ui';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -58,6 +59,10 @@ import {
   type EnrollmentState,
 } from '@bolusi/device/models/enrollment/model';
 import type { EnrollmentController } from '@bolusi/device/bootstrap/enrollment';
+import {
+  ApprovalPinScreen,
+  type ApprovalPinScreenProps,
+} from './src/screens/pin/ApprovalPinScreen.js';
 import { ChangePinScreen } from './src/screens/pin/ChangePinScreen.js';
 import { useLatestCallback } from './src/hooks/useLatestCallback.js';
 import { StaffPinScreen } from './src/screens/pin/StaffPinScreen.js';
@@ -186,6 +191,10 @@ export interface AppProps {
   readonly scan?: ScanSurface | null;
   /** The video recorder or player while one is open, from `useVideoHost`; like `capture`. */
   readonly video?: VideoSurface | null;
+  /** The approval PIN prompt or its setup while open, from `useApprovalPinHost`; like `capture`. */
+  readonly approval?: ApprovalPinScreenProps | null;
+  /** Settings › PIN persetujuan, for someone who makes decisions here; absent hides the row. */
+  readonly onOpenApprovalPin?: (() => void) | undefined;
   /**
    * The notes module surface at the `home` route (task 96). A `NotesRuntime` bound over the composed
    * command/query runtimes + media client + a session identity (04 §7). `undefined` until a live
@@ -707,9 +716,14 @@ export default function App(props: AppProps): React.JSX.Element {
   const signatureSurface = props.signature ?? null;
   const scanSurface = props.scan ?? null;
   const videoSurface = props.video ?? null;
+  const approvalSurface = props.approval ?? null;
   const goBack = useCallback((): boolean => {
     if (accountMenu) {
       setAccountMenu(false);
+      return true;
+    }
+    if (approvalSurface !== null) {
+      approvalSurface.onDone(false);
       return true;
     }
     // A capture owns the screen while it runs (see the early return below), so back IS its cancel —
@@ -788,6 +802,7 @@ export default function App(props: AppProps): React.JSX.Element {
     signatureSurface,
     scanSurface,
     videoSurface,
+    approvalSurface,
     syncReturn,
   ]);
 
@@ -1065,8 +1080,11 @@ export default function App(props: AppProps): React.JSX.Element {
   const signing = zone.kind === 'shell' ? signatureSurface : null;
   const scanning = zone.kind === 'shell' ? scanSurface : null;
   const filming = zone.kind === 'shell' ? videoSurface : null;
+  const approving = zone.kind === 'shell' ? approvalSurface : null;
   const modal =
-    capture !== null ? (
+    approving !== null ? (
+      <ApprovalPinScreen {...approving} />
+    ) : capture !== null ? (
       <CaptureScreen
         // Already-localized, per `CaptureScreenProps.title`. `media.action.takePhoto` is the
         // catalog's own name for this action ("Ambil foto") — no new key, no hardcoded string.
@@ -1341,6 +1359,7 @@ export default function App(props: AppProps): React.JSX.Element {
                   onBack={() => setRoute('home')}
                   onOpenSwitcher={() => setSwitching(true)}
                   onOpenChangePin={() => setRoute('changePin')}
+                  onOpenApprovalPin={props.onOpenApprovalPin}
                   onRenameDevice={
                     props.onRenameDevice === undefined ? undefined : () => setRoute('renameDevice')
                   }
@@ -1787,7 +1806,7 @@ export default function App(props: AppProps): React.JSX.Element {
           onClose={() => setAccountMenu(false)}
           testID="account-menu"
         >
-          <View style={styles.menuRows}>
+          <Rows style={styles.menuRows}>
             <ListRow
               leading={<Icon name="switchUser" size={size.iconInline} color={color.text} />}
               primaryText={t('core.account.switchUser')}
@@ -1809,7 +1828,7 @@ export default function App(props: AppProps): React.JSX.Element {
               }}
               testID="shell-open-settings"
             />
-          </View>
+          </Rows>
         </Sheet>
       ) : null}
       {props.onAnswerNotifications != null &&

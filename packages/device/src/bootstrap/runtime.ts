@@ -111,6 +111,12 @@ export interface AppRuntime {
    * Late-bound like the scheduler, because the media client starts after the runtime exists.
    */
   bindMediaAttached(notify: (() => void) | null): void;
+  /**
+   * The app's approval PIN prompt: asked when an owner's or manager's decision on a shared device
+   * was refused for want of one, resolving whether a decision session opened. Late-bound like the
+   * scheduler, because the prompt mounts with the shell. Null: the refusal reaches the screen.
+   */
+  bindDecisionPrompt(prompt: ((userId: string) => Promise<boolean>) | null): void;
 }
 
 /**
@@ -120,9 +126,6 @@ export interface AppRuntime {
  * (08 §2.2), one engine over the same registry — and closed over by `runtimeFor`, so every runtime
  * this app builds writes through the same append/projection atom (04 §5.1 steps 5–6).
  */
-/** How long a decision's save waits for the person's session to open (it holds the write). */
-const PROOF_WAIT_MS = 8_000;
-
 export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRuntime {
   const evaluator = new PermissionEvaluator(
     app.registry.permissions,
@@ -134,6 +137,7 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
   // transaction, so the media drain only ever uploads evidence a signed op committed to (06 §4).
   // Pulled ops never pass through here, and a foreign device's media has no local row anyway.
   let mediaAttached: (() => void) | null = null;
+  let decisionPrompt: ((userId: string) => Promise<boolean>) | null = null;
   const applyProjection: ProjectionApply = async (op) => {
     await projectAppended(op);
     // A type the device does not hold folds in the signed-in person's store instead (person-access).
@@ -176,6 +180,9 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
     bindSyncScheduler(next: SyncSchedulerPort | null): void {
       boundScheduler = next;
     },
+    bindDecisionPrompt(prompt: ((userId: string) => Promise<boolean>) | null): void {
+      decisionPrompt = prompt;
+    },
     bindMediaAttached(notify: (() => void) | null): void {
       mediaAttached = notify;
     },
@@ -196,20 +203,13 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
         syncScheduler,
         search,
         // An owner's or manager's decision is saved on a shared device only while the server has
-        // checked their PIN here, as the server requires (person-access.ts, oplog/steps/decision.ts).
-        // Just after sign-in the session may still be opening: the save waits for it, briefly.
-        decisionProven: async (userId) => {
-          if (personalUserId === undefined || personalUserId === userId) return true;
-          if (app.person.canProve(userId)) return true;
-          let timer: ReturnType<typeof setTimeout> | undefined;
-          const proof = await Promise.race([
-            app.person.sessionFor(userId),
-            new Promise<null>(
-              (resolve) => (timer = setTimeout(() => resolve(null), PROOF_WAIT_MS)),
-            ),
-          ]).finally(() => clearTimeout(timer));
-          return proof !== null;
-        },
+        // checked their approval PIN here, as the server requires (oplog/steps/decision.ts). A
+        // personal phone proves its own person; a shared device, a decision session opened on the
+        // approval PIN (person-access.ts `openDecision`). Without one the save is refused at once,
+        // the bound prompt asks for the approval PIN, and the command runs once more (core port.ts).
+        decisionProven: (userId) =>
+          personalUserId === undefined || personalUserId === userId || app.person.canProve(userId),
+        askDecision: () => decisionPrompt,
         // A query touching data that is not here says so (`NOT_ON_DEVICE`), after waiting for a
         // pull of the person's store that is under way.
         dataHere: {

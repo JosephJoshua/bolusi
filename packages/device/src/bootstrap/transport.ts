@@ -14,6 +14,8 @@
 import { SyncTransportError, type SyncTransportPort } from '@bolusi/core';
 import {
   PERSON_SESSION_HEADER,
+  type DecisionSessionRequest,
+  type DecisionSessionResponse,
   type PersonSessionRequest,
   type PersonSessionResponse,
   type PullRequest,
@@ -179,6 +181,8 @@ export function createFetchSyncTransport(config: SyncTransportConfig): SyncTrans
  */
 export interface PersonTransportPort {
   open(request: PersonSessionRequest): Promise<PersonSessionResponse>;
+  /** A decision session, on the approval PIN only the server checks (server auth/approval-pins.ts). */
+  openDecision(request: DecisionSessionRequest): Promise<DecisionSessionResponse>;
   pull(token: string, request: PullRequest): Promise<PullResponse>;
   end(token: string): Promise<void>;
   /** Send this device's PIN changes still waiting for the server (they precede a PIN check). */
@@ -191,6 +195,8 @@ export function createFetchPersonTransport(
   const send = deviceRequester(config);
   return {
     open: (request) => send<PersonSessionResponse>('POST', '/v1/sync/person-session', request),
+    openDecision: (request) =>
+      send<DecisionSessionResponse>('POST', '/v1/sync/decision-session', request),
     pull: (token, request) =>
       send<PullResponse>('POST', '/v1/sync/pull', request, { [PERSON_SESSION_HEADER]: token }),
     end: (token) =>

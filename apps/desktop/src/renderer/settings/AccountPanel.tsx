@@ -15,16 +15,19 @@ import { newPinPadKey } from '@bolusi/device/models/pin/new-pin';
 import { Avatar, Button, Card, Dialog, PinPad, SettingsPanel } from '@bolusi/ui-web';
 import { clsx } from 'clsx';
 import { CircleCheck, KeyRound } from 'lucide-react';
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 
 import type { CounterPerson } from '../Counter.js';
 
 export function AccountPanel({
   person,
   changePin,
+  approvalPin,
 }: {
   readonly person: CounterPerson;
   readonly changePin: ((currentPin: string, newPin: string) => Promise<void>) | undefined;
+  /** The approval PIN's card, for someone who makes decisions (approval-pin.tsx). */
+  readonly approvalPin?: ReactNode;
 }): React.JSX.Element {
   const [changing, setChanging] = useState(false);
   return (
@@ -62,6 +65,7 @@ export function AccountPanel({
           </div>
         </Card>
       )}
+      {approvalPin}
       {changing && changePin !== undefined ? (
         <ChangePinDialog person={person} changePin={changePin} onClose={() => setChanging(false)} />
       ) : null}

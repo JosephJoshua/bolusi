@@ -684,6 +684,7 @@ export async function provenIdentity(
         tokenHash,
         createdAt: 1_726_000_000_000n,
         expiresAt: 4_000_000_000_000n,
+        provesDecisions: true,
       })
       .onConflict((oc) => oc.column('tokenHash').doNothing())
       .execute();

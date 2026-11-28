@@ -69,6 +69,12 @@ export default tseslint.config(
     rules: { 'bolusi/no-cut-text': 'error' },
   },
   {
+    name: 'bolusi/no-row-divider',
+    files: ['packages/modules/src/**/*.tsx', 'apps/mobile/src/**/*.tsx', 'apps/mobile/App.tsx'],
+    ignores: ['packages/modules/src/**/desktop/**'],
+    rules: { 'bolusi/no-row-divider': 'error' },
+  },
+  {
     name: 'bolusi/numeric-token',
     files: [
       'packages/modules/src/**/*.tsx',

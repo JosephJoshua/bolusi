@@ -17,6 +17,8 @@ function port(): StaffAdminPort {
     createRole: vi.fn(() => Promise.resolve({ roleId: 'r-new' })),
     updateRole: vi.fn(() => Promise.resolve()),
     deleteRole: vi.fn(() => Promise.resolve()),
+    setApprovalPin: vi.fn(() => Promise.resolve()),
+    clearApprovalPin: vi.fn(() => Promise.resolve()),
   };
 }
 

@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useActionRunner } from '../../screen-kit/index.js';
 import { TaskDialog, type DiscardCopy } from '../../screen-kit/desktop/index.js';
 import { MAX_FIELD_VALUE, type CategoryField } from '../categories.js';
-import { MAX_COUNTED_QTY, TAG_FACET } from '../constants.js';
+import { countNeedsReason, MAX_COUNTED_QTY, TAG_FACET } from '../constants.js';
 import { ti } from '../i18n.js';
 import { useItemForm } from '../item-form.js';
 import { useInventoryCatalog } from '../model-options.js';
@@ -296,8 +296,14 @@ export function CountDialog({ part, onClose, onDone }: CountDialogProps): React.
   const recorded = part.onHand;
   const [counted, setCounted] = useState(Math.max(0, recorded));
   const [note, setNote] = useState('');
+  const [noReason, setNoReason] = useState(false);
   const difference = counted - recorded;
+  const needsReason = countNeedsReason(counted, recorded);
   const save = (): void => {
+    if (needsReason && note.trim() === '') {
+      setNoReason(true);
+      return;
+    }
     void runner
       .run(() =>
         runtime.run('countStock', {
@@ -337,9 +343,13 @@ export function CountDialog({ part, onClose, onDone }: CountDialogProps): React.
         testId="inventory.desk.count.counted"
       />
       <TextArea
-        label={ti('inventory.count.note')}
+        label={ti(needsReason ? 'inventory.count.reason' : 'inventory.count.note')}
         value={note}
-        onChange={(event) => setNote(event.target.value)}
+        onChange={(event) => {
+          setNote(event.target.value);
+          setNoReason(false);
+        }}
+        error={needsReason && noReason ? ti('inventory.count.reasonMissing') : undefined}
         maxLength={MAX_NOTE}
         rows={2}
         data-testid="inventory.desk.count.note"
