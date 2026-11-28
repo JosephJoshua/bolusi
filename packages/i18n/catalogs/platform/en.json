@@ -7,6 +7,7 @@
   "refusal": {
     "conflictNotFound": "This conflict wasn’t found.",
     "notYourPreference": "Only the account’s owner can change its language.",
-    "idTaken": "This couldn’t be saved. Create it again."
+    "idTaken": "This couldn’t be saved. Create it again.",
+    "decisionNeedsPin": "This needs your PIN checked online. Try again when you have internet, or ask for approval on the owner’s phone."
   }
 }

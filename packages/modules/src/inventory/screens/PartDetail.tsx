@@ -38,6 +38,7 @@ import { itemFacts } from '../item-facts.js';
 import { movementTitle, signedQty, stockText } from '../labels.js';
 import { itemDetails, type ItemDetailRow, type ItemRow } from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
+import { PartCost } from './PartCost.js';
 
 export interface PartDetailProps {
   readonly itemId: string;
@@ -67,6 +68,7 @@ export function PartDetail({
   const runtime = useInventoryRuntime();
   const canManage = runtime.hasPermission(INVENTORY_PERMISSION.manageItems);
   const canCount = runtime.hasPermission(INVENTORY_PERMISSION.count);
+  const seesCosts = runtime.hasPermission(INVENTORY_PERMISSION.readCost);
   const runner = useActionRunner();
   const [reloadNonce, setReloadNonce] = useState(0);
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -184,6 +186,8 @@ export function PartDetail({
                   </View>
                 ) : null}
               </Card>
+
+              {seesCosts ? <PartCost itemId={row.id} onBack={onBack} testID={testID} /> : null}
 
               {facts.length === 0 && !canManage ? null : (
                 <Section

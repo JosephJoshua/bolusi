@@ -14,7 +14,7 @@ import { resolveDeps, SERVER_MODULES } from '../../../src/deps.js';
 import { serverCryptoPort } from '../../../src/oplog/crypto.js';
 import { processPushBatch } from '../../../src/oplog/pipeline.js';
 import type { OplogPipelineDeps } from '../../../src/oplog/types.js';
-import { seedWorld } from '../oplog/helpers.js';
+import { seedWorld, provenIdentity } from '../oplog/helpers.js';
 
 let db: Kysely<DB>;
 let appForTenant: ForTenant;
@@ -198,11 +198,7 @@ test('a pushed repair journey folds into the server projections', async () => {
     }),
   ];
 
-  const result = await processPushBatch(
-    productionDeps(),
-    { deviceId: world.deviceId, tenantId: world.tenantId },
-    ops,
-  );
+  const result = await processPushBatch(productionDeps(), await provenIdentity(db, world), ops);
   expect(result.results.map((r) => r.status)).toEqual(ops.map(() => 'accepted'));
 
   const ticket = await db
@@ -252,11 +248,7 @@ test('a ticket payload missing a required photo is rejected and folds nothing', 
       ownershipVideo: null,
     },
   });
-  const result = await processPushBatch(
-    productionDeps(),
-    { deviceId: world.deviceId, tenantId: world.tenantId },
-    [op],
-  );
+  const result = await processPushBatch(productionDeps(), await provenIdentity(db, world), [op]);
   expect(result.results[0]).toMatchObject({ status: 'rejected', code: 'SCHEMA_INVALID' });
   expect(await db.selectFrom('repairTickets').select('id').execute()).toEqual([]);
 });

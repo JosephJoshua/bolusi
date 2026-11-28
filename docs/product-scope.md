@@ -486,9 +486,26 @@ Agreed with the owner on 2026-10-28; first part built 2026-10-31.
   order's state (Dipesan, Diterima sebagian, Diterima, Diterima lebih) is worked
   out from its deliveries, so two phones receiving offline never clash; more than
   ordered is kept and flagged for a stock correction.
-- **Next:** buy prices at receiving with a moving average cost per store, seen
-  only on owners' own phones (permission-scoped sync); then transfers, supplier
-  bills and returns (below).
+- **Buy prices (2026-11-25):** "Harga beli per pcs" can be typed per part when
+  receiving, or filled in or fixed later from the order's "Harga beli" section.
+  Only people with "Lihat harga beli" (owners by default, a role switch for
+  others) see prices: on the order, and on the part as "Modal rata-rata" with
+  its latest deliveries. Whoever receives may type the price once; fixing one
+  needs "Lihat harga beli", so nobody overwrites a price they cannot see.
+  Prices travel apart from stock moves, so store devices never hold them; an
+  owner on a store device reads them live after the PIN check ("Perlu internet"
+  offline), and a missing price shows as missing, never Rp 0.
+- **Average cost:** a moving weighted average per store and part, worked out
+  when read from the deliveries and stock moves in time order. A count keeps the
+  average; a delivery into empty or minus stock sets it to its price; a price
+  filled in later changes the average from that delivery on, including the cost
+  of parts already used on servisan.
+- **Cost of a servisan's parts:** under "Sparepart", people with "Lihat harga
+  beli" see "Modal sparepart": each part at the average when it was taken, less
+  any put back at the average then, and a total once every part has a price. A part without one shows
+  "Belum ada harga" and a warning, never Rp 0; it is read apart, so only that
+  section needs internet on a store device.
+- **Next:** supplier bills and returns (below).
 
 ## Transfers between stores (2026-11-25)
 
@@ -513,7 +530,8 @@ Designed so a later warehouse is just another place stock moves between.
   only what really left can arrive. Other stock records stay with their store.
   The server checks every step, including that the other store is one of the
   business's.
-- **Next:** parts carry the sender's average buy price (after part costs land).
+- **Next:** parts carry the sender's average buy price; until then an arrival
+  counts as a delivery with no price yet.
   Then supplier bills ("Tagihan supplier": prepay, on delivery and tempo, its own
   record compared with the order and deliveries, payments without a bill kept
   as supplier credit, ongkir spread into the buy price) and supplier returns (a
@@ -556,11 +574,19 @@ governance notes in "Decision" where they differ.
   longer fits (paid, picked up, repriced), and the asker can withdraw it. An
   approved price drop still waits for the customer's yes; a refund request names
   how the money goes back and is recorded when approved.
-- **Offline:** a request reaches the approver when both phones sync. With no
-  signal, an owner or manager at the counter can approve on the same phone with
-  their PIN. Role and limit changes are online only and reach phones with the
-  next sync; the server judges each synced action by the current roles and
-  limits and refuses one over them, which the owner sees.
+- **Offline:** a request reaches the approver when both phones sync. Role and
+  limit changes are online only and reach phones with the next sync; the server
+  judges each synced action by the current roles and limits and refuses one over
+  them, which the owner sees.
+- **Decisions on a shared device need the server's PIN check (2026-11-25):** a
+  counter PC or shared phone names who did something on its own word, so someone
+  with its keys could cancel or refund in the owner's name. An owner's or
+  manager's decision there (cancel, discount, DP fix, refund, void, Bayar nanti,
+  warranty exception, settling Kas, a PIN reset or unlock, approving a request)
+  needs internet: their PIN goes to the server at sign-in, and the decision
+  syncs with that check. Offline it is refused with "Ini perlu PIN yang dicek
+  saat online" and is asked of the owner's own phone instead, which needs no
+  check. Replaces approving at the counter with no signal.
 - **Approvals as built (first part):** a discount and a cancel. The counter's
   "Batalkan" and a discount past someone's limit (counting the servisan's other
   discounts) become "Minta persetujuan". The request shows on the servisan, and

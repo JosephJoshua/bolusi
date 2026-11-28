@@ -24,6 +24,7 @@
 import {
   assertDeviceClockTrusted,
   createModuleRuntime,
+  readPersonalUserId,
   SearchIndexCache,
   createDirectorySource,
   mediaRefsInPayload,
@@ -119,6 +120,9 @@ export interface AppRuntime {
  * (08 §2.2), one engine over the same registry — and closed over by `runtimeFor`, so every runtime
  * this app builds writes through the same append/projection atom (04 §5.1 steps 5–6).
  */
+/** How long a decision's save waits for the person's session to open (it holds the write). */
+const PROOF_WAIT_MS = 8_000;
+
 export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRuntime {
   const evaluator = new PermissionEvaluator(
     app.registry.permissions,
@@ -145,6 +149,11 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
   // One live search cache for the app, fed by the engine's applies (search/live-index.ts), so every
   // runtime this composition mints searches the same warm indexes.
   const search = new SearchIndexCache(app.invalidation);
+  // Whose own phone this is (null: a shared device). Read once; until it is, the server decides.
+  let personalUserId: string | null | undefined;
+  void readPersonalUserId(app.db.db)
+    .then((userId) => (personalUserId = userId))
+    .catch(() => undefined);
 
   /**
    * Step 7's hook, indirected so it can be pointed at the loop once one exists (see
@@ -186,6 +195,21 @@ export function createAppRuntime(app: Bootstrapped, deps: AppRuntimeDeps): AppRu
         applyProjection,
         syncScheduler,
         search,
+        // An owner's or manager's decision is saved on a shared device only while the server has
+        // checked their PIN here, as the server requires (person-access.ts, oplog/steps/decision.ts).
+        // Just after sign-in the session may still be opening: the save waits for it, briefly.
+        decisionProven: async (userId) => {
+          if (personalUserId === undefined || personalUserId === userId) return true;
+          if (app.person.canProve(userId)) return true;
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const proof = await Promise.race([
+            app.person.sessionFor(userId),
+            new Promise<null>(
+              (resolve) => (timer = setTimeout(() => resolve(null), PROOF_WAIT_MS)),
+            ),
+          ]).finally(() => clearTimeout(timer));
+          return proof !== null;
+        },
         // A query touching data that is not here says so (`NOT_ON_DEVICE`), after waiting for a
         // pull of the person's store that is under way.
         dataHere: {

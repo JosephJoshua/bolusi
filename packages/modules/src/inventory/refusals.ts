@@ -10,6 +10,9 @@ export const INVENTORY_REFUSALS = defineRefusals('inventory', [
   'moreThanTaken',
   'wrongUse',
   'wrongSource',
+  // Buy prices (rules.ts stockCostedRule).
+  'notReceived',
+  'costNotYours',
   // Transfers between stores (transfers/rules.ts).
   'transferNotFound',
   'transferMismatch',

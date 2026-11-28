@@ -1,0 +1,224 @@
+/**
+ * The Barang tab: the store's stock, with Belanja beside it for whoever buys from suppliers. Shown
+ * to whoever may read the stock and to nobody else; the tabs give way to an open form, and hardware
+ * back closes the form first, then returns to Servisan instead of leaving the app.
+ *
+ * Drives the real `Root` with the real repair runtime over the live shell's database.
+ */
+import { INVENTORY_PERMISSION } from '@bolusi/modules/inventory';
+import { PURCHASING_PERMISSION } from '@bolusi/modules/purchasing';
+import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
+import { STORES_META_KEY, writeMeta } from '@bolusi/core';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+
+vi.mock('expo-secure-store', () => ({
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY',
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
+  setItemAsync: vi.fn(async () => undefined),
+  getItemAsync: vi.fn(async () => null),
+  deleteItemAsync: vi.fn(async () => undefined),
+}));
+
+vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
+
+vi.mock('expo-notifications', () => ({
+  AndroidImportance: { HIGH: 4, DEFAULT: 3, LOW: 2, MIN: 1 },
+  setNotificationChannelAsync: vi.fn(async () => undefined),
+  getNotificationChannelsAsync: vi.fn(async () => []),
+}));
+
+vi.mock('expo-location', () => ({
+  Accuracy: { Balanced: 3 },
+  requestForegroundPermissionsAsync: vi.fn(async () => ({ status: 'denied' })),
+  getForegroundPermissionsAsync: vi.fn(async () => ({ status: 'denied' })),
+  watchPositionAsync: vi.fn(async () => ({ remove: () => undefined })),
+}));
+
+import { fire, type RenderResult } from '../../../packages/ui/test/render.js';
+import { createSessionRepairRuntime, repairMediaSeamsFor } from '@bolusi/device/bootstrap/repair';
+import { __emitHardwareBack, __resetHardwareBack } from './doubles/react-native.js';
+import {
+  bootFixture,
+  closeClientDb,
+  enrolledDevice,
+  fireOn,
+  mountRoot,
+  NOTES_PERMISSIONS,
+  seedTwoUsers,
+  settle,
+  submitPin,
+  waitUntil,
+  TEST_PIN,
+  type Fixture,
+} from './live-shell-support.js';
+
+const REPAIR_ONLY = [...NOTES_PERMISSIONS, ...Object.values(REPAIR_PERMISSION)];
+/** A technician: reads the stock, adds nothing to it, buys nothing. */
+const READS_STOCK = [...REPAIR_ONLY, INVENTORY_PERMISSION.read];
+/** A store owner: keeps the stock and buys from suppliers. */
+const KEEPS_AND_BUYS = [
+  ...REPAIR_ONLY,
+  INVENTORY_PERMISSION.read,
+  INVENTORY_PERMISSION.manageItems,
+  PURCHASING_PERMISSION.buy,
+];
+
+/** A manager: keeps the stock and sends parts to the business's other stores. */
+const SENDS = [
+  ...REPAIR_ONLY,
+  INVENTORY_PERMISSION.read,
+  INVENTORY_PERMISSION.receive,
+  INVENTORY_PERMISSION.transfer,
+];
+const OTHER_STORE = { id: '01920000-0000-7000-8000-00000000b0b0', name: 'Bolusi Sanggeng' };
+
+let fixture: Fixture | null = null;
+let screen: RenderResult | null = null;
+
+beforeEach(async () => {
+  __resetHardwareBack();
+  await closeClientDb();
+});
+
+afterEach(async () => {
+  screen?.unmount();
+  screen = null;
+  await fixture?.close();
+  fixture = null;
+  await closeClientDb();
+});
+
+async function press(target: RenderResult, testID: string): Promise<void> {
+  fire(target.all(testID)[0]!, 'onPress');
+  await settle();
+}
+
+/** Boot the live shell with the repair surface and sign in, holding `permissions`. */
+async function signedIn(permissions: readonly string[]): Promise<RenderResult> {
+  const target = await bootFixture();
+  fixture = target;
+  await enrolledDevice(target);
+  await seedTwoUsers(target, 300, permissions);
+  // The business's stores as the identity bundle lists them: this one and another. Written after
+  // the seeded bundle, which sets its own list.
+  await writeMeta(
+    target.app.db.db,
+    STORES_META_KEY,
+    JSON.stringify([{ id: target.storeId, name: 'Bolusi Rufei' }, OTHER_STORE]),
+  );
+  const mounted = await mountRoot(target, {
+    createRepair: (app, runtime, identity, media, capture) =>
+      createSessionRepairRuntime({
+        app,
+        runtime,
+        identity,
+        media: repairMediaSeamsFor(media, {
+          ...capture,
+          loadModelPhoto: () => Promise.reject(new Error('no phone photos in this test')),
+        }),
+      }),
+  });
+  screen = mounted;
+  fireOn(mounted, `switcher-user-${target.userId}`);
+  await settle();
+  expect(await submitPin(mounted, TEST_PIN)).toBe(true);
+  expect(await waitUntil(() => mounted.query('repair.board.newIntake') !== null)).toBe(true);
+  return mounted;
+}
+
+const selected = (shown: RenderResult, testID: string): unknown =>
+  shown.all(testID)[0]!.props['accessibilityState'];
+
+describe('the Barang tab', () => {
+  test('is not there for someone who may not read the stock', async () => {
+    const shown = await signedIn(REPAIR_ONLY);
+    expect(shown.query('shell-tabs')).toBeNull();
+  });
+
+  test('shows a technician the stock alone, with no Belanja and no back arrow', async () => {
+    const shown = await signedIn(READS_STOCK);
+    await press(shown, 'shell-tabs.items');
+    expect(await waitUntil(() => shown.query('inventory.list') !== null)).toBe(true);
+    expect(shown.query('items.sections')).toBeNull();
+    expect(shown.query('inventory.list.back')).toBeNull();
+    // Nothing of it is left in the account menu.
+    await press(shown, 'ui.avatarButton');
+    expect(shown.query('shell-open-parts')).toBeNull();
+    expect(shown.query('shell-open-purchasing')).toBeNull();
+  });
+
+  test('switches between Stok and Belanja for whoever buys, keeping each as it was', async () => {
+    const shown = await signedIn(KEEPS_AND_BUYS);
+    await press(shown, 'shell-tabs.items');
+    expect(await waitUntil(() => shown.query('inventory.list') !== null)).toBe(true);
+    await press(shown, 'items.sections.orders');
+    expect(await waitUntil(() => shown.query('purchasing.orders') !== null)).toBe(true);
+    expect(selected(shown, 'items.sections.orders')).toMatchObject({ selected: true });
+    // Servisan and back: Barang is still on Belanja.
+    await press(shown, 'shell-tabs.repair');
+    await press(shown, 'shell-tabs.items');
+    expect(selected(shown, 'items.sections.orders')).toMatchObject({ selected: true });
+  });
+
+  test('gives an open form the whole screen; hardware back closes it, then goes to Servisan', async () => {
+    const shown = await signedIn(KEEPS_AND_BUYS);
+    await press(shown, 'shell-tabs.items');
+    await waitUntil(() => shown.query('inventory.list.add') !== null);
+    await press(shown, 'inventory.list.add');
+    expect(shown.query('inventory.form')).not.toBeNull();
+    expect(shown.query('shell-tabs')).toBeNull();
+
+    expect(__emitHardwareBack()).toBe(true);
+    await settle();
+    expect(shown.query('inventory.form')).toBeNull();
+    expect(shown.query('inventory.list')).not.toBeNull();
+    expect(shown.query('shell-tabs')).not.toBeNull();
+
+    expect(__emitHardwareBack()).toBe(true);
+    await settle();
+    expect(selected(shown, 'shell-tabs.repair')).toEqual({ selected: true });
+  });
+});
+
+describe('Kiriman', () => {
+  test('is a section only for whoever sends or receives parts between stores', async () => {
+    const shown = await signedIn(KEEPS_AND_BUYS);
+    await press(shown, 'shell-tabs.items');
+    expect(await waitUntil(() => shown.query('items.sections') !== null)).toBe(true);
+    expect(shown.query('items.sections.transfers')).toBeNull();
+  });
+
+  test('sends to another store: the form offers the other stores, and back asks before losing it', async () => {
+    const shown = await signedIn(SENDS);
+    await press(shown, 'shell-tabs.items');
+    await waitUntil(() => shown.query('items.sections.transfers') !== null);
+    await press(shown, 'items.sections.transfers');
+    expect(await waitUntil(() => shown.query('inventory.transfers') !== null)).toBe(true);
+    expect(await waitUntil(() => shown.query('inventory.transfers.list.empty') !== null)).toBe(
+      true,
+    );
+
+    await press(shown, 'inventory.transfers.new');
+    expect(
+      await waitUntil(() => shown.query(`inventory.send.store.${OTHER_STORE.id}`) !== null),
+    ).toBe(true);
+    // Only the other store: a store never sends to itself.
+    expect(shown.query(`inventory.send.store.${fixture!.storeId}`)).toBeNull();
+    expect(shown.query('shell-tabs')).toBeNull();
+    await press(shown, `inventory.send.store.${OTHER_STORE.id}`);
+
+    // Picking a part and coming back keeps the store picked.
+    await press(shown, 'inventory.send.addPart');
+    expect(shown.query('inventory.send.pick')).not.toBeNull();
+    expect(__emitHardwareBack()).toBe(true);
+    await settle();
+    expect(selected(shown, `inventory.send.store.${OTHER_STORE.id}`)).toMatchObject({
+      selected: true,
+    });
+
+    // Back from a half-filled send asks first.
+    expect(__emitHardwareBack()).toBe(true);
+    await settle();
+    expect(shown.query('inventory.send.discard')).not.toBeNull();
+  });
+});

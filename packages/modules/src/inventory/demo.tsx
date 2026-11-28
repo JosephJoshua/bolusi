@@ -18,18 +18,23 @@ import {
 import { INVENTORY_PERMISSION, TAG_FACET, type MovementKind } from './constants.js';
 import { compactModel } from '../shared/model-key.js';
 import { fitsLine } from './applier.js';
-import type {
-  CategoryRow,
-  FacetValueRow,
-  ItemDetailRow,
-  ItemFitRow,
-  ItemRow,
-  MovementRow,
-  UsedPartRow,
+import { costOnUse, foldCost } from './cost.js';
+import {
+  COST_RECEIPTS_SHOWN,
+  type CategoryRow,
+  type FacetValueRow,
+  type ItemCostRow,
+  type UseCostRow,
+  type ItemDetailRow,
+  type ItemFitRow,
+  type ItemRow,
+  type MovementRow,
+  type UsedPartRow,
 } from './queries.js';
 import type { InventoryRuntime } from './runtime.js';
 import { INVENTORY_REFUSALS } from './rules.js';
 import { itemDocument } from './search.js';
+import { demoTransfers } from './transfers/demo.js';
 
 const I = INVENTORY_PERMISSION;
 
@@ -248,11 +253,16 @@ const SEED: readonly Seed[] = [
 
 /** The demo shelf, and the way a demo receipt from a supplier puts parts on it. */
 export type DemoInventoryRuntime = InventoryRuntime & {
+  /** Puts parts on the shelf and, with a price, what a piece cost. Returns the movement's id. */
   readonly receiveDemoStock: (
     itemId: string,
     qty: number,
     source: { id: string; label: string },
-  ) => void;
+    unitCost?: number | null,
+    at?: number,
+  ) => string;
+  /** What a received movement cost a piece, or null while unpriced. */
+  readonly demoCostOf: (movementId: string) => number | null;
 };
 
 export function demoInventoryRuntime(options: DemoInventoryOptions): DemoInventoryRuntime {
@@ -265,6 +275,8 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): DemoInvento
   }));
   const items: DemoItem[] = [];
   const movements: (MovementRow & { at: number })[] = [];
+  /** What each received movement cost a piece, by movement id. */
+  const costs = new Map<string, number>();
 
   const record = (
     itemId: string,
@@ -415,6 +427,45 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): DemoInvento
               .map((hit) => shown.find(({ row: r }) => r.id === hit.id)!.row);
       const more = matching.length > offset + limit;
       return page(matching.slice(offset, offset + limit), more ? String(offset + limit) : null);
+    },
+    itemCost: (input) => {
+      require(I.readCost);
+      const own = movements
+        .filter((m) => m.itemId === input['itemId'])
+        .map((m) => ({ ...m, unitCost: costs.get(m.id) ?? null }));
+      const fold = foldCost(own);
+      const cost: ItemCostRow = {
+        average: fold.average,
+        unpriced: fold.unpriced,
+        receipts: own
+          .filter((m) => m.kind === 'received')
+          .sort((a, b) => b.at - a.at)
+          .slice(0, COST_RECEIPTS_SHOWN)
+          .map((m) => ({
+            movementId: m.id,
+            at: m.at,
+            qty: m.qty,
+            unitCost: m.unitCost,
+            label: m.useLabel,
+          })),
+      };
+      return page([cost]);
+    },
+    useCost: (input) => {
+      require(I.readCost);
+      const useId = String(input['useId']);
+      const rows: UseCostRow[] = [
+        ...new Set(movements.filter((m) => m.useId === useId).map((m) => m.itemId)),
+      ]
+        .map((itemId) => {
+          const own = movements
+            .filter((m) => m.itemId === itemId)
+            .map((m) => ({ ...m, unitCost: costs.get(m.id) ?? null }));
+          return { itemId, name: find(itemId).name, ...costOnUse(own, foldCost(own), useId) };
+        })
+        .filter((row) => row.out > 0)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return page(rows);
     },
     countBelowZero: () =>
       page([{ count: items.filter((p) => !p.archived && onHand(p.id) < 0).length }]),
@@ -569,6 +620,22 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): DemoInvento
       items.push({ id, ...details(input), archived: false });
       return { itemId: id };
     },
+    addItems: (input) => {
+      require(I.manageItems);
+      const list = input['items'] as readonly Input[];
+      const counted = list.map((item) => Number(item['counted'] ?? 0));
+      if (counted.some((n) => n > 0)) require(I.count);
+      // As the command: every item checked before any is added, so a save is all or none.
+      const built = list.map(details);
+      const itemIds = built.map((item, i) => {
+        const id = newId('item');
+        items.push({ id, ...item, archived: false });
+        if (counted[i]! > 0)
+          record(id, 'counted', counted[i]!, { counted: counted[i]!, note: null });
+        return id;
+      });
+      return { itemIds };
+    },
     editItem: (input) => {
       require(I.manageItems);
       const item = find(String(input['itemId']));
@@ -600,6 +667,15 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): DemoInvento
         }),
       };
     },
+    priceStock: (input) => {
+      require(I.receive);
+      const movementId = String(input['movementId']);
+      if (!movements.some((m) => m.id === movementId && m.kind === 'received')) {
+        throw new DomainError('VALIDATION_FAILED', { field: 'movementId' });
+      }
+      costs.set(movementId, Number(input['unitCost']));
+      return { movementId };
+    },
     putBackPart: (input) => {
       const who = require(I.useParts);
       const item = find(String(input['itemId']));
@@ -617,6 +693,20 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): DemoInvento
       };
     },
   };
+
+  // Parts sent between this store and the business's others: the seeded parts by shelf position.
+  const transfers = demoTransfers({
+    now,
+    actor,
+    require,
+    permissions: { transfer: I.transfer, receive: I.receive, settle: I.settleTransfer },
+    record,
+    item: find,
+    seedItems: [0, 11, 7, 18, 20, 13].map((at) => items[at]!.id),
+    newId,
+  });
+  Object.assign(queries, transfers.queries);
+  Object.assign(commands, transfers.commands);
 
   const runtime = {
     get userId() {
@@ -647,13 +737,24 @@ export function demoInventoryRuntime(options: DemoInventoryOptions): DemoInvento
     searchModels: options.searchModels,
     // The preview has no camera: a scan reads the Redmi 9 battery's barcode, so the flow can be tried.
     scanCode: () => Promise.resolve(DEMO_SCANNED_CODE),
-    receiveDemoStock: (itemId: string, qty: number, source: { id: string; label: string }) => {
-      record(itemId, 'received', qty, {
+    otherStores: transfers.otherStores,
+    receiveDemoStock: (
+      itemId: string,
+      qty: number,
+      source: { id: string; label: string },
+      unitCost: number | null = null,
+      at?: number,
+    ) => {
+      const id = record(itemId, 'received', qty, {
         useKind: 'purchase_receipt',
         useId: source.id,
         useLabel: source.label,
+        ...(at === undefined ? {} : { at }),
       });
+      if (unitCost !== null) costs.set(id, unitCost);
+      return id;
     },
+    demoCostOf: (movementId: string) => costs.get(movementId) ?? null,
   };
   return runtime as unknown as DemoInventoryRuntime;
 }

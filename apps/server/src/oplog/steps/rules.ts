@@ -13,6 +13,7 @@ import type { SignedOperation } from '@bolusi/schemas';
 
 import { allowanceWithDirectory, evaluateWithDirectory } from '../../auth/permissions.js';
 import type { DeviceRecord, OpRegistry } from '../types.js';
+import { isDecisionPermission } from './decision.js';
 import type { AuthorLookup } from './permission.js';
 
 export type RuleOutcome = null | { readonly reason: string };
@@ -25,7 +26,13 @@ export async function checkRules(
   lookup: AuthorLookup,
   crypto: CryptoPort,
   receivedAt: number,
+  /** Told when the rule finds the author holds a `decision` permission it asks about (decision.ts). */
+  onDecision: () => void = () => undefined,
 ): Promise<RuleOutcome> {
+  const used = (userId: string, permissionId: string | null, held: boolean): boolean => {
+    if (held && userId === op.userId && isDecisionPermission(permissionId)) onDecision();
+    return held;
+  };
   try {
     await registry.checkRule(op, {
       db,
@@ -33,16 +40,20 @@ export async function checkRules(
       receivedAt,
       // Someone the op names (an assigned technician) must work at this store and hold the
       // permission there, by the server's directory: the same test the author passed.
-      holdsPermission: async (userId, permissionId) => {
+      holdsPermission: async (userId, permissionId, options) => {
         if (device.storeId === null || !(await lookup.stores(userId)).includes(device.storeId)) {
           return false;
         }
-        return evaluateWithDirectory(await lookup.directory(userId), {
+        return used(
           userId,
-          tenantId: op.tenantId,
-          storeId: device.storeId,
-          permissionId,
-        }).allowed;
+          options?.uses === false ? null : permissionId,
+          evaluateWithDirectory(await lookup.directory(userId), {
+            userId,
+            tenantId: op.tenantId,
+            storeId: device.storeId,
+            permissionId,
+          }).allowed,
+        );
       },
       sha256: (data) => crypto.sha256(data),
       // The limit a limited role has at this store by the server's current directory: an owner who
@@ -51,14 +62,18 @@ export async function checkRules(
         if (device.storeId === null || !(await lookup.stores(userId)).includes(device.storeId)) {
           return false;
         }
-        return allowanceCovers(
-          allowanceWithDirectory(await lookup.directory(userId), {
-            userId,
-            tenantId: op.tenantId,
-            storeId: device.storeId,
-            permissionId,
-          }),
-          amount,
+        return used(
+          userId,
+          permissionId,
+          allowanceCovers(
+            allowanceWithDirectory(await lookup.directory(userId), {
+              userId,
+              tenantId: op.tenantId,
+              storeId: device.storeId,
+              permissionId,
+            }),
+            amount,
+          ),
         );
       },
     });

@@ -273,6 +273,8 @@ const NO_PERSON = {
     bindTransport: () => undefined,
     sync: () => Promise.resolve(),
     refuse: () => Promise.resolve(),
+    proofs: () => [],
+    pushed: () => Promise.resolve(),
   },
 };
 

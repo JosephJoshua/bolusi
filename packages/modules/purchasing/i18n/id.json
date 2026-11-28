@@ -45,7 +45,9 @@
     "receive": "Terima barang",
     "send": "Kirim ke supplier",
     "cancel": "Batalkan pesanan",
-    "deleteDraft": "Hapus draf"
+    "deleteDraft": "Hapus draf",
+    "fillPrice": "Isi harga",
+    "fixPrice": "Ubah harga"
   },
   "list": {
     "title": "Belanja",
@@ -66,7 +68,12 @@
     "overHint": "Ada barang yang diterima lebih dari pesanan. Cek lalu koreksi stoknya.",
     "qty": "{qty} pcs",
     "receivedOf": "{received} dari {qty}",
-    "receiptLine": "{name} ({qty})"
+    "receiptLine": "{name} ({qty})",
+    "costs": "Harga beli",
+    "costLine": "{qty} × {price}",
+    "costMissing": "Belum diisi",
+    "costTotal": "Total",
+    "costUnpriced": "{count} barang belum ada harganya"
   },
   "cancel": {
     "title": "Batalkan pesanan ini?",
@@ -94,25 +101,19 @@
     "pickFirst": "Pilih supplier dan barangnya dulu."
   },
   "pick": {
-    "title": "Pilih barang",
-    "searchHint": "Cari nama atau kode barang",
-    "clear": "Hapus pencarian",
-    "scan": "Pindai",
-    "empty": "Belum ada barang di daftar.",
-    "noMatches": "Barang tidak ditemukan.",
-    "onOrder": "Sudah di pesanan, tap untuk tambah 1",
-    "stock": "Stok {count}"
+    "title": "Pilih barang"
   },
   "receive": {
     "title": "Terima barang",
-    "hint": "Isi jumlah yang datang.",
+    "hint": "Isi jumlah yang datang. Harga beli bisa diisi nanti.",
     "arrived": "Datang",
     "ordered": "Dipesan {qty}",
     "orderedSoFar": "Dipesan {qty}, sudah datang {received}",
     "over": "Lebih {extra} dari pesanan.",
     "note": "Catatan",
     "nothing": "Isi jumlah barang yang datang dulu.",
-    "save": "Simpan"
+    "save": "Simpan",
+    "price": "Harga beli per pcs"
   },
   "supplier": {
     "listTitle": "Supplier",
@@ -135,7 +136,8 @@
     "drafted": "Draf disimpan.",
     "received": "Barang diterima. Stok sudah bertambah.",
     "cancelled": "Pesanan dibatalkan.",
-    "supplierSaved": "Supplier disimpan."
+    "supplierSaved": "Supplier disimpan.",
+    "priced": "Harga beli disimpan."
   },
   "desk": {
     "col": {
@@ -147,9 +149,16 @@
     "close": "Tutup pesanan",
     "copied": "Pesan disalin. Tempel di chat supplier.",
     "copyFailed": "Pesan tidak bisa disalin.",
-    "addPart": "Cari barang untuk ditambah",
-    "noPartMatches": "Barang tidak ditemukan.",
     "emptyHint": "Pesanan ke supplier muncul di sini.",
-    "suppliersHint": "Supplier dipakai di semua toko."
+    "suppliersHint": "Supplier dipakai di semua toko.",
+    "currency": "Rp"
+  },
+  "price": {
+    "title": "Harga beli",
+    "field": "Harga per pcs",
+    "save": "Simpan harga",
+    "empty": "Isi harganya dulu.",
+    "discardTitle": "Buang harga ini?",
+    "discardMessage": "Harga yang kamu ketik akan hilang."
   }
 }

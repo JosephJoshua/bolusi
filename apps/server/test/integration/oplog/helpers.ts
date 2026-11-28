@@ -16,6 +16,8 @@
 // (task 81's ruling; the boundary is discharged by code, not asserted by a comment). PGlite was
 // also measurably BLIND to the silent int8 class the pipeline's serverSeq accounting depends on
 // (D16 / T-14f: 14/14 GREEN on PGlite vs 4 RED on real `pg`), which is the whole reason to move.
+import { createHash } from 'node:crypto';
+
 import { sql, type Kysely, type Selectable } from 'kysely';
 import { expect, inject } from 'vitest';
 import { z } from 'zod';
@@ -652,4 +654,40 @@ export async function seedRepairTicket(
       addedAt: at,
     })
     .execute();
+}
+
+/**
+ * The push identity of the world's device with every person of its tenant proven on it, as if each
+ * had signed in there and the server had checked their PIN (oplog/steps/decision.ts): what a shared
+ * device sends for its people's decisions. One session per person, made once and reused.
+ */
+export async function provenIdentity(
+  db: Kysely<DB>,
+  world: ChainWorld,
+): Promise<{ deviceId: string; tenantId: string; personSessions: string[] }> {
+  const users = await db
+    .selectFrom('users')
+    .select('id')
+    .where('tenantId', '=', world.tenantId)
+    .execute();
+  const personSessions: string[] = [];
+  for (const { id: userId } of users) {
+    const token = `bps_test_${world.deviceId}_${userId}`;
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    await db
+      .insertInto('personSessions')
+      .values({
+        id: uuidV7(mulberry32(Number.parseInt(tokenHash.slice(0, 8), 16)), 1_726_000_000_000),
+        tenantId: world.tenantId,
+        deviceId: world.deviceId,
+        userId,
+        tokenHash,
+        createdAt: 1_726_000_000_000n,
+        expiresAt: 4_000_000_000_000n,
+      })
+      .onConflict((oc) => oc.column('tokenHash').doNothing())
+      .execute();
+    personSessions.push(token);
+  }
+  return { deviceId: world.deviceId, tenantId: world.tenantId, personSessions };
 }

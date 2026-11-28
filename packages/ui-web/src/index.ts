@@ -41,6 +41,15 @@ export {
 } from './components/DataTable.js';
 export { Dialog, type DialogProps } from './components/Dialog.js';
 export {
+  EditableGrid,
+  type CellProblem,
+  type EditableGridLabels,
+  type EditableGridProps,
+  type GridColumn,
+  type GridRow,
+} from './components/EditableGrid.js';
+export { parseClipboardTable, rowFilled, toClipboardTable } from './components/grid-model.js';
+export {
   FieldFrame,
   SecretField,
   TextArea,
@@ -104,6 +113,8 @@ export {
   PageHeader,
   Sidebar,
   SidebarToggle,
+  type Crumb,
+  type NavGroup,
   type NavItem,
   type SidebarToggleLabels,
 } from './components/Shell.js';

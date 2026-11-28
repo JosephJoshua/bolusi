@@ -27,6 +27,16 @@ import {
   type DomainErrorDetails,
 } from '../errors/domain-error.js';
 
+export interface HoldsPermissionOptions {
+  /**
+   * False when the op does not use the power, only asks whether its author has it (asking for an
+   * approval of what one may also do oneself). Default true: the author holding a `decision`
+   * permission the rule asks about makes the op that decision, which a shared device must prove
+   * (server oplog/steps/decision.ts).
+   */
+  readonly uses?: boolean;
+}
+
 /** What a rule may consult besides the op itself. */
 export interface OpRuleContext<DB> {
   /** The judging side's projection, inside the transaction that will record the op. */
@@ -36,7 +46,11 @@ export interface OpRuleContext<DB> {
    * device's synced copy on a device, the server's own on the server. For ops that name another
    * user who must be able to do something (a technician being assigned).
    */
-  holdsPermission(userId: string, permissionId: string): Promise<boolean>;
+  holdsPermission(
+    userId: string,
+    permissionId: string,
+    options?: HoldsPermissionOptions,
+  ): Promise<boolean>;
   /**
    * SHA-256 from the judging side's crypto port, for a value an op must have derived by hash (a
    * customer's status link code) rather than chosen.

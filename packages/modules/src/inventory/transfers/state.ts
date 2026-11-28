@@ -78,6 +78,22 @@ export function transferActions(state: Pick<TransferState, 'stage' | 'lines' | '
   };
 }
 
+/** One part's state from what was sent and what its arrivals and settlements add up to. */
+export function lineState(
+  line: Pick<TransferLineState, 'itemId' | 'name' | 'listed' | 'sent'>,
+  totals: Pick<TransferLineState, 'arrived' | 'back' | 'lost' | 'found' | 'arrivedLate'>,
+  cancelled: boolean,
+): TransferLineState {
+  // A cancel takes back everything sent: it is only allowed before anything moved.
+  const back = (cancelled ? line.sent : 0) + totals.back;
+  return {
+    ...line,
+    ...totals,
+    back,
+    missing: line.sent - totals.arrived - back - totals.lost + totals.found + totals.arrivedLate,
+  };
+}
+
 type Db = Pick<Kysely<InventoryDatabase>, 'selectFrom'>;
 
 function key(transferId: string, itemId: string): string {
@@ -156,27 +172,24 @@ export async function loadTransferStates(
     const cancelled = transfer.cancelledAt !== null;
     const states = lines
       .filter((line) => line.transferId === transfer.id)
-      .map((line): TransferLineState => {
+      .map((line) => {
         const k = key(transfer.id, line.itemId);
-        const sent = left.get(k) ?? 0;
-        const came = arrived.get(k) ?? 0;
-        // A cancel takes back everything sent: it is only allowed before anything moved.
-        const backQty = (cancelled ? sent : 0) + (back.get(k) ?? 0);
-        const lostQty = lost.get(k) ?? 0;
-        const lateQty = late.get(k) ?? 0;
-        const foundQty = found.get(k) ?? 0;
-        return {
-          itemId: line.itemId,
-          name: line.itemName,
-          listed: Number(line.qty),
-          sent,
-          arrived: came,
-          back: backQty,
-          lost: lostQty,
-          found: foundQty,
-          arrivedLate: lateQty,
-          missing: sent - came - backQty - lostQty + foundQty + lateQty,
-        };
+        return lineState(
+          {
+            itemId: line.itemId,
+            name: line.itemName,
+            listed: Number(line.qty),
+            sent: left.get(k) ?? 0,
+          },
+          {
+            arrived: arrived.get(k) ?? 0,
+            back: back.get(k) ?? 0,
+            lost: lost.get(k) ?? 0,
+            found: found.get(k) ?? 0,
+            arrivedLate: late.get(k) ?? 0,
+          },
+          cancelled,
+        );
       });
     out.set(transfer.id, {
       id: transfer.id,

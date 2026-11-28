@@ -32,7 +32,7 @@ vi.mock('expo-location', () => ({
   watchPositionAsync: vi.fn(async () => ({ remove: () => undefined })),
 }));
 
-import { DomainError } from '@bolusi/core';
+import { DomainError, PERSONAL_USER_META_KEY, writeMeta } from '@bolusi/core';
 import { sql } from 'kysely';
 import type { AppSessionController } from '@bolusi/device/bootstrap/session';
 import * as SecureStore from 'expo-secure-store';
@@ -113,6 +113,9 @@ describe('Owner Reset reaches the screen and POSTs the verifier as the OWNER (ta
     fixture = await bootFixture();
     await enrolledDevice(fixture);
     await seedOwnerAndLockedTarget(fixture);
+    // The owner's own phone: a reset or unlock made offline on a shared device needs the owner's
+    // PIN checked by the server first (server oplog/steps/decision.ts), which this test has no server for.
+    await writeMeta(fixture.app.db.db, PERSONAL_USER_META_KEY, fixture.userId);
     const screen = await mountRoot(fixture, {
       uploadPinVerifier: {
         // The 4th arg is the ACTING user (§6.6) — the whole point of this test.
