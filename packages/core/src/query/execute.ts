@@ -197,6 +197,7 @@ export class QueryRuntime<DB> implements QueryExecutorPort {
       // this?"; it can only ask about the caller.
       hasPermission: (permissionId: string): boolean =>
         this.#enforcement.hasPermission(identity, permissionId),
+      rolesHeld: (): readonly string[] => this.#enforcement.rolesHeld(identity),
       ...(this.#search !== undefined ? { search: this.#search } : {}),
     });
   }

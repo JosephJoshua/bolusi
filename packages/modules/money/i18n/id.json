@@ -38,7 +38,11 @@
     "overLimit": "Melebihi batas Anda. Minta persetujuan pemilik toko.",
     "moveAboveDrawer": "Uang di laci tidak cukup.",
     "cashMoveNotFound": "Catatan kas ini tidak ada di toko ini.",
-    "laterCountSettled": "Selisih hitungan kas berikutnya sudah diselesaikan, jadi catatan ini tidak dapat dibatalkan."
+    "laterCountSettled": "Selisih hitungan kas berikutnya sudah diselesaikan, jadi catatan ini tidak dapat dibatalkan.",
+    "notADrawer": "Itu bukan laci kas toko ini.",
+    "drawerNotYours": "Jabatan Anda tidak memakai laci ini.",
+    "sameDrawer": "Pilih laci lain sebagai tujuan.",
+    "mainDrawerStays": "Laci utama toko tidak dapat dinonaktifkan."
   },
   "method": {
     "cash": "Tunai"
@@ -103,7 +107,8 @@
     "withdrawal": "Setor ke pemilik",
     "expense": "Biaya toko",
     "deposit": "Setor ke bank",
-    "float": "Tambah uang kembalian"
+    "float": "Tambah uang kembalian",
+    "transfer": "Pindah ke laci lain"
   },
   "count": {
     "counted": "Uang di laci",

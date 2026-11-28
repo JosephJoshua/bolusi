@@ -8,13 +8,15 @@ export interface MoneyAccountsTable {
   tenantId: string;
   /** The owning store; null for a central account. */
   storeId: string | null;
-  /** `qris` | `edc` | `transfer` (cash is each store's drawer and never configured). */
+  /** `MoneyAccountKind`: a payment method, or `drawer` (a store's cash drawer, constants.ts). */
   kind: string;
   name: string;
   /** 0/1: hidden from new payments when 0; past records keep naming it. */
   active: number;
   /** Central accounts only: JSON array of the store ids that use it; `[]` means every store. */
   storeIdsJson: string | null;
+  /** Drawers only: JSON array of the role ids that use it; `[]` or null means every role. */
+  roleIdsJson: string | null;
   createdAt: number;
   updatedBy: string;
   updatedAt: number;
@@ -44,6 +46,8 @@ export interface MoneyEntriesTable {
   tendered: number | null;
   /** The count an owner's adjustment settles; the payment a payment is recorded in place of. */
   relatedEntryId: string | null;
+  /** The drawer a cash move, count or adjustment is about (`cash` or `account:<id>`). */
+  drawer: string | null;
   createdBy: string;
   createdAt: number;
   voidedBy: string | null;

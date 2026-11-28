@@ -7,22 +7,28 @@ import type { CommandContext, CommandHandlerResult } from '@bolusi/core';
 import { zUuid } from '@bolusi/schemas';
 
 import {
+  CASH_ACCOUNT,
   CASH_MOVE_KINDS,
+  DRAWER_KIND,
   MAX_ACCOUNT_NAME,
   MAX_AMOUNT,
+  MAX_DRAWER_ROLES,
   MAX_REASON,
   MAX_REFERENCE,
   MONEY_ACCOUNT_ENTITY,
+  MONEY_ACCOUNT_KINDS,
   MONEY_ENTRY_ENTITY,
   MONEY_OP,
   MONEY_PERMISSION,
   PAYMENT_ACCOUNT_KINDS,
+  drawerAccountId,
+  drawerRef,
   movesOut,
   type CashMoveKind,
   type RevenueAccount,
 } from './constants.js';
 import { zDocument, type MoneyDocument } from './documents.js';
-import { zAccountRef, zAmount, zReason } from './operations.js';
+import { zAccountRef, zAmount, zReason, zRoleId } from './operations.js';
 import { documentMoneyQuery, drawerForMoveQuery } from './queries.js';
 import { MONEY_REFUSALS } from './rules.js';
 import { seesExpected } from './kas.js';
@@ -123,7 +129,14 @@ const accountFields = {
   active: z.boolean().default(true),
 };
 
-export const saveAccountInput = z.object(accountFields).strict();
+export const saveAccountInput = z
+  .object({
+    ...accountFields,
+    kind: z.enum(MONEY_ACCOUNT_KINDS),
+    /** Drawers only: the roles that use it; empty for every role. */
+    roleIds: z.array(zRoleId).max(MAX_DRAWER_ROLES).default([]),
+  })
+  .strict();
 export type SaveAccountInput = z.input<typeof saveAccountInput>;
 
 export function saveAccountHandler(
@@ -137,11 +150,48 @@ export function saveAccountHandler(
         type: MONEY_OP.accountSaved,
         entityType: MONEY_ACCOUNT_ENTITY,
         entityId: accountId,
-        payload: { kind: input.kind, name: input.name, active: input.active },
+        payload: {
+          kind: input.kind,
+          name: input.name,
+          active: input.active,
+          ...(input.kind === DRAWER_KIND ? { roleIds: [...new Set(input.roleIds)].sort() } : {}),
+        },
       }),
     ],
     result: { accountId },
   };
+}
+
+export const saveDrawerInput = z
+  .object({
+    /** The drawer: absent for a new one, `cash` for the store's main drawer. */
+    drawer: zAccountRef.optional(),
+    name: z.string().trim().min(1).max(MAX_ACCOUNT_NAME),
+    active: z.boolean().default(true),
+    roleIds: z.array(zRoleId).max(MAX_DRAWER_ROLES).default([]),
+  })
+  .strict();
+export type SaveDrawerInput = z.input<typeof saveDrawerInput>;
+
+/** Add a drawer, or rename one and set the roles that use it; the main drawer's settings too. */
+export function saveDrawerHandler(
+  input: z.output<typeof saveDrawerInput>,
+  ctx: CommandContext,
+): CommandHandlerResult<{ drawer: string }> {
+  const store = ctx.storeId ?? '';
+  const accountId =
+    input.drawer === undefined ? ctx.newId() : (drawerAccountId(input.drawer, store) ?? '');
+  const { ops } = saveAccountHandler(
+    {
+      accountId,
+      kind: DRAWER_KIND,
+      name: input.name,
+      active: input.active,
+      roleIds: input.roleIds,
+    },
+    ctx,
+  );
+  return { ops, result: { drawer: drawerRef(accountId, store) } };
 }
 
 export const saveCentralAccountInput = z
@@ -275,7 +325,10 @@ export const moveCashInput = z
     kind: z.enum(CASH_MOVE_KINDS),
     amount: zAmount,
     reason: zReason,
+    /** A deposit's account, or the drawer a transfer goes to. */
     account: zAccountRef.nullable().default(null),
+    /** The drawer the cash leaves or enters. */
+    drawer: zAccountRef.default(CASH_ACCOUNT),
   })
   .strict();
 export type MoveCashInput = z.input<typeof moveCashInput>;
@@ -293,7 +346,9 @@ export async function moveCashHandler(
   // Not for someone counting blind: the refusal would give the drawer away a try at a time.
   const blind = !seesExpected((permission) => ctx.colleagueHasPermission(ctx.userId, permission));
   if (movesOut(kind) && !blind) {
-    const drawer = (await ctx.query(drawerForMoveQuery, { counts: 0 })).rows[0]!.expected;
+    const drawer =
+      (await ctx.query(drawerForMoveQuery, { counts: 0, drawer: input.drawer })).rows[0]
+        ?.expected ?? 0;
     if (input.amount > drawer) {
       throw MONEY_REFUSALS.refuseOnDevice('moveAboveDrawer', {
         code: 'VALIDATION_FAILED',
@@ -305,7 +360,8 @@ export async function moveCashHandler(
     kind,
     amount: input.amount,
     reason: input.reason,
-    account: kind === 'deposit' ? input.account : null,
+    account: kind === 'deposit' || kind === 'transfer' ? input.account : null,
+    ...(input.drawer === CASH_ACCOUNT ? {} : { drawer: input.drawer }),
   });
   return { ops: [op], result: { entryId: op.entityId } };
 }
@@ -314,6 +370,7 @@ export const countCashInput = z
   .object({
     counted: z.number().int().min(0).max(MAX_AMOUNT),
     note: z.string().trim().max(MAX_REASON).default(''),
+    drawer: zAccountRef.default(CASH_ACCOUNT),
   })
   .strict();
 export type CountCashInput = z.input<typeof countCashInput>;
@@ -322,7 +379,11 @@ export function countCashHandler(
   input: z.output<typeof countCashInput>,
   ctx: CommandContext,
 ): CommandHandlerResult<{ entryId: string }> {
-  const op = entryOp(ctx, MONEY_OP.cashCounted, input);
+  const { drawer, ...count } = input;
+  const op = entryOp(ctx, MONEY_OP.cashCounted, {
+    ...count,
+    ...(drawer === CASH_ACCOUNT ? {} : { drawer }),
+  });
   return { ops: [op], result: { entryId: op.entityId } };
 }
 

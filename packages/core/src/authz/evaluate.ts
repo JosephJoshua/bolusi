@@ -189,6 +189,29 @@ export function computeEffectiveSet(
   return { tenantScope, storeScope };
 }
 
+/**
+ * The roles a user holds in a store: their store grants there and their tenant-wide ones, for a
+ * rule that limits something to named roles (a cash drawer). Fails closed like `hasPermission`: an
+ * inactive or unknown user, another tenant or a malformed grant holds nothing.
+ */
+export function rolesHeld(
+  snapshot: DirectorySnapshot,
+  query: Omit<PermissionQuery, 'permissionId'>,
+): string[] {
+  const user = snapshot.users.get(query.userId);
+  if (user === undefined || user.status !== 'active') return [];
+  if (snapshot.tenantId === null || snapshot.tenantId !== query.tenantId) return [];
+  const held = new Set<string>();
+  for (const grant of snapshot.grantsByUser.get(query.userId) ?? []) {
+    const scoped = classifyGrant(snapshot.roles.get(grant.roleId), grant);
+    if (scoped === null) continue;
+    if (scoped.scope === 'tenant' || (query.storeId !== null && scoped.storeId === query.storeId)) {
+      held.add(grant.roleId);
+    }
+  }
+  return [...held].sort();
+}
+
 /** Lets the memo (memo.ts) supply a cached `EffectiveSet` instead of recomputing per call. */
 export type EffectiveSetLookup = (userId: string, storeId: string | null) => EffectiveSet;
 

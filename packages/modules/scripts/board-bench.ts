@@ -99,6 +99,7 @@ async function main(): Promise<void> {
       storeId: writer.storeId,
       userId: writer.technicianId,
       hasPermission: () => true,
+      rolesHeld: () => [],
       search: device.search,
     };
     const { listTickets, searchTickets } = repairModule.queries;

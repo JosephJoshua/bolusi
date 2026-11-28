@@ -52,6 +52,11 @@ export interface OpRuleContext<DB> {
     options?: HoldsPermissionOptions,
   ): Promise<boolean>;
   /**
+   * The roles `userId` holds in the op's store, by the same directory as `holdsPermission`: for a
+   * rule that limits something to named roles (a cash drawer only some roles may use).
+   */
+  rolesOf(userId: string): Promise<readonly string[]>;
+  /**
    * SHA-256 from the judging side's crypto port, for a value an op must have derived by hash (a
    * customer's status link code) rather than chosen.
    */

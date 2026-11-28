@@ -95,6 +95,7 @@ export const CASH_MOVE_LABEL: Readonly<Record<CashMoveKind, MoneyKey>> = {
   expense: 'money.moveKind.expense',
   deposit: 'money.moveKind.deposit',
   float: 'money.moveKind.float',
+  transfer: 'money.moveKind.transfer',
 };
 
 /** A change to the drawer the counter did not take at the counter: a move, or a settled difference. */

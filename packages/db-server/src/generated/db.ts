@@ -320,6 +320,7 @@ export interface MoneyAccounts {
   id: string;
   kind: string;
   name: string;
+  roleIdsJson: string | null;
   storeId: string | null;
   storeIdsJson: string | null;
   tenantId: string;
@@ -335,6 +336,7 @@ export interface MoneyEntries {
   documentId: string | null;
   documentKind: string | null;
   documentLabel: string | null;
+  drawer: string | null;
   id: string;
   kind: string;
   reason: string | null;

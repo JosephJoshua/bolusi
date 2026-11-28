@@ -38,7 +38,11 @@
     "overLimit": "Over your limit. Ask a store owner.",
     "moveAboveDrawer": "Not enough cash in the drawer.",
     "cashMoveNotFound": "This cash record isn’t in this store.",
-    "laterCountSettled": "A later drawer count was already settled, so this record can’t be cancelled any more."
+    "laterCountSettled": "A later drawer count was already settled, so this record can’t be cancelled any more.",
+    "notADrawer": "That isn't one of this store's cash drawers.",
+    "drawerNotYours": "Your role doesn't use this drawer.",
+    "sameDrawer": "Pick another drawer to move the cash to.",
+    "mainDrawerStays": "The store's main drawer can't be switched off."
   },
   "method": {
     "cash": "Cash"
@@ -103,7 +107,8 @@
     "withdrawal": "To the owner",
     "expense": "Store expense",
     "deposit": "Bank deposit",
-    "float": "Add change money"
+    "float": "Add change money",
+    "transfer": "Move to another drawer"
   },
   "count": {
     "counted": "Cash in the drawer",

@@ -19,6 +19,7 @@ import {
   computeEffectiveSet,
   DENIAL_REASONS,
   evaluatePermission,
+  rolesHeld,
   type DenialReason,
   type DirectorySnapshot,
   type PermissionQuery,
@@ -486,5 +487,23 @@ describe('computeEffectiveSet (02-permissions §5.2 steps 4–6)', () => {
       grants: { [USER_STAFF]: [{ roleId: ROLE_STAFF, storeId: STORE_A }] },
     });
     expect(() => computeEffectiveSet(snap, USER_STAFF, STORE_A)).toThrow();
+  });
+});
+
+describe('rolesHeld (roles that limit something, such as a cash drawer)', () => {
+  const at = (userId: string, storeId: string | null, tenantId = TENANT) =>
+    rolesHeld(v0Snapshot(), { userId, tenantId, storeId });
+
+  test('a store grant counts at its store, a tenant-wide one at every store', () => {
+    expect(at(USER_STORE_OWNER, STORE_A)).toEqual([ROLE_STORE_OWNER]);
+    expect(at(USER_STORE_OWNER, STORE_B)).toEqual([]);
+    expect(at(USER_OWNER, STORE_B)).toEqual([ROLE_MAIN_OWNER]);
+  });
+
+  test('fails closed: another tenant, an unknown or deactivated user holds nothing', () => {
+    expect(at(USER_STORE_OWNER, STORE_A, OTHER_TENANT)).toEqual([]);
+    expect(at('user-nobody', STORE_A)).toEqual([]);
+    const snap = v0Snapshot({ users: { [USER_STAFF]: { status: 'deactivated' } } });
+    expect(rolesHeld(snap, { userId: USER_STAFF, tenantId: TENANT, storeId: STORE_A })).toEqual([]);
   });
 });

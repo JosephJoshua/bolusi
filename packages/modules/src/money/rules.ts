@@ -19,11 +19,14 @@ import type { SignedOperation } from '@bolusi/schemas';
 
 import {
   CASH_ACCOUNT,
+  DRAWER_KIND,
   MONEY_ENTRY_ENTITY,
   MONEY_PERMISSION,
   SYSTEM_ACCOUNT,
+  drawerAccountId,
   paymentAccountIdOf,
   referenceRequired,
+  type MoneyAccountKind,
   type PaymentAccountKind,
 } from './constants.js';
 import type { MoneyDocument, MoneyDocumentSources } from './documents.js';
@@ -61,6 +64,10 @@ export const MONEY_REFUSALS = defineRefusals(
     'overLimit',
     'cashMoveNotFound',
     'laterCountSettled',
+    'notADrawer',
+    'drawerNotYours',
+    'sameDrawer',
+    'mainDrawerStays',
   ] as const,
   // The server records cash as it really moved, so only a device that sees the drawer stops a
   // move above it.
@@ -120,7 +127,7 @@ export async function usableAccount(
   storeId: string,
   accountId: string,
   options: { includeInactive?: boolean } = {},
-): Promise<{ kind: PaymentAccountKind } | null> {
+): Promise<{ kind: MoneyAccountKind } | null> {
   let query = db
     .selectFrom('moneyAccounts')
     .select(['kind', 'storeId', 'storeIdsJson'])
@@ -132,7 +139,33 @@ export async function usableAccount(
   if (!accountVisibleTo({ ...row, storeIds: centralStoreIds(row.storeIdsJson) }, storeId)) {
     return null;
   }
-  return { kind: row.kind as PaymentAccountKind };
+  return { kind: row.kind as MoneyAccountKind };
+}
+
+/** The roles a drawer is limited to; empty when every role uses it (or it has no settings). */
+export async function drawerRoles(db: Db, storeId: string, drawer: string): Promise<string[]> {
+  const id = drawerAccountId(drawer, storeId);
+  if (id === null) return [];
+  const row = await db
+    .selectFrom('moneyAccounts')
+    .select('roleIdsJson')
+    .where('id', '=', id)
+    .where('storeId', '=', storeId)
+    .where('kind', '=', DRAWER_KIND)
+    .executeTakeFirst();
+  return JSON.parse(row?.roleIdsJson ?? '[]') as string[];
+}
+
+/**
+ * Whether someone may use a drawer: it is open to every role, they hold one of its roles, or they
+ * manage the store's accounts (an owner, who could give themselves the role anyway).
+ */
+export function drawerOpenTo(
+  roleIds: readonly string[],
+  held: readonly string[],
+  managesAccounts: boolean,
+): boolean {
+  return roleIds.length === 0 || managesAccounts || held.some((role) => roleIds.includes(role));
 }
 
 /** What the customer owes on a document now: positive owed, negative paid ahead. */
@@ -179,6 +212,7 @@ export async function documentTotal(
 export async function countExpected(
   db: Db,
   storeId: string,
+  drawer: string,
   count: { readonly id: string; readonly createdAt: number },
 ): Promise<number> {
   const row = await db
@@ -192,7 +226,7 @@ export async function countExpected(
     )
     .select(sql<string | number>`COALESCE(SUM(l.debit - l.credit), 0)`.as('balance'))
     .where('l.storeId', '=', storeId)
-    .where('l.account', '=', CASH_ACCOUNT)
+    .where('l.account', '=', drawer)
     .where((eb) =>
       eb.or([
         eb.and([eb('c.id', 'is', null), eb('l.at', '<', count.createdAt)]),
@@ -402,13 +436,13 @@ async function requireFreshEntry(db: Db, op: SignedOperation): Promise<void> {
   if (await entryExists(db, op.entityId)) throw alreadyRecorded(op);
 }
 
-/** The drawer, or a configured account this store may use. Returns its kind. */
+/** The main drawer, or a configured account (a method or a drawer) this store may use. */
 async function requireAccount(
   db: Db,
   op: SignedOperation,
   account: string,
   options: { includeInactive?: boolean } = {},
-): Promise<PaymentAccountKind | 'cash'> {
+): Promise<MoneyAccountKind | 'cash'> {
   if (account === CASH_ACCOUNT) return 'cash';
   const id = paymentAccountIdOf(account);
   const usable =
@@ -420,6 +454,53 @@ async function requireAccount(
     });
   }
   return usable.kind;
+}
+
+/** Whether an account kind is cash in a drawer. */
+function isDrawerKind(kind: MoneyAccountKind | 'cash'): boolean {
+  return kind === 'cash' || kind === DRAWER_KIND;
+}
+
+type DrawerCtx = Pick<Parameters<Rule>[1], 'db' | 'holdsPermission' | 'rolesOf'>;
+
+/** The op's author may use this drawer (`drawerOpenTo`), by the judging side's directory. */
+async function requireDrawerUse(ctx: DrawerCtx, op: SignedOperation, drawer: string) {
+  const roleIds = await drawerRoles(ctx.db, storeOf(op), drawer);
+  if (roleIds.length === 0) return;
+  const manages = await ctx.holdsPermission(op.userId, MONEY_PERMISSION.manageAccounts, {
+    uses: false,
+  });
+  if (drawerOpenTo(roleIds, await ctx.rolesOf(op.userId), manages)) return;
+  throw refuse('drawerNotYours', {
+    code: 'PERMISSION_DENIED',
+    details: { field: 'drawer', issue: 'not a drawer this person uses', account: drawer },
+  });
+}
+
+/** One of this store's active drawers, which the author may use. */
+async function requireDrawer(ctx: DrawerCtx, op: SignedOperation, drawer: string) {
+  const kind = await requireAccount(ctx.db, op, drawer);
+  if (!isDrawerKind(kind)) {
+    throw refuse('notADrawer', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'drawer', issue: 'not a cash drawer', account: drawer },
+    });
+  }
+  await requireDrawerUse(ctx, op, drawer);
+}
+
+/** Whether money through `account` is drawer cash, without asking whether it is usable. */
+async function isDrawerAccount(db: Db, op: SignedOperation, account: string): Promise<boolean> {
+  if (account === CASH_ACCOUNT) return true;
+  const id = paymentAccountIdOf(account);
+  if (id === null) return false;
+  const row = await db
+    .selectFrom('moneyAccounts')
+    .select('kind')
+    .where('id', '=', id)
+    .where('storeId', '=', storeOf(op))
+    .executeTakeFirst();
+  return row?.kind === DRAWER_KIND;
 }
 
 /** The change a refund limit judges with what is already taken off a document. */
@@ -585,7 +666,8 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, takenOff);
   };
 
-  const paymentReceivedRule: Rule = async (op, { db }) => {
+  const paymentReceivedRule: Rule = async (op, ctx) => {
+    const { db } = ctx;
     const { document, account, amount, reference, tendered, replaces } = payloadOf<{
       document: MoneyDocument;
       account: string;
@@ -597,13 +679,19 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     await requireFreshEntry(db, op);
     await requireDocument(db, op, document);
     const kind = await requireAccount(db, op, account);
-    if (referenceRequired(kind) && (reference === null || reference.trim() === '')) {
+    const drawer = isDrawerKind(kind);
+    if (drawer) await requireDrawerUse(ctx, op, account);
+    if (
+      !drawer &&
+      referenceRequired(kind as PaymentAccountKind) &&
+      (reference === null || reference.trim() === '')
+    ) {
       throw refuse('referenceRequired', {
         code: 'VALIDATION_FAILED',
         details: { field: 'reference', issue: 'required for this account' },
       });
     }
-    if (tendered !== null && (account !== CASH_ACCOUNT || tendered < amount)) {
+    if (tendered !== null && (!drawer || tendered < amount)) {
       throw refuse('tenderedTooLow', {
         code: 'VALIDATION_FAILED',
         details: { field: 'tendered', issue: 'cash handed over is less than the payment' },
@@ -664,7 +752,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
   const cashMoveVoidedRule: Rule = async (op, { db }) => {
     const entry = await db
       .selectFrom('moneyEntries')
-      .select(['id', 'kind', 'voidedBy', 'createdAt'])
+      .select(['id', 'kind', 'voidedBy', 'createdAt', 'drawer', 'subKind', 'account'])
       .where('id', '=', op.entityId)
       .where('storeId', '=', storeOf(op))
       .executeTakeFirst();
@@ -685,6 +773,11 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
       .where('a.kind', '=', 'cash_adjusted')
       .where('c.kind', '=', 'cash_counted')
       .where('c.createdAt', '>', entry.createdAt)
+      // A transfer moved cash in two drawers: a settled count of either stops its void.
+      .where('c.drawer', 'in', [
+        entry.drawer ?? CASH_ACCOUNT,
+        ...(entry.subKind === 'transfer' && entry.account !== null ? [entry.account] : []),
+      ])
       .executeTakeFirst();
     if (settled !== undefined) {
       throw refuse('laterCountSettled', {
@@ -715,6 +808,8 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     if (!(await paidThroughOnDocument(db, store, document, account))) {
       await requireAccount(db, op, account, { includeInactive: true });
     }
+    // Cash goes back out of a drawer its author uses, as it came in.
+    if (await isDrawerAccount(db, op, account)) await requireDrawerUse(ctx, op, account);
     // Nobody, not even an owner, gives back more than came in: two phones that each saw the same
     // payment must not both hand it back.
     const refunded = await documentTotal(db, store, document, 'refund_paid');
@@ -755,18 +850,42 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     await requireWithinLimit(op, ctx, MONEY_PERMISSION.refund, takenOff);
   };
 
-  /** A deposit goes into one of the store's accounts; other moves touch only the drawer. */
-  const cashMovedRule: Rule = async (op, { db }) => {
-    const { kind, account } = payloadOf<{ kind: string; account: string | null }>(op);
+  /**
+   * Cash moves in or out of a drawer its author uses. A deposit goes into one of the store's
+   * payment accounts; a transfer into another drawer, which its author must use too, so nobody
+   * pushes cash into a drawer they have no part in. Other moves touch only the one drawer.
+   */
+  const cashMovedRule: Rule = async (op, ctx) => {
+    const { db } = ctx;
+    const { kind, account, drawer } = payloadOf<{
+      kind: string;
+      account: string | null;
+      drawer?: string;
+    }>(op);
     await requireFreshEntry(db, op);
+    const from = drawer ?? CASH_ACCOUNT;
+    await requireDrawer(ctx, op, from);
     if (kind === 'deposit') {
-      if (account === null || account === CASH_ACCOUNT) {
+      if (account === null || isDrawerKind(await requireAccount(db, op, account))) {
         throw refuse('accountNotUsable', {
           code: 'VALIDATION_FAILED',
           details: { field: 'account', issue: 'a deposit names the account it went into' },
         });
       }
-      await requireAccount(db, op, account);
+    } else if (kind === 'transfer') {
+      if (account === null) {
+        throw refuse('notADrawer', {
+          code: 'VALIDATION_FAILED',
+          details: { field: 'account', issue: 'a transfer names the drawer it went to' },
+        });
+      }
+      if (account === from) {
+        throw refuse('sameDrawer', {
+          code: 'VALIDATION_FAILED',
+          details: { field: 'account', issue: 'a transfer goes to another drawer' },
+        });
+      }
+      await requireDrawer(ctx, op, account);
     } else if (account !== null) {
       throw refuse('accountNotUsable', {
         code: 'VALIDATION_FAILED',
@@ -775,8 +894,10 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     }
   };
 
-  const cashCountedRule: Rule = async (op, { db }) => {
-    await requireFreshEntry(db, op);
+  /** A count is of one of the store's drawers, by someone who uses it. */
+  const cashCountedRule: Rule = async (op, ctx) => {
+    await requireFreshEntry(ctx.db, op);
+    await requireDrawer(ctx, op, payloadOf<{ drawer?: string }>(op).drawer ?? CASH_ACCOUNT);
   };
 
   /**
@@ -784,7 +905,8 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
    * (schema v1), but a correction that names none would move the book with no count behind it, so
    * none is recorded any more.
    */
-  const cashAdjustedRule: Rule = async (op, { db }) => {
+  const cashAdjustedRule: Rule = async (op, ctx) => {
+    const { db } = ctx;
     const { amount, countId } = payloadOf<{ amount: number; countId: string | null }>(op);
     await requireFreshEntry(db, op);
     if (countId === null) {
@@ -795,7 +917,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     }
     const count = await db
       .selectFrom('moneyEntries')
-      .select(['id', 'amount', 'createdAt'])
+      .select(['id', 'amount', 'createdAt', 'drawer'])
       .where('id', '=', countId)
       .where('storeId', '=', storeOf(op))
       .where('kind', '=', 'cash_counted')
@@ -818,11 +940,14 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     }
     // A later count found this difference again, since it was still in the book: only the latest
     // count is settled, or the drawer would be corrected twice.
+    const drawer = count.drawer ?? CASH_ACCOUNT;
+    await requireDrawerUse(ctx, op, drawer);
     const later = await db
       .selectFrom('moneyEntries')
       .select('id')
       .where('storeId', '=', storeOf(op))
       .where('kind', '=', 'cash_counted')
+      .where('drawer', '=', drawer)
       // Newest first by time, then id, as the drawer lists them: two counts in one millisecond
       // still have one latest.
       .where((eb) =>
@@ -838,7 +963,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     // The correction is the difference as it stands: a payment from before the count that synced
     // since changed it, and the owner settles what the count now shows.
     const counted = Number(count.amount);
-    const expected = await countExpected(db, storeOf(op), {
+    const expected = await countExpected(db, storeOf(op), drawer, {
       id: count.id,
       createdAt: Number(count.createdAt),
     });
@@ -1048,6 +1173,10 @@ async function requireSameAccount(db: Db, op: SignedOperation, kind: string): Pr
   }
 }
 
+/**
+ * A store's own account. Only a drawer names roles. The account whose id is the store's own holds
+ * the main drawer's settings: it is a drawer, and stays on, since every store has its drawer.
+ */
 export const accountSavedRule: Rule = async (op, { db }) => {
   if (op.storeId === null) {
     throw refuse('notThisStore', {
@@ -1055,7 +1184,24 @@ export const accountSavedRule: Rule = async (op, { db }) => {
       details: { reason: 'restriction_violated', entityId: op.entityId },
     });
   }
-  await requireSameAccount(db, op, payloadOf<{ kind: string }>(op).kind);
+  const { kind, active, roleIds } = payloadOf<{
+    kind: string;
+    active: boolean;
+    roleIds?: readonly string[];
+  }>(op);
+  if (kind !== DRAWER_KIND && roleIds !== undefined && roleIds.length > 0) {
+    throw refuse('notADrawer', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'roleIds', issue: 'only a drawer is limited to roles' },
+    });
+  }
+  if (op.entityId === op.storeId && (kind !== DRAWER_KIND || !active)) {
+    throw refuse('mainDrawerStays', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'active', issue: "the store's main drawer stays a drawer, and on" },
+    });
+  }
+  await requireSameAccount(db, op, kind);
 };
 
 export const centralAccountSavedRule: Rule = async (op, { db }) => {

@@ -98,6 +98,15 @@ export class PermissionEnforcementPoint {
     }).allowed;
   }
 
+  /** The roles the user holds in their store, for a check limited to named roles (a drawer). */
+  rolesHeld(identity: CommandIdentity): string[] {
+    return this.#evaluator.rolesHeld({
+      userId: identity.userId,
+      tenantId: identity.tenantId,
+      storeId: identity.storeId,
+    });
+  }
+
   /**
    * How far the user may use a permission (authz/limits.ts): silent and synchronous like
    * `hasPermission`, for screens that offer an amount. Rules decide again on save.

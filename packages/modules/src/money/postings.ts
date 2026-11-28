@@ -13,30 +13,42 @@ export interface Posting {
 export interface PostingInput {
   readonly kind: EntryKind;
   readonly amount: number;
-  /** The payment account (payments, refunds, deposits) or the revenue account (charges). */
+  /**
+   * The payment account (payments, refunds, deposits), the drawer cash moved to (a transfer) or
+   * the revenue account (charges).
+   */
   readonly account: string | null;
   readonly subKind: string | null;
+  /** The drawer a cash move or adjustment touches; the main drawer when absent. */
+  readonly drawer?: string | null;
 }
 
 const dr = (account: string, amount: number): Posting => ({ account, debit: amount, credit: 0 });
 const cr = (account: string, amount: number): Posting => ({ account, debit: 0, credit: amount });
 
-function cashMove(kind: CashMoveKind, amount: number, account: string | null): Posting[] {
+function cashMove(
+  kind: CashMoveKind,
+  amount: number,
+  account: string | null,
+  drawer: string,
+): Posting[] {
   switch (kind) {
     case 'withdrawal':
-      return [dr(SYSTEM_ACCOUNT.ownerDraw, amount), cr(CASH_ACCOUNT, amount)];
+      return [dr(SYSTEM_ACCOUNT.ownerDraw, amount), cr(drawer, amount)];
     case 'expense':
-      return [dr(SYSTEM_ACCOUNT.expense, amount), cr(CASH_ACCOUNT, amount)];
+      return [dr(SYSTEM_ACCOUNT.expense, amount), cr(drawer, amount)];
     case 'deposit':
-      return [dr(account ?? CASH_ACCOUNT, amount), cr(CASH_ACCOUNT, amount)];
+    case 'transfer':
+      return [dr(account ?? drawer, amount), cr(drawer, amount)];
     case 'float':
-      return [dr(CASH_ACCOUNT, amount), cr(SYSTEM_ACCOUNT.ownerCapital, amount)];
+      return [dr(drawer, amount), cr(SYSTEM_ACCOUNT.ownerCapital, amount)];
   }
 }
 
 /** The balanced lines of one record. A count posts nothing: only an owner's adjustment does. */
 export function postingsFor(input: PostingInput): Posting[] {
   const { amount, account } = input;
+  const drawer = input.drawer ?? CASH_ACCOUNT;
   const receivable = SYSTEM_ACCOUNT.receivable;
   switch (input.kind) {
     case 'charge_recorded':
@@ -48,13 +60,13 @@ export function postingsFor(input: PostingInput): Posting[] {
     case 'refund_paid':
       return [dr(receivable, amount), cr(account ?? CASH_ACCOUNT, amount)];
     case 'cash_moved':
-      return cashMove(input.subKind as CashMoveKind, amount, account);
+      return cashMove(input.subKind as CashMoveKind, amount, account, drawer);
     case 'cash_counted':
       return [];
     case 'cash_adjusted':
       return amount >= 0
-        ? [dr(CASH_ACCOUNT, amount), cr(SYSTEM_ACCOUNT.cashOverShort, amount)]
-        : [dr(SYSTEM_ACCOUNT.cashOverShort, -amount), cr(CASH_ACCOUNT, -amount)];
+        ? [dr(drawer, amount), cr(SYSTEM_ACCOUNT.cashOverShort, amount)]
+        : [dr(SYSTEM_ACCOUNT.cashOverShort, -amount), cr(drawer, -amount)];
   }
 }
 

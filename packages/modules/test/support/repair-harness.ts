@@ -392,6 +392,7 @@ export async function openRepairHarness(
         holdsPermission: () => Promise.resolve(true),
         withinLimit,
         sha256: (data) => noblePort.sha256(data),
+        rolesOf: () => Promise.resolve([]),
         ...extra,
       }),
     tenantId,

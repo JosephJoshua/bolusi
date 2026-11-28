@@ -130,6 +130,8 @@ export interface QueryContext<DB> {
    * handler must OMIT the field (§9.2: absent, never `null`, never `"***"`) or filter the row.
    */
   hasPermission(permissionId: string): boolean;
+  /** The roles the caller holds in this store (authz `rolesHeld`), for rows limited to roles. */
+  rolesHeld(): readonly string[];
   /**
    * The device's live search indexes (search/live-index.ts), when the runtime keeps them. Read
    * through `searchIndexFor`, which builds a one-off index when this is absent.

@@ -9,6 +9,8 @@
 import type { ProjectionApplier, ProjectionOperation, ProjectionTableManifest } from '@bolusi/core';
 
 import {
+  CASH_ACCOUNT,
+  DRAWER_KIND,
   MONEY_ACCOUNT_ENTITY,
   MONEY_ENTRY_ENTITY,
   MONEY_MODULE_ID,
@@ -31,6 +33,7 @@ export const moneyAccountsTable: ProjectionTableManifest = {
     name: 'text',
     active: 'integer',
     store_ids_json: 'text',
+    role_ids_json: 'text',
     created_at: 'integer',
     updated_by: 'text',
     updated_at: 'integer',
@@ -38,7 +41,7 @@ export const moneyAccountsTable: ProjectionTableManifest = {
   primaryKey: ['id'],
   entityType: MONEY_ACCOUNT_ENTITY,
   entityIdColumn: 'id',
-  projectionVersion: 1,
+  projectionVersion: 2,
 };
 
 export const moneyEntriesTable: ProjectionTableManifest = {
@@ -57,6 +60,7 @@ export const moneyEntriesTable: ProjectionTableManifest = {
     reason: 'text',
     tendered: 'integer',
     related_entry_id: 'text',
+    drawer: 'text',
     created_by: 'text',
     created_at: 'integer',
     voided_by: 'text',
@@ -66,7 +70,7 @@ export const moneyEntriesTable: ProjectionTableManifest = {
   primaryKey: ['id'],
   entityType: MONEY_ENTRY_ENTITY,
   entityIdColumn: 'id',
-  projectionVersion: 1,
+  projectionVersion: 2,
 };
 
 export const moneyLinesTable: ProjectionTableManifest = {
@@ -144,11 +148,34 @@ interface EntryPayload {
   readonly tendered?: number | null;
   readonly countId?: string | null;
   readonly replaces?: string;
+  readonly drawer?: string;
 }
 
 /** The account an entry moved money through, as its payload names it. */
 function entryAccount(kind: EntryKind, payload: EntryPayload): string | null {
   return kind === 'cash_counted' ? null : (payload.account ?? null);
+}
+
+/**
+ * The drawer a cash move or count names (the main one when it names none), or that the count an
+ * adjustment settles was of. Null for every other record: a payment's drawer is its account.
+ */
+async function entryDrawer(
+  db: Db,
+  op: ProjectionOperation,
+  kind: EntryKind,
+  payload: EntryPayload,
+): Promise<string | null> {
+  if (kind === 'cash_moved' || kind === 'cash_counted') return payload.drawer ?? CASH_ACCOUNT;
+  if (kind !== 'cash_adjusted') return null;
+  if (payload.countId === null || payload.countId === undefined) return CASH_ACCOUNT;
+  const count = await db
+    .selectFrom('moneyEntries')
+    .select('drawer')
+    .where('id', '=', payload.countId)
+    .where('storeId', '=', storeIdOf(op))
+    .executeTakeFirst();
+  return count?.drawer ?? CASH_ACCOUNT;
 }
 
 // ── appliers ───────────────────────────────────────────────────────────────────────────────────
@@ -162,6 +189,7 @@ export const entryRecordedApplier: ProjectionApplier<MoneyDatabase> = async (db,
     kind === 'cash_counted' ? payloadOf<{ counted: number }>(op).counted : payload.amount;
   const subKind = kind === 'cash_moved' ? (payload.kind ?? null) : null;
   const account = entryAccount(kind, payload);
+  const drawer = await entryDrawer(db, op, kind, payload);
   const document = payload.document ?? null;
   await db
     .insertInto('moneyEntries')
@@ -180,6 +208,7 @@ export const entryRecordedApplier: ProjectionApplier<MoneyDatabase> = async (db,
       reason: payload.reason ?? payload.note ?? null,
       tendered: payload.tendered ?? null,
       relatedEntryId: payload.countId ?? payload.replaces ?? null,
+      drawer,
       createdBy: op.userId,
       createdAt: op.timestamp,
       voidedBy: null,
@@ -187,7 +216,13 @@ export const entryRecordedApplier: ProjectionApplier<MoneyDatabase> = async (db,
       voidReason: null,
     })
     .execute();
-  await insertLines(db, op, postingsFor({ kind, amount, account, subKind }), document, op.entityId);
+  await insertLines(
+    db,
+    op,
+    postingsFor({ kind, amount, account, subKind, drawer }),
+    document,
+    op.entityId,
+  );
 };
 
 /**
@@ -222,6 +257,7 @@ function voidedApplier(
       amount: Number(entry.amount),
       account: entry.account,
       subKind: entry.subKind,
+      drawer: entry.drawer,
     });
     const document =
       entry.documentKind === null || entry.documentId === null
@@ -248,12 +284,15 @@ export const accountSavedApplier: ProjectionApplier<MoneyDatabase> = async (db, 
     name: string;
     active: boolean;
     storeIds?: readonly string[];
+    roleIds?: readonly string[];
   }>(op);
   const values = {
     kind: payload.kind,
     name: payload.name,
     active: payload.active ? 1 : 0,
     storeIdsJson: op.storeId === null ? JSON.stringify([...(payload.storeIds ?? [])].sort()) : null,
+    roleIdsJson:
+      payload.kind === DRAWER_KIND ? JSON.stringify([...(payload.roleIds ?? [])].sort()) : null,
     updatedBy: op.userId,
     updatedAt: op.timestamp,
   };
