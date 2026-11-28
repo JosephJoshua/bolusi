@@ -11,8 +11,8 @@ import type { SignedOperation } from '@bolusi/schemas';
 
 import enCatalog from '../purchasing/i18n/en.json' with { type: 'json' };
 import idCatalog from '../purchasing/i18n/id.json' with { type: 'json' };
-import { drawerMoves } from '../src/money/kas.js';
-import type { MoneyEntryRow } from '../src/money/queries.js';
+import { drawerMoves, historyLine } from '../src/money/kas.js';
+import type { MoneyEntryRow, PaymentAccountRow } from '../src/money/queries.js';
 import { billOverdue, type BillDetailRow, type BillRow } from '../src/purchasing/bills/queries.js';
 import { registerPurchasingCatalog } from '../src/purchasing/i18n.js';
 import { allocate } from '../src/purchasing/payments/balances.js';
@@ -172,6 +172,13 @@ describe('paying a bill', () => {
     ).find((entry) => entry.id === bankPayment)!;
     expect(bankEntry).toMatchObject({ kind: 'supplier_paid', account: `account:${accountId}` });
     expect(drawerMoves([bankEntry])).toEqual([]);
+    // Kas history reads it as money out, from the bank.
+    const accounts = (await h.moneyQuery('paymentAccounts', {}, h.storeOwnerId))
+      .rows as PaymentAccountRow[];
+    const line = historyLine(bankEntry, accounts);
+    expect(line.label).toBe('money.kas.supplierPaid');
+    expect(line.amount).toMatch(/^[-−]/);
+    expect(line.details).toContain('BCA Toko');
     const paid = await bill(h, billId);
     expect(paid).toMatchObject({ paid: 700_000, balance: 0 });
     expect(paid.payments.map((p) => [p.sourceKind, p.accountName, p.amount])).toEqual([

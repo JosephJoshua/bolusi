@@ -44,6 +44,7 @@ export const MONEY_KEYS = [
   'money.reduce.rejected',
   'money.reduce.rejectedNote',
   'money.method.cash',
+  'money.method.ownerFunds',
   'money.pay.addMethod',
   'money.pay.amount',
   'money.pay.approvalCode',

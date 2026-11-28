@@ -44,7 +44,8 @@
     "payoutNotFound": "Kas hanya dapat dikeluarkan sesuai pembayaran supplier yang dicatat pemilik."
   },
   "method": {
-    "cash": "Tunai"
+    "cash": "Tunai",
+    "ownerFunds": "Uang pribadi pemilik"
   },
   "pay": {
     "amount": "Jumlah",

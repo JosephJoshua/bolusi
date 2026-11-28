@@ -8,6 +8,7 @@ import {
   MONEY_PERMISSION,
   movesOut,
   PAYOUT_KINDS,
+  SYSTEM_ACCOUNT,
   type CashMoveKind,
 } from './constants.js';
 import type { MoneyDocument } from './documents.js';
@@ -26,6 +27,7 @@ export function dayStart(now: number): number {
 /** A method's name, also for one switched off since: past money keeps the name it came in by. */
 export function accountLabel(account: string, accounts: readonly PaymentAccountRow[]): string {
   if (account === CASH_ACCOUNT) return tm('money.method.cash');
+  if (account === SYSTEM_ACCOUNT.ownerCapital) return tm('money.method.ownerFunds');
   return accounts.find((row) => `account:${row.id}` === account)?.name ?? account;
 }
 
@@ -255,16 +257,21 @@ export function historyLine(
   const voidedPayment = voided && entry.kind === 'payment_received';
   const label = voidedPayment
     ? 'money.opType.paymentVoided'
-    : (move?.label ?? ENTRY_LABEL[entry.kind] ?? 'money.opType.paymentReceived');
+    : isPayout(entry.kind)
+      ? PAYOUT_LABEL[entry.kind]
+      : (move?.label ?? ENTRY_LABEL[entry.kind] ?? 'money.opType.paymentReceived');
+  // A payout says which account it left, the drawer, a bank or the owner's own money.
   const method =
     entry.account === null ||
-    !['payment_received', 'refund_paid', 'cash_moved'].includes(entry.kind)
+    !(
+      ['payment_received', 'refund_paid', 'cash_moved'].includes(entry.kind) || isPayout(entry.kind)
+    )
       ? null
       : accountLabel(entry.account, accounts);
   const signed =
     move !== undefined
       ? move.delta
-      : entry.kind === 'refund_paid' || entry.kind === 'charge_reduced'
+      : isPayout(entry.kind) || entry.kind === 'refund_paid' || entry.kind === 'charge_reduced'
         ? -entry.amount
         : entry.amount;
   return {

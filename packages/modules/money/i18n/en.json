@@ -44,7 +44,8 @@
     "payoutNotFound": "Cash leaves the drawer only as the owner’s supplier payment records it."
   },
   "method": {
-    "cash": "Cash"
+    "cash": "Cash",
+    "ownerFunds": "Owner’s own money"
   },
   "pay": {
     "amount": "Amount",
