@@ -159,6 +159,7 @@ function PriceTable({
   const query = useRepairQuery(
     async (rt) => {
       const page = await rt.query('priceList', {
+        storeOnly: true,
         text,
         repairType,
         limit: PAGE * pages,

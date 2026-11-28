@@ -124,6 +124,8 @@ export const priceListInput = z
     text: z.string().max(200).default(''),
     /** Only this repair type's rows. */
     repairType: zOptionId.nullable().default(null),
+    /** Leave out the repair types this store hides, as the counter quotes only what it offers. */
+    storeOnly: z.boolean().default(false),
     offset: z.number().int().min(0).default(0),
     limit: z.number().int().min(1).max(MAX_PRICE_PAGE).default(50),
   })
@@ -175,6 +177,11 @@ export async function priceListHandler(
 ): Promise<QueryPage<PriceRow>> {
   let query = priceRows(qctx);
   if (input.repairType !== null) query = query.where('p.repairType', '=', input.repairType);
+  if (input.storeOnly && qctx.storeId !== null) {
+    const hidden = (await readIntakeOptionSettings(qctx.db, qctx.tenantId, qctx.storeId)).hidden
+      .repairTypes;
+    if (hidden.length > 0) query = query.where('p.repairType', 'not in', hidden);
+  }
 
   if (input.text.trim() !== '') {
     // The filter drops hits the index ranked, so the window widens until it holds the page.

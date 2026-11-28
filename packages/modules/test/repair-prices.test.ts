@@ -183,6 +183,16 @@ describe("a store's own price", () => {
     );
   });
 
+  test("the counter's list leaves out the repair types this store hides", async () => {
+    const h = await harness(11);
+    const [lcd, battery] = await saveRows(h, [LCD_A12, BATTERY_NOTE10]);
+    await h.run('hideIntakeOptions', { list: 'repairTypes', hidden: ['battery'] }, h.storeOwnerId);
+    const ids = async (storeOnly: boolean) =>
+      (await list(h, { storeOnly })).map((r: { id: string }) => r.id);
+    expect(await ids(true)).toStrictEqual([lcd]);
+    expect(await ids(false)).toStrictEqual([lcd, battery]);
+  });
+
   test('who sees what on the list', async () => {
     const h = await harness(10);
     const of = (userId: string) => priceAbilities((p) => h.hasPermission(userId, p));

@@ -86,6 +86,7 @@ export function PriceList({
       for (let n = 0; n < pages && next !== null; n += 1) {
         const page: { readonly rows: readonly PriceRow[]; readonly nextCursor: string | null } =
           await rt.query('priceList', {
+            storeOnly: !can.edit,
             text: searchText,
             repairType,
             offset: Number(next),
