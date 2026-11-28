@@ -5,8 +5,8 @@
  * tiny dependency-free static server, then drives it headless in Chromium. This is the browser
  * APPROXIMATION lane — it never replaces the device gates (27a/27b) or native E2E (117).
  *
- * `build.ts` runs `tsc -b` and `expo export` before every run, so the suite always checks the
- * current source, however it is started.
+ * The server's command runs `build:web` (`tsc -b`, then `expo export`) first, so every run checks
+ * the current source, however it is started. Playwright starts the server before any global setup.
  */
 import path from 'node:path';
 
@@ -18,7 +18,6 @@ const BASE_URL = `http://localhost:${PORT}`;
 
 export default defineConfig<{ fontScale: number }>({
   testDir: __dirname,
-  globalSetup: path.join(__dirname, 'build.ts'),
   outputDir: path.join(__dirname, 'test-results'),
   // A phone-shaped viewport: the screens target ~360 dp Android (design-system §0). Each page runs
   // its own demo with its own fixed clock, so files run side by side; tests in a file stay in order.
@@ -42,14 +41,16 @@ export default defineConfig<{ fontScale: number }>({
     deviceScaleFactor: 2,
   },
   webServer: {
-    command: `node ${path.join(__dirname, 'static-server.mjs')} ${path.join(MOBILE_ROOT, 'dist')}`,
+    command: `pnpm run build:web && node ${path.join(__dirname, 'static-server.mjs')} ${path.join(MOBILE_ROOT, 'dist')}`,
+    cwd: MOBILE_ROOT,
     url: BASE_URL,
     // Always start a FRESH server bound to `dist`. `reuseExistingServer: true` is a footgun here:
     // a leftover static-server from an earlier run (a spike bundle, a stale dist) silently answers on
     // the port and the whole suite validates the WRONG bytes — a real green with fictional provenance
     // (CLAUDE.md §2.1). `false` makes a port collision fail loud instead.
     reuseExistingServer: false,
-    timeout: 60_000,
+    // A cold `tsc -b` of the workspace plus the export.
+    timeout: 300_000,
     env: { PORT: String(PORT) },
   },
 });
