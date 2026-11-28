@@ -35,6 +35,7 @@ import {
   intakeListProblems,
   needsOwnershipVideo,
   DEFAULT_INTAKE_OPTIONS,
+  gradeOf,
   recordedOption,
   storeIntakeOptions,
   warrantyUntil,
@@ -642,44 +643,74 @@ async function listVersions(
   ];
 }
 
+/** Every version of the franchise lists a repair type's terms are judged against. */
+interface TermVersions {
+  readonly repairTypes: readonly (readonly IntakeOption[])[];
+  readonly grades: readonly (readonly IntakeOption[])[];
+}
+
+async function termVersions(
+  db: Db,
+  op: SignedOperation,
+  lists: IntakeOptionSettings['lists'],
+): Promise<TermVersions> {
+  return {
+    repairTypes: await listVersions(db, op, 'repairTypes', lists.repairTypes),
+    grades: await listVersions(db, op, 'grades', lists.grades),
+  };
+}
+
 /**
  * Whether a repair type newly put on a servisan carries terms the owner gave it: some version of
  * the franchise list had it under that name with at least as much warranty, and no more need for
- * the ownership video, than recorded. Any version counts, since the counter may have picked it
- * offline before the owner changed the list; terms no version ever gave (more warranty days, or
- * no video for a type that always needed one) were not the owner's.
+ * the ownership video, than recorded. A type with a grade takes its warranty from that grade on
+ * the type, and the grade's name from some version of the grades list. Any version counts, since
+ * the counter may have picked it offline before the owner changed the list; terms no version ever
+ * gave (more warranty days, or no video for a type that always needed one) were not the owner's.
  */
-function hasListTerms(
-  type: RecordedRepairType,
-  versions: readonly (readonly IntakeOption[])[],
-): boolean {
-  return versions.some((offered) => {
+function hasListTerms(type: RecordedRepairType, versions: TermVersions): boolean {
+  const grade = type.grade ?? null;
+  if (
+    grade !== null &&
+    !versions.grades.some((offered) =>
+      offered.some((item) => item.id === grade.item && item.label === grade.label),
+    )
+  ) {
+    return false;
+  }
+  return versions.repairTypes.some((offered) => {
     const option = offered.find((item) => item.id === type.item);
-    return (
-      option !== undefined &&
-      option.label === type.label &&
-      type.warrantyDays <= (option.warrantyDays ?? 0) &&
-      (type.needsVideo || option.needsVideo !== true)
-    );
+    if (option === undefined || option.label !== type.label) return false;
+    if (!type.needsVideo && option.needsVideo === true) return false;
+    const days =
+      grade === null
+        ? option.warrantyDays
+        : option.grades?.find((terms) => terms.id === grade.item)?.warrantyDays;
+    return days !== undefined && type.warrantyDays <= days;
   });
 }
 
 /**
  * The repair types an op records take their terms from the owner's list, never from the device that
- * signed it: one already on the servisan (`kept`) keeps exactly the terms it was given, so a promise
- * already made never changes, and a new one has terms some version of the list gave it.
+ * signed it: one already on the servisan in the same grade (`kept`) keeps exactly the terms it was
+ * given, so a promise already made never changes, and a new one, or one in another grade, has terms
+ * some version of the list gave it.
  */
 function requireRepairTypeTerms(
   types: readonly RecordedRepairType[],
-  versions: readonly (readonly IntakeOption[])[],
+  versions: TermVersions,
   kept: readonly RecordedRepairType[] = [],
 ): void {
   for (const type of types) {
-    const recorded = kept.find((other) => other.item === type.item);
+    const recorded = kept.find(
+      (other) => other.item === type.item && gradeOf(other) === gradeOf(type),
+    );
     const ok =
       recorded === undefined
         ? hasListTerms(type, versions)
-        : type.warrantyDays === recorded.warrantyDays && type.needsVideo === recorded.needsVideo;
+        : type.warrantyDays === recorded.warrantyDays &&
+          type.needsVideo === recorded.needsVideo &&
+          (type.grade?.label ?? null) === (recorded.grade?.label ?? null);
     if (!ok) {
       throw refuse('repairTypeTerms', {
         code: 'VALIDATION_FAILED',
@@ -762,7 +793,7 @@ export const ticketRepairTypesChangedRule: Rule = async (op, { db, holdsPermissi
   const { lists } = await readIntakeOptionSettings(db, op.tenantId, storeOf(op));
   requireRepairTypeTerms(
     repairTypes,
-    await listVersions(db, op, 'repairTypes', lists.repairTypes),
+    await termVersions(db, op, lists),
     JSON.parse(row.repairTypesJson) as RecordedRepairType[],
   );
 };
@@ -930,10 +961,7 @@ export const ticketOpenedRule: Rule = async (op, ctx) => {
       payload.photos.map((photo) => photo.slot),
     );
     if (op.schemaVersion >= 3 && payload.repairTypes.length > 0) {
-      requireRepairTypeTerms(
-        payload.repairTypes,
-        await listVersions(db, op, 'repairTypes', settings.lists.repairTypes),
-      );
+      requireRepairTypeTerms(payload.repairTypes, await termVersions(db, op, settings.lists));
     }
   }
   // From v4 the customer's ownership video comes with the intake that needs one.

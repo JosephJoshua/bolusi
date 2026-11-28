@@ -228,6 +228,9 @@ const zRepairTypeIds = z
   .max(MAX_TICKET_REPAIR_TYPES)
   .refine((ids) => new Set(ids).size === ids.length, { message: 'a repair type is picked twice' });
 
+/** The part grade picked for each repair type that asks for one: repair type id to grade id. */
+const zGradePicks = z.record(zOptionId, zOptionId);
+
 // ── openTicket (the one-sitting intake) ────────────────────────────────────────────────────────
 
 export const openTicketInput = z
@@ -260,6 +263,8 @@ export const openTicketInput = z
     peripherals: z.array(zRecordedOption).max(50).default([]),
     /** What is being repaired, by the ids on this store's list; the terms are recorded here. */
     repairTypes: zRepairTypeIds.default([]),
+    /** The grade the customer agreed to for each picked repair type that asks for one. */
+    grades: zGradePicks.default({}),
     /**
      * The servisan this intake is a warranty claim on: one that went home repaired. A claim repairs
      * what that one did, so it picks no repair types of its own.
@@ -300,7 +305,7 @@ export async function openTicketHandler(
   const offered = storeIntakeOptions(await loadIntakeOptions(ctx));
   const angles = offered.photoAngles;
   const repairTypes = repairTypesOrRefuse(
-    recordRepairTypes(input.repairTypes, offered.repairTypes),
+    recordRepairTypes(input.repairTypes, offered.repairTypes, [], input.grades, offered.grades),
   );
   const taken = new Set(input.photos.map((photo) => photo.slot));
   const missing = angles.filter((angle) => !taken.has(angle.id));
@@ -399,6 +404,13 @@ async function openedTicket(
 
 function repairTypesOrRefuse(recorded: ReturnType<typeof recordRepairTypes>): RecordedRepairType[] {
   if ('types' in recorded) return recorded.types;
+  if ('gradeNeeded' in recorded) {
+    throw new DomainError(
+      'VALIDATION_FAILED',
+      { field: 'grades', issue: 'grade needed' },
+      `repair type ${recorded.gradeNeeded} needs one of its grades`,
+    );
+  }
   throw new DomainError(
     'VALIDATION_FAILED',
     { field: 'repairTypes', issue: 'not on the list' },
@@ -407,7 +419,11 @@ function repairTypesOrRefuse(recorded: ReturnType<typeof recordRepairTypes>): Re
 }
 
 export const setRepairTypesInput = z
-  .object({ ticketId: z.string().min(1), repairTypes: zRepairTypeIds })
+  .object({
+    ticketId: z.string().min(1),
+    repairTypes: zRepairTypeIds,
+    grades: zGradePicks.default({}),
+  })
   .strict();
 export type SetRepairTypesInput = z.input<typeof setRepairTypesInput>;
 
@@ -420,9 +436,15 @@ export async function setRepairTypesHandler(
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ ticketId: string }>> {
   const ticket = (await ctx.query(getTicketQuery, { ticketId: input.ticketId })).rows[0]!;
-  const offered = storeIntakeOptions(await loadIntakeOptions(ctx)).repairTypes;
+  const offered = storeIntakeOptions(await loadIntakeOptions(ctx));
   const repairTypes = repairTypesOrRefuse(
-    recordRepairTypes(input.repairTypes, offered, ticket.repairTypes),
+    recordRepairTypes(
+      input.repairTypes,
+      offered.repairTypes,
+      ticket.repairTypes,
+      input.grades,
+      offered.grades,
+    ),
   );
   if (sameRepairTypes(repairTypes, ticket.repairTypes)) throw nothingChanged('repairTypes');
   return {
@@ -1335,9 +1357,13 @@ export const changeIntakeOptionsInput = z
             id: zOptionId.nullable(),
             /** What the owner typed; null keeps a built-in item's app name. */
             label: z.string().trim().max(200).nullable(),
-            /** A repair type's warranty and whether it needs an ownership video. */
+            /** A repair type's warranty, whether it needs an ownership video, and its grades. */
             warrantyDays: z.number().int().optional(),
             needsVideo: z.boolean().optional(),
+            grades: z
+              .array(z.object({ id: zOptionId, warrantyDays: z.number().int() }).strict())
+              .max(MAX_OPTIONS)
+              .optional(),
           })
           .strict(),
       )
@@ -1351,12 +1377,15 @@ export async function changeIntakeOptionsHandler(
   input: z.output<typeof changeIntakeOptionsInput>,
   ctx: CommandContext,
 ): Promise<CommandHandlerResult<{ list: IntakeOptionList }>> {
-  const items: IntakeOption[] = input.items.map(({ id, label, warrantyDays, needsVideo }) => ({
-    id: id ?? ctx.newId(),
-    label,
-    ...(warrantyDays === undefined ? {} : { warrantyDays }),
-    ...(needsVideo === undefined ? {} : { needsVideo }),
-  }));
+  const items: IntakeOption[] = input.items.map(
+    ({ id, label, warrantyDays, needsVideo, grades }) => ({
+      id: id ?? ctx.newId(),
+      label,
+      ...(warrantyDays === undefined ? {} : { warrantyDays }),
+      ...(needsVideo === undefined ? {} : { needsVideo }),
+      ...(grades === undefined ? {} : { grades }),
+    }),
+  );
   const problems = intakeListProblems(input.list, items);
   if (problems.length > 0) {
     throw new DomainError(

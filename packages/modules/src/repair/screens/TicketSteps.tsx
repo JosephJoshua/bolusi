@@ -28,7 +28,6 @@ import { StyleSheet, View } from 'react-native';
 import { WORK_PHOTOS_MAX, type WorkPhotoStage } from '../constants.js';
 import { useChangeCancelFee, type CancelFeeTicket } from '../cancel-fee-ask.js';
 import { useDownPaymentForm } from '../down-payment-form.js';
-import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 import { groupedRupiah } from '../../shared/rupiah.js';
@@ -36,6 +35,7 @@ import { groupedRupiah } from '../../shared/rupiah.js';
 import { useAssignTechnician } from '../assign-technician.js';
 import { useCancelTicket } from '../cancel-ticket.js';
 import { useRepairTypesPick } from '../repair-types-pick.js';
+import { GradePicker } from './GradePicker.js';
 import { useDecideProposal, usePriceChange } from '../price-change.js';
 import { tn, type RepairKey } from '../i18n.js';
 import { PRICE_KIND_KEY, optionLabel } from '../labels.js';
@@ -50,7 +50,7 @@ import {
 } from '../flows.js';
 import { FlowScreen, PhotoThumb, QueryView, repairStyles, type RepairChrome } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
-import { useIntakeOptionSettings, useRepairRuntime } from '../runtime.js';
+import { useRepairRuntime } from '../runtime.js';
 import { PaymentMethodField } from '../../money/screens/PaymentMethodField.js';
 
 export interface StepProps {
@@ -673,11 +673,18 @@ export function RepairTypesStep({
   readonly current: TicketDetailRow['repairTypes'];
   readonly testID?: string | undefined;
 }): React.JSX.Element {
-  const settings = useIntakeOptionSettings();
-  const { runner, picked, setPicked, submit } = useRepairTypesPick(
-    { ticketId, current },
-    { onDone, onUnchanged: onCancel },
-  );
+  const {
+    runner,
+    settings,
+    choices,
+    picked,
+    setPicked,
+    questions,
+    grades,
+    pickGrade,
+    gradeError,
+    submit,
+  } = useRepairTypesPick({ ticketId, current }, { onDone, onUnchanged: onCancel });
   return (
     <FlowScreen
       chrome={chrome}
@@ -697,27 +704,31 @@ export function RepairTypesStep({
         onRetry={() => undefined}
         testID={`${testID}.options`}
       >
-        {(data) => {
-          const choices = repairTypeChoices(storeIntakeOptions(data).repairTypes, current);
-          return (
-            <View>
-              <View style={repairStyles.chips} testID={`${testID}.chips`}>
-                {choices.map((option) => (
-                  <ToggleChip
-                    key={option.id}
-                    label={optionLabel('repairTypes', option)}
-                    selected={picked.includes(option.id)}
-                    onToggle={() => setPicked((ids) => toggled(ids, option.id))}
-                    testID={`${testID}.type.${option.id}`}
-                  />
-                ))}
-              </View>
-              <Text style={[repairStyles.caption, repairStyles.gap]}>
-                {tn('repair.warranty.fromPickup')}
-              </Text>
+        {() => (
+          <View>
+            <View style={repairStyles.chips} testID={`${testID}.chips`}>
+              {choices.map((option) => (
+                <ToggleChip
+                  key={option.id}
+                  label={optionLabel('repairTypes', option)}
+                  selected={picked.includes(option.id)}
+                  onToggle={() => setPicked((ids) => toggled(ids, option.id))}
+                  testID={`${testID}.type.${option.id}`}
+                />
+              ))}
             </View>
-          );
-        }}
+            <GradePicker
+              questions={questions}
+              picks={grades}
+              onPick={pickGrade}
+              error={gradeError ? tn('repair.problem.grade') : undefined}
+              testID={`${testID}.grade`}
+            />
+            <Text style={[repairStyles.caption, repairStyles.gap]}>
+              {tn('repair.warranty.fromPickup')}
+            </Text>
+          </View>
+        )}
       </QueryView>
     </FlowScreen>
   );

@@ -35,6 +35,7 @@ import {
   LOCK_KIND_KEY,
   PRICE_KIND_KEY,
   optionLabel,
+  pickedRepairTypeLabel,
   readyLabel,
 } from '../labels.js';
 import {
@@ -44,6 +45,7 @@ import {
   chosenAccessories,
   chosenRepairTypes,
   chosenReady,
+  gradeQuestions,
   intakeDownPayment,
   intakeNeedsVideo,
   intakeTotal,
@@ -74,6 +76,7 @@ import { useRepairQuery } from '../runtime.js';
 import { type PriceKind } from '../flows.js';
 import { usePriceKinds } from '../price-change.js';
 import { OwnershipVideoTile } from './video.js';
+import { GradePicker } from './GradePicker.js';
 
 export interface StepProps {
   readonly draft: IntakeDraft;
@@ -469,8 +472,12 @@ export function ConditionStep({
   update,
   options,
   complaintError,
+  gradeError,
   testID,
-}: StepProps & { readonly complaintError: string | undefined }): React.JSX.Element {
+}: StepProps & {
+  readonly complaintError: string | undefined;
+  readonly gradeError?: string | undefined;
+}): React.JSX.Element {
   const { width, fontScale } = useWindowDimensions();
   const stackChecks = width - CHECK_ROW_CHROME < CHECK_ROW_TEXT * fontScale;
   const toggleRepairType = (item: string): void =>
@@ -500,6 +507,13 @@ export function ConditionStep({
               />
             ))}
           </ChipRow>
+          <GradePicker
+            questions={gradeQuestions(draft.repairTypes, options.repairTypes, options.grades)}
+            picks={draft.grades}
+            onPick={(typeId, gradeId) => update({ grades: { ...draft.grades, [typeId]: gradeId } })}
+            error={gradeError}
+            testID={`${testID}.grade`}
+          />
         </Section>
       )}
       {options.checks.length === 0 ? null : (
@@ -885,7 +899,9 @@ export function ReviewStep({
           {repairTypes.length === 0 ? null : (
             <Field
               label={tn('repair.condition.repairTypes')}
-              value={repairTypes.map((type) => optionLabel('repairTypes', type)).join(', ')}
+              value={repairTypes
+                .map((type) => pickedRepairTypeLabel(type, draft.grades, options.grades))
+                .join(', ')}
               testID={`${testID}.repairTypes`}
             />
           )}

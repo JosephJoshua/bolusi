@@ -26,12 +26,15 @@ import type { ScreenLockKind } from './screen-lock.js';
 import type { TicketRefund } from './queries.js';
 import {
   READY_UNKNOWN,
+  gradeChoices,
   readyDays,
+  type GradePicks,
   type HandoverCheck,
   type HandoverCheckId,
   type IntakeCheck,
   type IntakeOption,
   type IntakeOptionList,
+  type PartGradeId,
   type Peripheral,
   type RecordedRepairType,
   type RepairTypeId,
@@ -92,6 +95,12 @@ const PERIPHERAL_KEY: Readonly<Record<Peripheral, RepairKey>> = {
   box: 'repair.peripheral.box',
 };
 
+const GRADE_KEY: Readonly<Record<PartGradeId, RepairKey>> = {
+  original: 'repair.grade.original',
+  oem: 'repair.grade.oem',
+  kw: 'repair.grade.kw',
+};
+
 const REPAIR_TYPE_KEY: Readonly<Record<RepairTypeId, RepairKey>> = {
   screen: 'repair.repairType.screen',
   battery: 'repair.repairType.battery',
@@ -138,6 +147,7 @@ export const INTAKE_LIST_KEY: Readonly<Record<IntakeOptionList, RepairKey>> = {
   readyBy: 'repair.options.list.readyBy',
   repairTypes: 'repair.options.list.repairTypes',
   handoverChecks: 'repair.options.list.handoverChecks',
+  grades: 'repair.options.list.grades',
 };
 
 /** What each list is for, under its name in the owner's editor. */
@@ -149,6 +159,7 @@ export const INTAKE_HINT_KEY: Readonly<Record<IntakeOptionList, RepairKey>> = {
   readyBy: 'repair.options.hint.readyBy',
   repairTypes: 'repair.options.hint.repairTypes',
   handoverChecks: 'repair.options.hint.handoverChecks',
+  grades: 'repair.options.hint.grades',
 };
 
 const HANDOVER_CHECK_KEY: Readonly<Record<HandoverCheckId, RepairKey>> = {
@@ -164,6 +175,7 @@ const BUILT_IN_KEYS: Readonly<Record<IntakeOptionList, Readonly<Record<string, R
   readyBy: {},
   repairTypes: REPAIR_TYPE_KEY,
   handoverChecks: HANDOVER_CHECK_KEY,
+  grades: GRADE_KEY,
 };
 
 /** The app's own name for a built-in intake list item, in the current language, or null. */
@@ -182,9 +194,35 @@ export function optionLabel(list: IntakeOptionList, option: IntakeOption): strin
   return option.label ?? builtInLabel(list, option.id) ?? option.id;
 }
 
-/** A recorded repair type's name, as the servisan showed it. */
-export function repairTypeLabel(type: Pick<RecordedRepairType, 'item' | 'label'>): string {
-  return optionLabel('repairTypes', { id: type.item, label: type.label });
+/**
+ * A recorded repair type's name, as the servisan showed it, with the part grade the customer agreed
+ * to: "Ganti layar (Original)".
+ */
+export function repairTypeLabel(
+  type: Pick<RecordedRepairType, 'item' | 'label' | 'grade'>,
+): string {
+  const name = optionLabel('repairTypes', { id: type.item, label: type.label });
+  const grade = type.grade ?? null;
+  return grade === null
+    ? name
+    : tn('repair.repairType.withGrade', {
+        name,
+        grade: optionLabel('grades', { id: grade.item, label: grade.label }),
+      });
+}
+
+/** A repair type picked on a form, named with the grade picked for it, if any. */
+export function pickedRepairTypeLabel(
+  type: IntakeOption,
+  picks: GradePicks,
+  grades: readonly IntakeOption[],
+): string {
+  const grade = gradeChoices(type, grades).find((choice) => choice.id === picks[type.id]);
+  return repairTypeLabel({
+    item: type.id,
+    label: type.label,
+    grade: grade === undefined ? null : { item: grade.id, label: grade.label },
+  });
 }
 
 /**

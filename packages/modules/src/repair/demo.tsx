@@ -318,6 +318,8 @@ function ticket(spec: {
   returnedHoursAgo?: number;
   /** Repair type ids from the default list. */
   repairTypes?: readonly string[];
+  /** The grade each part repair was agreed in; Original where left out. */
+  grades?: Readonly<Record<string, string>>;
   /** What its handover gives back through each method. */
   refunds?: TicketDetailRow['refunds'];
 }): TicketDetailRow {
@@ -367,7 +369,7 @@ function ticket(spec: {
       { item: 'charger', label: null },
       { item: 'case', label: null },
     ],
-    repairTypes: demoRepairTypes(spec.repairTypes ?? []),
+    repairTypes: demoRepairTypes(spec.repairTypes ?? [], spec.grades ?? {}),
     claimOfTicketId: null,
     claimOf: null,
     claims: [],
@@ -410,8 +412,18 @@ function ticket(spec: {
   };
 }
 
-function demoRepairTypes(ids: readonly string[]): TicketDetailRow['repairTypes'] {
-  const recorded = recordRepairTypes(ids, DEFAULT_INTAKE_OPTIONS.repairTypes);
+function demoRepairTypes(
+  ids: readonly string[],
+  grades: Readonly<Record<string, string>>,
+): TicketDetailRow['repairTypes'] {
+  const picks = Object.fromEntries(ids.map((id) => [id, grades[id] ?? 'original']));
+  const recorded = recordRepairTypes(
+    ids,
+    DEFAULT_INTAKE_OPTIONS.repairTypes,
+    [],
+    picks,
+    DEFAULT_INTAKE_OPTIONS.grades,
+  );
   return 'types' in recorded ? recorded.types : [];
 }
 
@@ -562,6 +574,7 @@ function seedTickets(): TicketDetailRow[] {
       technicianId: 'u-budi',
       lines: [line('part', 'Baterai A57', 180_000), line('labour', 'Ganti baterai', 50_000)],
       repairTypes: ['battery'],
+      grades: { battery: 'kw' },
       hoursAgo: 75 * 24,
       readyHoursAgo: 72 * 24,
       extraPhotos: [photoRow('before:m8'), photoRow('after:m9')],
@@ -861,14 +874,19 @@ export function demoRepairRuntime(
   // Recorded as the command does: the store's list now, a kept type keeps its terms.
   const recordedTypes = (
     ids: unknown,
+    grades: unknown,
     kept: TicketDetailRow['repairTypes'],
   ): TicketDetailRow['repairTypes'] => {
+    const offered = storeIntakeOptions(options);
     const recorded = recordRepairTypes(
       (ids as string[] | undefined) ?? [],
-      storeIntakeOptions(options).repairTypes,
+      offered.repairTypes,
       kept,
+      (grades as Record<string, string> | undefined) ?? {},
+      offered.grades,
     );
-    return 'types' in recorded ? recorded.types : kept;
+    if ('types' in recorded) return recorded.types;
+    throw Object.assign(new Error('not on the list'), { code: 'VALIDATION_FAILED' });
   };
 
   const find = (ticketId: string): TicketDetailRow => {
@@ -1148,7 +1166,7 @@ export function demoRepairRuntime(
           throw REPAIR_REFUSALS.refuse(problem.reason);
         }
       }
-      const repairTypes = recordedTypes(input['repairTypes'], []);
+      const repairTypes = recordedTypes(input['repairTypes'], input['grades'], []);
       const video = (input['ownershipVideo'] as VideoRef | null | undefined) ?? null;
       // As the intake rule judges it.
       if (video === null && needsOwnershipVideo(repairTypes)) {
@@ -1297,7 +1315,7 @@ export function demoRepairRuntime(
       const t = find(String(input['ticketId']));
       if (t.claimOfTicketId !== null) throw REPAIR_REFUSALS.refuse('claimWithTypes');
       return update(t.id, 'repair.ticket_repair_types_changed', {
-        repairTypes: recordedTypes(input['repairTypes'], t.repairTypes),
+        repairTypes: recordedTypes(input['repairTypes'], input['grades'], t.repairTypes),
       });
     },
     changeIntakeOptions: (input) => {

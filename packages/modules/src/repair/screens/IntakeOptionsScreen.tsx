@@ -7,12 +7,14 @@
  */
 import { t } from '@bolusi/i18n';
 import {
+  ChipRow,
   ConfirmSheet,
   ListRow,
   ReorderableList,
   SwitchRow,
   TextButton,
   TextInput,
+  ToggleChip,
   border,
   color,
   space,
@@ -30,6 +32,7 @@ import { repairAbilities, type RepairAbilities } from '../flows.js';
 import {
   INTAKE_OPTION_LISTS,
   READY_UNKNOWN,
+  type IntakeOption,
   type IntakeOptionList,
   type IntakeOptionSettings,
 } from '../intake-options.js';
@@ -41,9 +44,13 @@ import {
   editorProblems,
   hasProblems,
   moveRow,
+  gradeWarrantyOk,
   removeRow,
+  setGradeWarranty,
+  toggleGrade,
   updateRow,
   type BuiltInName,
+  type EditorGrade,
   type EditorRow,
   type ListProblem,
   type RowProblem,
@@ -287,7 +294,12 @@ function ListEditor({
               handle={reorderable && expanded !== row.key ? handle : null}
               problem={showProblems ? problems.rows.get(row.key) : undefined}
               onToggleExpanded={() => setExpanded((key) => (key === row.key ? null : row.key))}
+              grades={settings.lists.grades}
               onChange={(patch) => setState((s) => updateRow(s, row.key, patch))}
+              onToggleGrade={(gradeId) => setState((s) => toggleGrade(s, row.key, gradeId))}
+              onGradeWarranty={(gradeId, warranty) =>
+                setState((s) => setGradeWarranty(s, row.key, gradeId, warranty))
+              }
               onRemove={() => {
                 setState((s) => removeRow(s, row.key));
                 setExpanded(null);
@@ -342,8 +354,11 @@ function OptionRow({
   hide,
   handle,
   problem,
+  grades,
   onToggleExpanded,
   onChange,
+  onToggleGrade,
+  onGradeWarranty,
   onRemove,
   testID,
 }: {
@@ -354,8 +369,12 @@ function OptionRow({
   readonly hide: boolean;
   readonly handle: ReactNode;
   readonly problem: RowProblem | undefined;
+  /** The franchise's part grades, which a repair type may be done with. */
+  readonly grades: readonly IntakeOption[];
   readonly onToggleExpanded: () => void;
   readonly onChange: (patch: Partial<EditorRow>) => void;
+  readonly onToggleGrade: (gradeId: string) => void;
+  readonly onGradeWarranty: (gradeId: string, warranty: string) => void;
   readonly onRemove: () => void;
   readonly testID: string;
 }): React.JSX.Element {
@@ -404,17 +423,57 @@ function OptionRow({
         )}
         {list === 'repairTypes' ? (
           <View style={styles.terms}>
-            <TextInput
-              label={tn('repair.options.warrantyDays')}
-              value={row.warranty}
-              onChangeText={(warranty) => onChange({ warranty: warranty.replace(/\D/g, '') })}
-              keyboardType="number-pad"
-              maxLength={3}
-              errorMessage={
-                problem === 'badWarranty' ? tn('repair.options.problem.badWarranty') : undefined
-              }
-              testID={`${testID}.warranty`}
-            />
+            {grades.length === 0 ? null : (
+              <View>
+                <Text style={styles.termsLabel}>{tn('repair.options.grades')}</Text>
+                <ChipRow testID={`${testID}.grades`}>
+                  {grades.map((grade) => (
+                    <ToggleChip
+                      key={grade.id}
+                      label={optionLabel('grades', grade)}
+                      selected={row.grades.some((offered) => offered.id === grade.id)}
+                      onToggle={() => onToggleGrade(grade.id)}
+                      testID={`${testID}.grade.${grade.id}`}
+                    />
+                  ))}
+                </ChipRow>
+              </View>
+            )}
+            {/* A graded type's warranty is each grade's; one without grades has its own. */}
+            {gradesShown(row, grades).length === 0 ? (
+              <TextInput
+                label={tn('repair.options.warrantyDays')}
+                value={row.warranty}
+                onChangeText={(warranty) => onChange({ warranty: warranty.replace(/\D/g, '') })}
+                keyboardType="number-pad"
+                maxLength={3}
+                errorMessage={
+                  problem === 'badWarranty' ? tn('repair.options.problem.badWarranty') : undefined
+                }
+                testID={`${testID}.warranty`}
+              />
+            ) : (
+              gradesShown(row, grades).map(({ grade, terms }) => (
+                <TextInput
+                  key={grade.id}
+                  label={tn('repair.options.gradeWarranty', {
+                    grade: optionLabel('grades', grade),
+                  })}
+                  value={terms.warranty}
+                  onChangeText={(warranty) =>
+                    onGradeWarranty(grade.id, warranty.replace(/\D/g, ''))
+                  }
+                  keyboardType="number-pad"
+                  maxLength={3}
+                  errorMessage={
+                    problem === 'badWarranty' && !gradeWarrantyOk(terms)
+                      ? tn('repair.options.problem.badWarranty')
+                      : undefined
+                  }
+                  testID={`${testID}.gradeWarranty.${grade.id}`}
+                />
+              ))
+            )}
             <SwitchRow
               label={tn('repair.options.needsVideo')}
               caption={tn('repair.options.needsVideoCaption')}
@@ -459,7 +518,7 @@ function OptionRow({
     );
   }
 
-  const terms = list === 'repairTypes' ? termsSummary(row) : null;
+  const terms = list === 'repairTypes' ? termsSummary(row, grades) : null;
   const caption =
     problem !== undefined ? (
       <Text style={styles.rowProblem}>{tn(PROBLEM_KEY[problem])}</Text>
@@ -516,13 +575,38 @@ function OptionRow({
   );
 }
 
-/** "Garansi 30 hari · Perlu video": a repair type's terms under its name. */
-function termsSummary(row: EditorRow): string {
+/** The grades on the list this repair type is offered in, in the list's order, with their terms. */
+function gradesShown(
+  row: EditorRow,
+  grades: readonly IntakeOption[],
+): { grade: IntakeOption; terms: EditorGrade }[] {
+  return grades.flatMap((grade) => {
+    const terms = row.grades.find((offered) => offered.id === grade.id);
+    return terms === undefined ? [] : [{ grade, terms }];
+  });
+}
+
+/**
+ * A repair type's terms under its name: "Garansi 30 hari · Perlu video", or each grade's warranty
+ * for one done in grades, "Original 30 hari · KW 7 hari".
+ */
+function termsSummary(row: EditorRow, grades: readonly IntakeOption[]): string {
+  const shown = gradesShown(row, grades);
   const days = Number(row.warranty);
   const warranty =
-    row.warranty.trim() === '' || days === 0
-      ? tn('repair.options.noWarranty')
-      : tn('repair.options.warranty', { count: days });
+    shown.length > 0
+      ? shown
+          .map(({ grade, terms }) => {
+            const name = optionLabel('grades', grade);
+            const count = Number(terms.warranty);
+            return terms.warranty.trim() === '' || count === 0
+              ? tn('repair.options.gradeNoWarranty', { grade: name })
+              : tn('repair.options.gradeTerms', { grade: name, count });
+          })
+          .join(' · ')
+      : row.warranty.trim() === '' || days === 0
+        ? tn('repair.options.noWarranty')
+        : tn('repair.options.warranty', { count: days });
   return row.needsVideo ? `${warranty} · ${tn('repair.options.videoShort')}` : warranty;
 }
 
@@ -567,6 +651,7 @@ const styles = StyleSheet.create({
   editLabel: { ...type.bodySm, fontWeight: '600', color: color.primary },
   useHere: { marginTop: space.sm },
   terms: { marginTop: space.md, gap: space.sm },
+  termsLabel: { ...type.caption, color: color.textMuted, marginBottom: space.xs },
   notSaved: { marginTop: space.md },
   actions: {
     flexDirection: 'row',

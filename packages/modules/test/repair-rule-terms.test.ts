@@ -12,7 +12,12 @@ import type { SignedOperation } from '@bolusi/schemas';
 import { REPAIR_OP } from '../src/repair/constants.js';
 import { DEFAULT_INTAKE_OPTIONS } from '../src/repair/intake-options.js';
 
-import { intake, openRepairHarness, type RepairHarness } from './support/repair-harness.js';
+import {
+  intake,
+  openRepairHarness,
+  ORIGINAL_PARTS,
+  type RepairHarness,
+} from './support/repair-harness.js';
 
 const open: RepairHarness[] = [];
 afterEach(async () => {
@@ -122,7 +127,11 @@ describe('repair types carry the owner’s terms, not the device’s', () => {
       intake(h, { repairTypes: ['screen'] }),
       h.cashierId,
     )) as { ticketId: string };
-    await h.run('setRepairTypes', { ticketId, repairTypes: ['screen', 'battery'] }, h.cashierId);
+    await h.run(
+      'setRepairTypes',
+      { ticketId, repairTypes: ['screen', 'battery'], grades: ORIGINAL_PARTS },
+      h.cashierId,
+    );
     const changed = await last(REPAIR_OP.ticketRepairTypesChanged);
     await sync(changed);
 

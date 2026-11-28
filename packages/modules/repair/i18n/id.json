@@ -140,7 +140,8 @@
     "peripherals": "Kelengkapan yang dititipkan",
     "restOk": "Sisanya normal",
     "notesLabel": "Catatan",
-    "repairTypes": "Jenis servisan"
+    "repairTypes": "Jenis servisan",
+    "grade": "Kualitas untuk {name}"
   },
   "customer": {
     "change": "Ganti pelanggan",
@@ -299,7 +300,8 @@
     "screenLock": "Isi kunci layar, atau pilih Tidak ada.",
     "ownershipVideo": "Video kepemilikan belum direkam.",
     "customerPhone": "Nomor HP belum benar. Periksa kembali.",
-    "deviceImei": "IMEI belum benar. Cocokkan dengan 15 angka di *#06#."
+    "deviceImei": "IMEI belum benar. Cocokkan dengan 15 angka di *#06#.",
+    "grade": "Pilih kualitas sparepart terlebih dahulu."
   },
   "ready": {
     "today": "Hari ini",
@@ -396,7 +398,8 @@
       "brands": "Merek pilihan cepat",
       "readyBy": "Estimasi selesai",
       "repairTypes": "Jenis servisan",
-      "handoverChecks": "Cek saat serah terima"
+      "handoverChecks": "Cek saat serah terima",
+      "grades": "Kualitas sparepart"
     },
     "hint": {
       "checks": "Diperiksa kasir di hadapan pelanggan, berurutan dari atas.",
@@ -405,7 +408,8 @@
       "brands": "Ditampilkan sebagai pilihan cepat. Merek lain tetap dapat diketik.",
       "readyBy": "Pilihan estimasi selesai saat menerima HP.",
       "repairTypes": "Garansi dihitung sejak HP diambil.",
-      "handoverChecks": "Diperiksa bersama pelanggan sebelum HP dibawa pulang, termasuk kelengkapan yang dititipkan."
+      "handoverChecks": "Diperiksa bersama pelanggan sebelum HP dibawa pulang, termasuk kelengkapan yang dititipkan.",
+      "grades": "Dipilih bersama pelanggan saat menerima HP dan dicetak di nota."
     },
     "add": "Tambah",
     "addUnknown": "Tambah “Belum tahu”",
@@ -441,7 +445,13 @@
     "needsVideoCaption": "Pelanggan menyatakan di video bahwa HP ini miliknya.",
     "warranty": "Garansi {count} hari",
     "noWarranty": "Tanpa garansi",
-    "videoShort": "Perlu video"
+    "videoShort": "Perlu video",
+    "grades": "Kualitas sparepart",
+    "gradeWarranty": "Garansi {grade} (hari)",
+    "gradeTerms": "{grade} {count} hari",
+    "gradeNoWarranty": "{grade} tanpa garansi",
+    "perGrade": "Per kualitas",
+    "daysUnit": "hari"
   },
   "spec": {
     "battery": "Baterai",
@@ -812,7 +822,8 @@
     "noPower": "Mati total",
     "software": "Software / instal ulang",
     "waterDamage": "Kena air",
-    "unlock": "Buka kunci / akun"
+    "unlock": "Buka kunci / akun",
+    "withGrade": "{name} ({grade})"
   },
   "warranty": {
     "title": "Garansi",
@@ -982,5 +993,10 @@
     "save": "Simpan tagihan",
     "same": "Ubah tagihan terlebih dahulu.",
     "short": "Ubah tagihan"
+  },
+  "grade": {
+    "original": "Original",
+    "oem": "OEM",
+    "kw": "KW"
   }
 }

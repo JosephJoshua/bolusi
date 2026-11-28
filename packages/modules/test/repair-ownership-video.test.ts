@@ -24,6 +24,7 @@ import {
   intake,
   openRepairHarness,
   paidHandover,
+  ORIGINAL_PARTS,
   type RepairHarness,
 } from './support/repair-harness.js';
 
@@ -125,7 +126,11 @@ describe('after intake', () => {
   test('a type that needs the video, added later, does not hold the phone at pickup', async () => {
     const h = await harness(7405);
     const ticketId = await opened(h, { repairTypes: ['screen'] });
-    await h.run('setRepairTypes', { ticketId, repairTypes: ['screen', 'unlock'] }, h.cashierId);
+    await h.run(
+      'setRepairTypes',
+      { ticketId, repairTypes: ['screen', 'unlock'], grades: ORIGINAL_PARTS },
+      h.cashierId,
+    );
     await repair(h, ticketId);
     await h.run('returnDevice', (await paidHandover(h, ticketId)) as never, h.cashierId);
     const row = await ticket(h, ticketId);

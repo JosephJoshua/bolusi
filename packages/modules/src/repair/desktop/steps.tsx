@@ -49,12 +49,13 @@ import {
   type PriceKind,
   type StaleStep,
 } from '../flows.js';
-import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
+import { storeIntakeOptions } from '../intake-options.js';
 import { ta } from '../../approvals/i18n.js';
 import { type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { useAssignTechnician } from '../assign-technician.js';
 import { useCancelTicket } from '../cancel-ticket.js';
 import { useRepairTypesPick } from '../repair-types-pick.js';
+import { GradePicker } from './GradePicker.js';
 import { useDecideProposal, usePriceChange } from '../price-change.js';
 import { tn, type RepairKey } from '../i18n.js';
 import {
@@ -377,11 +378,18 @@ export function RepairTypesDialog({
   onDone,
   onClose,
 }: StepDialogProps & { readonly current: TicketDetailRow['repairTypes'] }): React.JSX.Element {
-  const settings = useIntakeOptionSettings();
-  const { runner, picked, setPicked, submit } = useRepairTypesPick(
-    { ticketId, current },
-    { onDone, onUnchanged: onClose },
-  );
+  const {
+    runner,
+    settings,
+    choices,
+    picked,
+    setPicked,
+    questions,
+    grades,
+    pickGrade,
+    gradeError,
+    submit,
+  } = useRepairTypesPick({ ticketId, current }, { onDone, onUnchanged: onClose });
   return (
     <StepDialog
       title={tn('repair.repairTypes.title')}
@@ -405,10 +413,10 @@ export function RepairTypesDialog({
       }
     >
       <QueryPanel query={settings} onRetry={() => undefined}>
-        {(data) => (
+        {() => (
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap gap-2" data-testid="repair.desk.repairTypes.chips">
-              {repairTypeChoices(storeIntakeOptions(data).repairTypes, current).map((option) => (
+              {choices.map((option) => (
                 <ToggleChip
                   key={option.id}
                   label={optionLabel('repairTypes', option)}
@@ -417,6 +425,13 @@ export function RepairTypesDialog({
                 />
               ))}
             </div>
+            <GradePicker
+              questions={questions}
+              picks={grades}
+              onPick={pickGrade}
+              error={gradeError ? tn('repair.problem.grade') : undefined}
+              testId="repair.desk.repairTypes.grade"
+            />
             <p className="text-small text-text-muted">{tn('repair.warranty.fromPickup')}</p>
           </div>
         )}

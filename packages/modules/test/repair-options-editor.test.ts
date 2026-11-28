@@ -46,6 +46,7 @@ describe('the list editor', () => {
         hidden: false,
         warranty: '',
         needsVideo: false,
+        grades: [],
       },
       {
         key: 'touch',
@@ -54,6 +55,7 @@ describe('the list editor', () => {
         hidden: true,
         warranty: '',
         needsVideo: false,
+        grades: [],
       },
     ]);
     expect(changedItems(state, settings.lists.checks, builtInName)).toBeNull();

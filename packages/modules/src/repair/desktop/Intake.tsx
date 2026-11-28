@@ -47,6 +47,7 @@ import {
   stepProblems,
   toOpenTicketInput,
   claimWarrantyEnded,
+  gradeQuestions,
   acceptsRupiahText,
   balanceAfterDownPayment,
   intakeDownPayment,
@@ -85,6 +86,7 @@ import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
 import type { MediaRef } from '@bolusi/schemas';
 import { useOwnershipVideo } from '../ownership-video.js';
 import { OwnershipVideoField } from './video.js';
+import { GradePicker } from './GradePicker.js';
 
 import { ActionError } from '../../screen-kit/desktop/index.js';
 import { ModelPhoto, MoneyField, photoLabels, rupiahText, usePhotoState } from './parts.js';
@@ -107,6 +109,7 @@ const PROBLEM_FIELD: Readonly<Record<IntakeProblem, string>> = {
   deviceModel: 'repair.desk.intake.model',
   deviceImei: 'repair.desk.intake.imei',
   complaint: 'repair.desk.intake.complaint',
+  grade: 'repair.desk.intake.grade',
   photos: 'repair.desk.intake.photos',
   ownershipVideo: 'repair.desk.intake.video',
   quoteLines: 'repair.desk.intake.line.0.description',
@@ -377,6 +380,7 @@ export function IntakePage({
                   update={update}
                   options={options}
                   complaintError={problemText('complaint')}
+                  gradeError={problemText('grade')}
                 />
               </IntakeSection>
               <IntakeSection n={4} section="photos" complete={problemsBy.photos.length === 0}>
@@ -1030,11 +1034,13 @@ function ConditionFields({
   update,
   options,
   complaintError,
+  gradeError,
 }: {
   readonly draft: IntakeDraft;
   readonly update: (patch: Partial<IntakeDraft>) => void;
   readonly options: IntakeOptionLists;
   readonly complaintError: string | undefined;
+  readonly gradeError: string | undefined;
 }): React.JSX.Element {
   return (
     <div className="flex flex-col gap-6">
@@ -1063,6 +1069,13 @@ function ConditionFields({
               />
             ))}
           </div>
+          <GradePicker
+            questions={gradeQuestions(draft.repairTypes, options.repairTypes, options.grades)}
+            picks={draft.grades}
+            onPick={(typeId, gradeId) => update({ grades: { ...draft.grades, [typeId]: gradeId } })}
+            error={gradeError}
+            testId="repair.desk.intake.grade"
+          />
         </div>
       )}
       {options.checks.length === 0 ? null : (

@@ -39,6 +39,7 @@ import { INVENTORY_PERMISSION } from '../../src/inventory/index.js';
 import { MONEY_PERMISSION } from '../../src/money/index.js';
 import { PURCHASING_PERMISSION } from '../../src/purchasing/index.js';
 import { repairModule, REPAIR_PERMISSION } from '../../src/repair/index.js';
+import { DEFAULT_INTAKE_OPTIONS } from '../../src/repair/intake-options.js';
 import { SqliteOpStore } from './harness.js';
 
 const CASHIER_ROLE = 'role-cashier';
@@ -561,9 +562,18 @@ export function intake(h: RepairHarness, overrides: Record<string, unknown> = {}
       label: null,
       ref: h.photo(i + 1),
     })),
+    // Whichever default type a test picks, the customer agreed to the original part.
+    grades: ORIGINAL_PARTS,
     ...overrides,
   };
 }
+
+/** The original grade for every default repair type that asks for one, by type id. */
+export const ORIGINAL_PARTS: Readonly<Record<string, string>> = Object.fromEntries(
+  DEFAULT_INTAKE_OPTIONS.repairTypes
+    .filter((type) => (type.grades ?? []).length > 0)
+    .map((type) => [type.id, 'original']),
+);
 
 /**
  * A handover the way the counter takes it: photo, signature and the rest of the bill in cash.
