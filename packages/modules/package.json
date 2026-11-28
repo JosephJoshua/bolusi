@@ -57,6 +57,14 @@
       "types": "./dist/inventory/desktop/index.d.ts",
       "default": "./dist/inventory/desktop/index.js"
     },
+    "./pay": {
+      "types": "./dist/pay/index.d.ts",
+      "default": "./dist/pay/index.js"
+    },
+    "./pay/screens": {
+      "types": "./dist/pay/screens/index.d.ts",
+      "default": "./dist/pay/screens/index.js"
+    },
     "./purchasing": {
       "types": "./dist/purchasing/index.d.ts",
       "default": "./dist/purchasing/index.js"
@@ -103,6 +111,8 @@
     "./repair/i18n/en.json": "./repair/i18n/en.json",
     "./inventory/i18n/id.json": "./inventory/i18n/id.json",
     "./inventory/i18n/en.json": "./inventory/i18n/en.json",
+    "./pay/i18n/id.json": "./pay/i18n/id.json",
+    "./pay/i18n/en.json": "./pay/i18n/en.json",
     "./purchasing/i18n/id.json": "./purchasing/i18n/id.json",
     "./purchasing/i18n/en.json": "./purchasing/i18n/en.json",
     "./money/i18n/id.json": "./money/i18n/id.json",
@@ -115,6 +125,7 @@
     "notes/i18n",
     "repair/i18n",
     "inventory/i18n",
+    "pay/i18n",
     "purchasing/i18n",
     "money/i18n",
     "approvals/i18n"

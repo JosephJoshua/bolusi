@@ -633,6 +633,40 @@ governance notes in "Decision" where they differ.
   how far the bill drops as a note, and their yes records exactly what the
   manager would have.
 
+## Staff pay: commission, kasbon and monthly pay (2026-11-28)
+
+Agreed with the owner on 2026-11-28. Most stores pay a monthly salary; payroll
+with BPJS and PPh 21 comes later and builds on these records.
+
+- **Terms:** the owner sets each employee's fixed monthly salary. Commission is
+  off per store by default; a store that turns it on sets a percentage, and an
+  employee may have their own. A rate counts from when it is set.
+- **Commission:** a percentage of the profit on a servisan: what the customer
+  paid, less refunds, less the cost of its parts. It goes to the technician on
+  the servisan when it is handed over (after Ganti teknisi, whoever finished
+  it), and is earned once the phone has gone home fully paid; with "Bayar nanti",
+  once the debt is paid. Cancel fees and warranty claims earn nothing. A refund,
+  a reversed handover or a part price typed later changes it after the fact. A
+  servisan whose parts have no price yet waits until they do. The owner may add
+  or deduct by hand with a reason (work that came back under warranty).
+- **Kasbon:** an owner or Manajer gives it from a drawer or a bank account,
+  with a reason and a monthly installment; never to themselves. It is one
+  balance per person. The person may repay into Kas any time.
+- **Monthly pay ("Bayar gaji"):** once per person per month: salary +
+  commission owed up to that moment − installment = paid, from a drawer or a
+  bank account. The owner may change the installment that month with a note.
+  Pay is never negative: what does not fit stays on the kasbon or carries to
+  the next month. Commission is a running balance (earned − paid), so whatever
+  changes after a payout comes off or onto the next one.
+- **Leaving:** the last payout takes what it can; only the owner writes off the
+  rest of a kasbon, with a reason.
+- **Who sees it:** pay records are owners' (a role switch for others). Each
+  employee sees only their own statement. Commission needs part costs, so on a
+  store device it is read after the server PIN check.
+- **Server-enforced:** commission paid is never more than the server's own
+  figure, salary never more than the set salary, one payout per person per
+  month, and the ledger posts each step (kasbon as money the staff owe).
+
 ## Customers follow their repair online (2026-10-28)
 
 - Each servisan gets a 12-character link code (Crockford base32) made on the

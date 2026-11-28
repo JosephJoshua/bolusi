@@ -23,9 +23,10 @@ import {
   type StockSinkKind,
   type StockSourceKind,
 } from './constants.js';
-import { costOnUse, foldCost } from './cost.js';
+import { costOnUse } from './cost.js';
 import type { InventoryDatabase } from './schema.js';
 import { itemSearchSource } from './search.js';
+import { costedItems } from './use-costs.js';
 
 type Qctx = QueryContext<InventoryDatabase>;
 
@@ -821,32 +822,13 @@ export interface ItemCostRow {
 export const itemCostInput = z.object({ itemId: z.string().min(1) }).strict();
 export type ItemCostInput = z.input<typeof itemCostInput>;
 
+function costScope(qctx: Qctx) {
+  return { tenantId: qctx.tenantId, storeId: qctx.storeId ?? '' };
+}
+
 /** A part's movements in this store with the prices typed for its receipts, and their fold. */
 async function costedMovements(qctx: Qctx, itemId: string) {
-  const movements = await storeMovements(qctx).where('itemId', '=', itemId).execute();
-  const prices = new Map(
-    (
-      await qctx.db
-        .selectFrom('inventoryCosts')
-        .select(['movementId', 'unitCost'])
-        .where('tenantId', '=', qctx.tenantId)
-        .where('storeId', '=', qctx.storeId)
-        .where('itemId', '=', itemId)
-        .execute()
-    ).map((row) => [row.movementId, Number(row.unitCost)]),
-  );
-  const rows = movements.map((row) => ({
-    id: row.id,
-    at: Number(row.at),
-    kind: row.kind as MovementKind,
-    qty: Number(row.qty),
-    counted: row.counted === null ? null : Number(row.counted),
-    unitCost: prices.get(row.id) ?? null,
-    label: row.useLabel,
-    useKind: row.useKind,
-    useId: row.useId,
-  }));
-  return { rows, fold: foldCost(rows) };
+  return (await costedItems(qctx.db, costScope(qctx), [itemId])).get(itemId)!;
 }
 
 /** What a part costs this store: the average now, and what each delivery cost a piece. */
@@ -920,9 +902,10 @@ export async function useCostHandler(
         .execute()
     ).map((row) => [row.id, row.name]),
   );
+  const costed = await costedItems(qctx.db, costScope(qctx), itemIds);
   const rows: UseCostRow[] = [];
   for (const itemId of itemIds) {
-    const { rows: movements, fold } = await costedMovements(qctx, itemId);
+    const { rows: movements, fold } = costed.get(itemId)!;
     const onUse = movements.filter((movement) => movement.useKind === input.useKind);
     const { out, cost } = costOnUse(onUse, fold, input.useId);
     if (out > 0) rows.push({ itemId, name: names.get(itemId) ?? '', out, cost });

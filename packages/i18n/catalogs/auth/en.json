@@ -381,6 +381,7 @@
       "repair": "Repairs",
       "money": "Money",
       "stock": "Stock",
+      "pay": "Pay",
       "other": "Other"
     },
     "ability": {
@@ -438,6 +439,12 @@
       "stockTransferHint": "Send to another store and receive transfers",
       "stockCost": "See buy prices",
       "stockCostHint": "Buy prices and the average cost of parts",
+      "payKasbon": "Kasbon",
+      "payKasbonHint": "Give kasbon and take repayments",
+      "payView": "See pay",
+      "payViewHint": "Everyone's salary, commission and payouts",
+      "payPay": "Pay salaries",
+      "payPayHint": "Pay the monthly salary and commission",
       "notes": "Notes",
       "notesHint": "Write and archive store notes",
       "syncProblems": "Sync problems",

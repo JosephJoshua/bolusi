@@ -41,6 +41,7 @@ import { defineInventoryModule, type InventoryModule } from './inventory/index.j
 import { createMoneyApprovalKinds } from './money/approval-kinds.js';
 import { createMoneyModule } from './money/manifest.js';
 import { notesModule } from './notes/manifest.js';
+import { payModule } from './pay/manifest.js';
 import { purchasingModule } from './purchasing/manifest.js';
 import { purchaseReceiptSource } from './purchasing/stock-source.js';
 import { repairApprovalKinds } from './repair/approval-kinds.js';
@@ -58,7 +59,7 @@ export const inventoryModule: InventoryModule = defineInventoryModule(
   { purchase_receipt: purchaseReceiptSource },
 );
 
-export { purchasingModule };
+export { purchasingModule, payModule };
 
 /**
  * The money ledger, checking each charge against the module that issued the document. A module that
@@ -78,7 +79,7 @@ export const approvalsModule: ApprovalsModule = createApprovalsModule({
 
 /**
  * The modules every Bolusi build registers — the ONE list `SERVER_MODULES` and `CLIENT_MODULES`
- * both are (04 §1/§3/§4; 02 §3.2). Order is `platform`, `notes`, `repair`, `inventory`, `purchasing`, `money`, `approvals`, `auth`; a registration list's
+ * both are (04 §1/§3/§4; 02 §3.2). Order is `platform`, `notes`, `repair`, `inventory`, `purchasing`, `money`, `approvals`, `pay`, `auth`; a registration list's
  * failure mode is a silent omission, so the count is guarded in `index.test.ts` (T-14) and folded
  * on the real push path (server) and real bootstrap (client) — an empty list would fold nothing.
  */
@@ -90,6 +91,7 @@ export const ALL_MODULES = [
   purchasingModule,
   moneyModule,
   approvalsModule,
+  payModule,
   authModule,
 ] as unknown as readonly AnyModuleDefinition<never>[];
 export * from './role-abilities.js';

@@ -36,6 +36,12 @@ const SPEC_TABLES = [
   'money_lines',
   'notes',
   'operations',
+  'pay_adjustments',
+  'pay_advances',
+  'pay_payouts',
+  'pay_repayments',
+  'pay_store_rates',
+  'pay_terms',
   'pending_pin_verifiers',
   'phone_models',
   'pin_attempt_state',
@@ -99,6 +105,12 @@ const SPEC_INDEXES = [
   'idx_operations_entity_canonical',
   'idx_operations_push_queue',
   'idx_operations_rejected',
+  'idx_pay_adjustments_user',
+  'idx_pay_advances_user',
+  'idx_pay_payouts_user',
+  'idx_pay_repayments_user',
+  'idx_pay_store_rates_store',
+  'idx_pay_terms_user',
   'idx_purchasing_bills_order',
   'idx_purchasing_bills_store',
   'idx_purchasing_orders_store',
@@ -193,7 +205,7 @@ describe('runClientMigrations against a fresh database', () => {
     const result = await runClientMigrations(driver, { now: () => 1_700_000_000_000 });
     expect(result.applied).toEqual([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 28, 29, 31, 32, 33,
-      34,
+      34, 35,
     ]);
 
     const rows = await driver.execute(`SELECT version, name, applied_at FROM migrations`);
@@ -227,6 +239,7 @@ describe('runClientMigrations against a fresh database', () => {
       { version: 32, name: 'transfers', applied_at: 1_700_000_000_000 },
       { version: 33, name: 'inventory_costs', applied_at: 1_700_000_000_000 },
       { version: 34, name: 'supplier_bills', applied_at: 1_700_000_000_000 },
+      { version: 35, name: 'staff_pay', applied_at: 1_700_000_000_000 },
     ]);
   });
 });
@@ -238,12 +251,12 @@ describe('runner is idempotent', () => {
 
     expect(first.applied).toEqual([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 28, 29, 31, 32, 33,
-      34,
+      34, 35,
     ]);
     expect(second.applied).toEqual([]);
 
     const rows = await driver.execute(`SELECT COUNT(*) AS c FROM migrations`);
-    expect(rows.rows).toEqual([{ c: 27 }]);
+    expect(rows.rows).toEqual([{ c: 28 }]);
     // Re-running must not re-seed the singleton either.
     const state = await driver.execute(`SELECT COUNT(*) AS c FROM sync_state`);
     expect(state.rows).toEqual([{ c: 1 }]);

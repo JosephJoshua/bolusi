@@ -512,6 +512,33 @@ export async function voidCounted(
   );
 }
 
+/**
+ * Whether an owner settled a count of this store's drawer made after `at`. A drawer record from
+ * before it is then part of a book that owner put right: cancelling it would open the difference
+ * again. Exported for the modules whose records take drawer cash (a supplier payment).
+ */
+export async function settledCountAfter(db: Db, storeId: string, at: number): Promise<boolean> {
+  const settled = await db
+    .selectFrom('moneyEntries as a')
+    .innerJoin('moneyEntries as c', 'c.id', 'a.relatedEntryId')
+    .select('a.id')
+    .where('a.storeId', '=', storeId)
+    .where('a.kind', '=', 'cash_adjusted')
+    .where('c.kind', '=', 'cash_counted')
+    .where('c.createdAt', '>', at)
+    .executeTakeFirst();
+  return settled !== undefined;
+}
+
+async function requireNoLaterSettledCount(db: Db, op: SignedOperation, at: number): Promise<void> {
+  if (await settledCountAfter(db, storeOf(op), at)) {
+    throw refuse('laterCountSettled', {
+      code: 'INVALID_TRANSITION',
+      details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
+    });
+  }
+}
+
 export function createMoneyRules(sources: MoneyDocumentSources) {
   async function requireDocument(db: Db, op: SignedOperation, document: MoneyDocument) {
     const source = sources[document.kind];
@@ -677,21 +704,7 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
     if (entry.voidedBy !== null) {
       throw refuse('alreadyVoided', { details: { entityId: op.entityId } });
     }
-    const settled = await db
-      .selectFrom('moneyEntries as a')
-      .innerJoin('moneyEntries as c', 'c.id', 'a.relatedEntryId')
-      .select('a.id')
-      .where('a.storeId', '=', storeOf(op))
-      .where('a.kind', '=', 'cash_adjusted')
-      .where('c.kind', '=', 'cash_counted')
-      .where('c.createdAt', '>', entry.createdAt)
-      .executeTakeFirst();
-    if (settled !== undefined) {
-      throw refuse('laterCountSettled', {
-        code: 'INVALID_TRANSITION',
-        details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
-      });
-    }
+    await requireNoLaterSettledCount(db, op, Number(entry.createdAt));
   };
 
   /**

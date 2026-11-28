@@ -33,10 +33,12 @@ import {
   approvalsModule,
   inventoryModule,
   moneyModule,
+  payModule,
   purchasingModule,
 } from '../../src/index.js';
 import { INVENTORY_PERMISSION } from '../../src/inventory/index.js';
 import { MONEY_PERMISSION } from '../../src/money/index.js';
+import { PAY_PERMISSION } from '../../src/pay/index.js';
 import { PURCHASING_PERMISSION } from '../../src/purchasing/index.js';
 import { repairModule, REPAIR_PERMISSION } from '../../src/repair/index.js';
 import { SqliteOpStore } from './harness.js';
@@ -54,11 +56,13 @@ const P = REPAIR_PERMISSION;
 const M = MONEY_PERMISSION;
 const I = INVENTORY_PERMISSION;
 const B = PURCHASING_PERMISSION;
+const W = PAY_PERMISSION;
 
-// Every role asks for and answers approvals; the decision's own permission says what.
+// Every role asks for and answers approvals (the decision's own permission says what), and sees
+// its own pay.
 const role = (permissionIds: readonly string[], scopeType = 'store'): DirectoryRole => ({
   scopeType,
-  permissionIdsJson: JSON.stringify([...permissionIds, APPROVAL_PERMISSION.use]),
+  permissionIdsJson: JSON.stringify([...permissionIds, APPROVAL_PERMISSION.use, W.own]),
 });
 
 // Query rows are read loosely in tests; the query modules own the real row types.
@@ -138,6 +142,18 @@ export interface RepairHarness {
     input: unknown,
     userId: string,
   ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
+  /** Run a pay command as `userId`. */
+  pay<K extends keyof typeof payModule.commands>(
+    command: K,
+    input: Parameters<(typeof payModule.commands)[K]['input']['parse']>[0],
+    userId: string,
+  ): Promise<unknown>;
+  /** Run a pay query as `userId`. */
+  payQuery<K extends keyof typeof payModule.queries>(
+    query: K,
+    input: unknown,
+    userId: string,
+  ): Promise<{ rows: readonly QueryRow[]; nextCursor: string | null }>;
   /** Run an approvals command as `userId`. */
   approvals<K extends keyof typeof approvalsModule.commands>(
     command: K,
@@ -195,6 +211,7 @@ export async function openRepairHarness(
     purchasingModule as unknown as AnyModuleDefinition<ClientDatabase>,
     moneyModule as unknown as AnyModuleDefinition<ClientDatabase>,
     approvalsModule as unknown as AnyModuleDefinition<ClientDatabase>,
+    payModule as unknown as AnyModuleDefinition<ClientDatabase>,
   ]);
   const engine = createProjectionEngine(db, registry.projections);
 
@@ -222,6 +239,7 @@ export async function openRepairHarness(
       purchasingModule as unknown as ModulePermissionManifest,
       moneyModule as unknown as ModulePermissionManifest,
       approvalsModule as unknown as ModulePermissionManifest,
+      payModule as unknown as ModulePermissionManifest,
     ]),
     {
       load: () =>
@@ -264,6 +282,7 @@ export async function openRepairHarness(
                   ...Object.values(I),
                   ...Object.values(M),
                   ...Object.values(B),
+                  ...Object.values(W),
                 ],
                 'tenant',
               ),
@@ -286,6 +305,7 @@ export async function openRepairHarness(
                 ...Object.values(I).filter((id) => id !== I.manageCategories),
                 ...Object.values(M).filter((id) => id !== M.manageCentralAccounts),
                 ...Object.values(B),
+                ...Object.values(W),
               ]),
             ],
             [
@@ -311,6 +331,7 @@ export async function openRepairHarness(
                   M.extendCredit,
                   I.read,
                   I.useParts,
+                  W.advances,
                 ]),
                 limits: new Map([[storeId, MANAGER_LIMITS]]),
               },
@@ -459,6 +480,22 @@ export async function openRepairHarness(
         deviceId,
       })) as { rows: readonly QueryRow[]; nextCursor: string | null };
     },
+    pay: async (command, input, userId) => {
+      const outcome = await runtime.commands.execute(
+        payModule.commands[command] as never,
+        input as never,
+        runtime.commands.createContext(userId),
+      );
+      return (outcome as { result?: unknown }).result;
+    },
+    payQuery: async (query, input, userId) => {
+      return (await runtime.queries.execute(payModule.queries[query] as never, input as never, {
+        tenantId,
+        storeId,
+        userId,
+        deviceId,
+      })) as { rows: readonly QueryRow[]; nextCursor: string | null };
+    },
     approvals: async (command, input, userId) => {
       const outcome = await runtime.commands.execute(
         approvalsModule.commands[command] as never,
@@ -496,6 +533,7 @@ export async function openRepairHarness(
             eb('type', 'like', 'money.%'),
             eb('type', 'like', 'purchasing.%'),
             eb('type', 'like', 'approvals.%'),
+            eb('type', 'like', 'pay.%'),
           ]),
         )
         .orderBy('seq', 'asc')

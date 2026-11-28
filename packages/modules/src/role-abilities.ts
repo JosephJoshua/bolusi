@@ -13,6 +13,7 @@ import { APPROVAL_PERMISSION } from './approvals/constants.js';
 import { INVENTORY_PERMISSION } from './inventory/constants.js';
 import { MONEY_PERMISSION } from './money/constants.js';
 import { NOTES_PERMISSION } from './notes/constants.js';
+import { PAY_PERMISSION } from './pay/constants.js';
 import { PURCHASING_PERMISSION } from './purchasing/constants.js';
 import { REPAIR_PERMISSION } from './repair/constants.js';
 
@@ -97,6 +98,16 @@ export const ROLE_ABILITY_GROUPS = [
     ],
   },
   {
+    id: 'pay',
+    abilities: [
+      // Kasbon: see balances, hand one out, take a repayment. Salaries stay hidden.
+      { id: 'payKasbon', permissionIds: [PAY_PERMISSION.advances] },
+      { id: 'payView', permissionIds: [PAY_PERMISSION.read] },
+      // "Bayar gaji" takes the month's kasbon installment, so it keeps kasbon too.
+      { id: 'payPay', permissionIds: [PAY_PERMISSION.pay], requires: ['payView', 'payKasbon'] },
+    ],
+  },
+  {
     id: 'other',
     abilities: [
       { id: 'notes', permissionIds: [N.read, N.create, N.edit, N.archive] },
@@ -157,6 +168,7 @@ export const PRESET_ROLE_ABILITIES = {
     'moneyRefund',
     'moneyVoid',
     'moneyCredit',
+    'payKasbon',
   ],
   staff: ['notes'],
 } as const satisfies Record<string, readonly RoleAbilityId[]>;
@@ -182,6 +194,8 @@ export const ROLE_BASE_PERMISSIONS: readonly string[] = [
   AUTH_PERMISSION.pinChange,
   PLATFORM_PERMISSION.setLocale,
   APPROVAL_PERMISSION.use,
+  // Each person's own pay statement.
+  PAY_PERMISSION.own,
 ];
 
 /**
@@ -204,6 +218,8 @@ export const OWNER_ONLY_PERMISSIONS: readonly string[] = [
   INVENTORY_PERMISSION.settleTransfer,
   // What parts cost to buy and what the store owes its suppliers (owner decision 2026-11-25).
   PURCHASING_PERMISSION.bills,
+  // Salaries, commission rates, commission by hand, cancelling pay and writing off kasbon.
+  PAY_PERMISSION.manage,
 ];
 
 const BY_ID = new Map(ROLE_ABILITIES.map((ability) => [ability.id, ability]));
@@ -306,6 +322,8 @@ export const RISKY_ABILITIES: ReadonlySet<string> = new Set<RoleAbilityId>([
   'moneyAccounts',
   'stockCount',
   'stockCorrect',
+  'payKasbon',
+  'payPay',
 ]);
 
 /** The switches behind which some module declares a dangerous permission. */

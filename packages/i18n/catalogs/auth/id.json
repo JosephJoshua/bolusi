@@ -381,6 +381,7 @@
       "repair": "Servisan",
       "money": "Uang",
       "stock": "Stok",
+      "pay": "Gaji",
       "other": "Lainnya"
     },
     "ability": {
@@ -438,6 +439,12 @@
       "stockTransferHint": "Kirim ke toko lain dan terima kiriman",
       "stockCost": "Lihat harga beli",
       "stockCostHint": "Harga beli dan modal rata-rata sparepart",
+      "payKasbon": "Kasbon",
+      "payKasbonHint": "Memberi kasbon dan menerima pembayarannya",
+      "payView": "Lihat gaji",
+      "payViewHint": "Gaji, komisi, dan pembayaran gaji semua karyawan",
+      "payPay": "Bayar gaji",
+      "payPayHint": "Membayar gaji dan komisi bulanan",
       "notes": "Catatan",
       "notesHint": "Menulis dan mengarsipkan catatan toko",
       "syncProblems": "Masalah sinkronisasi",
