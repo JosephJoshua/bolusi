@@ -195,7 +195,7 @@ function DeviceRows({
                   variant="dangerText"
                   size="sm"
                   disabled={busy}
-                  aria-label={t('auth.devices.blockTitle', { name: row.name })}
+                  aria-label={t('auth.devices.blockLabel', { name: row.name })}
                   onClick={() => onBlock(row)}
                   data-testid={`desktop.settings.devices.block.${row.id}`}
                 />

@@ -459,6 +459,7 @@
     "blockedSection": "Blocked",
     "block": "Block",
     "blockTitle": "Block {name}?",
+    "blockLabel": "Block {name}",
     "blockBody": "Last synced {time}. When it connects again, all its data is erased, including changes not yet sent.",
     "blockBodyNever": "Never synced. When it connects, all its data is erased.",
     "blockConfirm": "Block",
