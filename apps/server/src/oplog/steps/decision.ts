@@ -3,8 +3,9 @@
 // PC's sealed secrets, a phone's storage) could record a cancel, refund or void in the owner's name.
 // So an op that uses a `decision` permission (authz/registry.ts) for its own author, either as its
 // declared permission or through its rule (a price drop needing the discount permission, Bayar nanti
-// needing credit), is accepted from a shared device only when the push carries a person session the
-// server opened for that author on that device after checking their PIN itself.
+// needing credit), is accepted from a shared device only when the push carries a decision session
+// the server opened for that author on that device after checking their approval PIN, which no
+// device stores (auth/approval-pins.ts). A sign-in session proves no decision.
 //
 // Structural, for every module: the declared permission and the rule context's two grant checks are
 // the only ways an op uses a power, and both pass through here. A personal phone is exempt: the
@@ -40,6 +41,7 @@ export function createDecisionProofs(
         token,
         device: { deviceId: device.id, storeId: device.storeId },
         now,
+        decision: true,
       });
       if (userId !== null) found.add(userId);
     }

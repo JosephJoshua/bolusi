@@ -44,6 +44,8 @@ describe('HTTP error-code registry (api/00 §7)', () => {
         'QRIS_CHARGE_OPEN',
         'CHANGE_REFUSED',
         'PERSON_SESSION_INVALID',
+        'APPROVAL_PIN_NOT_SET',
+        'APPROVAL_PIN_WEAK',
       ].sort(),
     );
   });

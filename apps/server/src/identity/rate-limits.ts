@@ -156,6 +156,11 @@ export const IDENTITY_LIMITS = {
   personPinFailPerUserDevice: { limit: 5, windowMs: 15 * MINUTE },
   /** Every PIN check one device asks for, right or wrong, whoever it names. */
   personPinPerDevice: { limit: 30, windowMs: 15 * MINUTE },
+  /**
+   * Wrong approval PINs per person, from any device: the PIN is checked only here, so this is the
+   * whole guessing budget (auth/approval-pins.ts).
+   */
+  approvalPinFailPerUser: { limit: 5, windowMs: 15 * MINUTE },
 } as const;
 
 /** Throw `RATE_LIMITED` (429) when a decision denies — `respondError` stamps `Retry-After`. */

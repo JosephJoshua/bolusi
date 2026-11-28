@@ -54,6 +54,7 @@ import type { Bootstrapped } from '@bolusi/device/bootstrap/bootstrap';
 import type { AppEnrollment, EnrollmentController } from '@bolusi/device/bootstrap/enrollment';
 import { readSessionIdentity } from '@bolusi/device/bootstrap/notes';
 import { createUserLocaleWriter } from '@bolusi/device/bootstrap/user-locale';
+import { useApprovalPinHost } from './approval-pin-host.js';
 import type { UpdateCheckResult } from './app-updates.js';
 import { createNotificationChannels } from './notifications.js';
 import { BrandIntro } from './BrandIntro.js';
@@ -455,6 +456,8 @@ export function Root({
   const unsubRef = useRef<(() => void) | null>(null);
   /** The media client (task 82), held for the same reason as `syncRef`: constructed at most once. */
   const mediaRef = useRef<MediaClient | null>(null);
+  /** The approval PIN prompt's ask, read at each decision (bound into the runtime below). */
+  const approvalAskRef = useRef<(userId: string) => Promise<boolean>>(() => Promise.resolve(false));
   /**
    * The `AppRuntime` whose step-7 hook currently points at the live loop (task 136), held in a ref so
    * the effect's teardown can detach it — the cleanup closure cannot see the `enroll` local, which is
@@ -698,6 +701,8 @@ export function Root({
       }
       // Through the ref, so an append after teardown (ref cleared) notifies nothing.
       enroll?.runtime.bindMediaAttached(() => mediaRef.current?.notifyAttached());
+      // A decision refused for want of the approval PIN asks for it, then runs once more.
+      enroll?.runtime.bindDecisionPrompt((userId) => approvalAskRef.current(userId));
     };
 
     void (async () => {
@@ -932,6 +937,10 @@ export function Root({
 
   /** The signature pad (06 §2.3) for handover, stamped with the same session identity. */
   const signature = useSignatureHost({ media, identity: notes?.identity ?? null });
+
+  /** The approval PIN prompt over the screen whose decision needs it, and its Settings entry. */
+  const approval = useApprovalPinHost({ session, staffAdmin });
+  approvalAskRef.current = approval.ask;
 
   /** The code scanner for the items list and form. It reads a code and stores nothing. */
   const scan = useScanHost(scanPlatformFixed);
@@ -1276,6 +1285,9 @@ export function Root({
         scan={scan.surface}
         // The video recorder or player while one is open, else null.
         video={video.surface}
+        // The approval PIN prompt while a decision waits on it, or Settings opened it; else null.
+        approval={approval.surface}
+        onOpenApprovalPin={approval.openSetup}
         // SEC-AUTH-08 work retention (task 155) — the READ and WRITE halves of task 133's path, which
         // shipped with a producer (`updateWorkspace`) and NO consumer, so a half-typed note was still
         // lost on a real device. `workspace` is the active user's retained work from the shell session
