@@ -391,6 +391,17 @@ describe('technician work', () => {
   });
 });
 
+describe('the board', () => {
+  test("shows the customer's name and the phone in full, wrapping instead of cutting", async () => {
+    h = await openRepairScreenHarness(5311);
+    const ticketId = await openTicket(h);
+    const screen = await mount(h, h.cashierId);
+    const name = screen.get(`repair.board.row.${ticketId}.customer`);
+    expect(name.props.numberOfLines).toBeUndefined();
+    screen.unmount();
+  });
+});
+
 describe('price changes and handover', () => {
   test('a technician proposes, the cashier applies it with the customer agreeing', async () => {
     h = await openRepairScreenHarness(5301);
