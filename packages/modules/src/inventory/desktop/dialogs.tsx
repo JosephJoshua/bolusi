@@ -3,15 +3,14 @@
 import { TextArea, TextField, ToggleChip } from '@bolusi/ui-web';
 import { useState } from 'react';
 
-import { useActionRunner } from '../../screen-kit/index.js';
 import { TaskDialog, type DiscardCopy } from '../../screen-kit/desktop/index.js';
 import { MAX_FIELD_VALUE, type CategoryField } from '../categories.js';
 import { MAX_COUNTED_QTY, TAG_FACET } from '../constants.js';
+import { useCountStock } from '../item-actions.js';
 import { ti } from '../i18n.js';
 import { useItemForm } from '../item-form.js';
 import { MAX_BARCODE, MAX_NOTE, MAX_PART_CODE, MAX_PART_NAME } from '../operations.js';
 import type { ItemDetailRow, ItemFitRow, ItemRow } from '../queries.js';
-import { useInventoryRuntime } from '../runtime.js';
 import { ModelsPicker, QtyField, ValuePicker } from './fields.js';
 
 export function discardCopy(): DiscardCopy {
@@ -279,30 +278,16 @@ export interface CountDialogProps {
  * matching count is one Enter, and the difference is said as it changes.
  */
 export function CountDialog({ part, onClose, onDone }: CountDialogProps): React.JSX.Element {
-  const runtime = useInventoryRuntime();
-  const runner = useActionRunner();
-  const recorded = part.onHand;
-  const [counted, setCounted] = useState(Math.max(0, recorded));
-  const [note, setNote] = useState('');
-  const difference = counted - recorded;
-  const save = (): void => {
-    void runner
-      .run(() =>
-        runtime.run('countStock', {
-          counts: [{ itemId: part.id, counted }],
-          note: note.trim() === '' ? null : note,
-        }),
-      )
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
+  const { runner, counted, setCounted, note, setNote, caption, dirty, save } = useCountStock(
+    part,
+    onDone,
+  );
   return (
     <TaskDialog
       title={ti('inventory.count.title')}
       description={part.name}
       runner={runner}
-      dirty={counted !== Math.max(0, recorded) || note !== ''}
+      dirty={dirty}
       discard={discardCopy()}
       onClose={onClose}
       submitLabel={ti('inventory.count.save')}
@@ -315,13 +300,7 @@ export function CountDialog({ part, onClose, onDone }: CountDialogProps): React.
         onChange={setCounted}
         max={MAX_COUNTED_QTY}
         autoFocus
-        hint={`${ti('inventory.count.recorded', { count: recorded })} · ${
-          difference === 0
-            ? ti('inventory.count.same')
-            : difference > 0
-              ? ti('inventory.count.more', { count: difference })
-              : ti('inventory.count.less', { count: -difference })
-        }`}
+        hint={caption}
         testId="inventory.desk.count.counted"
       />
       <TextArea
