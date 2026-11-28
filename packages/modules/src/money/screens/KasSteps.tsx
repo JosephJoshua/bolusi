@@ -4,6 +4,7 @@
  * what they still owe on a phone they already took home, money going back to a customer, and an
  * owner lowering a bill.
  */
+import { useReceiveDebt } from '../receive-debt.js';
 import { useCashCount, useCashMove, useSettleCount } from '../cash-forms.js';
 import { formatDateTime, formatMoney } from '@bolusi/i18n';
 import {
@@ -21,7 +22,7 @@ import {
 import { type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
+import { type DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
 import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js';
 
@@ -35,11 +36,9 @@ import {
 import { ta } from '../../approvals/i18n.js';
 import { tm } from '../i18n.js';
 import { CASH_MOVE_LABEL, differenceText, RECOUNT_CASH, type NamedBalance } from '../kas.js';
-import { useChangeCheck } from '../change-check.js';
 import { digitsOf, digitsText, rupiah } from '../payment-entry.js';
 import { canSimulateQris } from '../qris.js';
 import type { CashCountRow } from '../queries.js';
-import { useDebtReceipt } from '../receive-debt.js';
 import {
   reduceAmountError,
   reduceHint,
@@ -396,8 +395,7 @@ export function ReceiveDebtStep({
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
-  const runner = useActionRunner();
-  const receipt = useDebtReceipt(balance);
+  const { receipt, runner, changeCheck, submit } = useReceiveDebt(balance, onDone);
   const { entry, input, qris } = receipt;
   const leave = useStepLeave(
     receipt.dirty && !receipt.paidByQr,
@@ -409,22 +407,6 @@ export function ReceiveDebtStep({
     },
     testID,
   );
-  const changeCheck = useChangeCheck();
-
-  const submit = (): void => {
-    if (receipt.paidByQr) {
-      onDone();
-      return;
-    }
-    if (input === null) return;
-    changeCheck.guard(input.payments, () => {
-      void runner
-        .run(() => runtime.run('receivePayments', input))
-        .then((result) => {
-          if (result !== undefined) onDone();
-        });
-    });
-  };
 
   if (qris.open !== null && runtime.qris !== undefined) {
     return (

@@ -1,12 +1,12 @@
 // The tasks the Kas page opens on the counter PC, each a dialog over it: Tutup kas, cash out of or
 // into the drawer, an owner settling a counted difference, a customer paying a debt, money going
 // back to a customer, an owner lowering a bill and an owner cancelling a payment. The rules are the phone's (kas.ts and the commands); only the layout differs.
+import { useReceiveDebt } from '../receive-debt.js';
+import { useVoidPayment } from '../void-ask.js';
 import { useCashCount, useCashMove, useSettleCount } from '../cash-forms.js';
 import { formatDateTime, formatMoney } from '@bolusi/i18n';
 import { Button, TextField, ToggleChip } from '@bolusi/ui-web';
 import { useState } from 'react';
-
-import { useActionRunner } from '../../screen-kit/index.js';
 
 import {
   CASH_ACCOUNT,
@@ -16,7 +16,6 @@ import {
   MONEY_PERMISSION,
 } from '../constants.js';
 import { tm } from '../i18n.js';
-import { useEntryCustomer, useVoidAsk, voidRequest } from '../void-ask.js';
 import { ta } from '../../approvals/i18n.js';
 import {
   CASH_MOVE_LABEL,
@@ -24,13 +23,10 @@ import {
   differenceText,
   RECOUNT_CASH,
   type NamedBalance,
-  voidKind,
 } from '../kas.js';
-import { useChangeCheck } from '../change-check.js';
 import { rupiah } from '../payment-entry.js';
 import type { CashCountRow, MoneyEntryRow, PaymentAccountRow } from '../queries.js';
 import { canSimulateQris } from '../qris.js';
-import { useDebtReceipt } from '../receive-debt.js';
 import {
   reduceAmountError,
   reduceHint,
@@ -297,28 +293,11 @@ export function ReceiveDebtDialog({
   readonly onAsked?: (() => void) | undefined;
 }): React.JSX.Element {
   const runtime = useMoneyRuntime();
-  const runner = useActionRunner();
-  const receipt = useDebtReceipt(balance);
+  const { receipt, runner, changeCheck, submit } = useReceiveDebt(balance, onDone);
   const { entry, input, qris } = receipt;
   // An owner lowers the bill over this dialog, so what was typed here waits underneath.
   const [reducing, setReducing] = useState(false);
   const testId = 'money.desk.receive';
-  const changeCheck = useChangeCheck();
-
-  const submit = (): void => {
-    if (receipt.paidByQr) {
-      onDone();
-      return;
-    }
-    if (input === null) return;
-    changeCheck.guard(input.payments, () => {
-      void runner
-        .run(() => runtime.run('receivePayments', input))
-        .then((result) => {
-          if (result !== undefined) onDone();
-        });
-    });
-  };
 
   return (
     <>
@@ -620,29 +599,11 @@ export function VoidPaymentDialog({
   readonly accounts: readonly PaymentAccountRow[];
   readonly onAsked: () => void;
 }): React.JSX.Element {
-  const runtime = useMoneyRuntime();
-  const runner = useActionRunner();
-  const [reason, setReason] = useState('');
-  const kind = voidKind(entry);
-  // A limited role (a manager) sees its limit up front; beyond it, or without the decision, an
-  // owner is asked instead.
-  const ask = useVoidAsk(entry);
-  const customer = useEntryCustomer(entry);
-  const blocked = ask.asking && !ask.mayAsk;
+  const { runner, reason, setReason, kind, ask, customer, blocked, submit } = useVoidPayment(
+    entry,
+    { onDone, onAsked },
+  );
   const testId = 'money.desk.void';
-
-  const submit = (): void => {
-    if (reason.trim() === '' || blocked || ask.pending) return;
-    void runner
-      .run<unknown>(() =>
-        ask.asking
-          ? runtime.approvals.run('requestApproval', voidRequest(entry, reason))
-          : runtime.run(kind.command, { entryId: entry.id, reason }),
-      )
-      .then((result) => {
-        if (result !== undefined) (ask.asking ? onAsked : onDone)();
-      });
-  };
 
   return (
     <MoneyDialog
