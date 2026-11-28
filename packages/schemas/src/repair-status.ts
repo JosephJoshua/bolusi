@@ -44,10 +44,22 @@ export const zPublicRepairStatus = z
       .strict(),
     /** Price changes the store is waiting for the customer to agree to. */
     pendingPrices: z.array(z.object({ description: z.string(), amount: zIdr }).strict()),
-    /** The repair types and their warranty days, as the servisan recorded them. */
+    /**
+     * The repair types and their warranty days, as the servisan recorded them, with the part grade
+     * the customer agreed to (null or absent: none).
+     */
     repairTypes: z.array(
       z
-        .object({ item: z.string(), label: z.string().nullable(), warrantyDays: z.number().int() })
+        .object({
+          item: z.string(),
+          label: z.string().nullable(),
+          warrantyDays: z.number().int(),
+          grade: z
+            .object({ item: z.string(), label: z.string().nullable() })
+            .strict()
+            .nullable()
+            .optional(),
+        })
         .strict(),
     ),
     /** When the phone went home (the warranty counts from here); null while it is in the store. */

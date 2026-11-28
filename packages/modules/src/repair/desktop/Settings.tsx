@@ -19,6 +19,7 @@ import {
   Switch,
   TextArea,
   TextField,
+  ToggleChip,
   Tooltip,
 } from '@bolusi/ui-web';
 import { CircleCheck, ImagePlus, Plus, Sparkles, Trash2 } from 'lucide-react';
@@ -28,6 +29,7 @@ import { repairAbilities, type RepairAbilities } from '../flows.js';
 import { tn, type RepairKey } from '../i18n.js';
 import {
   READY_UNKNOWN,
+  type IntakeOption,
   type IntakeOptionList,
   type IntakeOptionSettings,
 } from '../intake-options.js';
@@ -35,7 +37,10 @@ import { INTAKE_HINT_KEY, INTAKE_LIST_KEY, optionLabel } from '../labels.js';
 import {
   addRow,
   moveRow,
+  gradeWarrantyOk,
   removeRow,
+  setGradeWarranty,
+  toggleGrade,
   updateRow,
   type EditorRow,
   type EditorState,
@@ -271,7 +276,12 @@ function ListEditor({
               handle={handle}
               focus={focusKey === row.key}
               problem={showProblems ? problems.rows.get(row.key) : undefined}
+              grades={settings.lists.grades}
               onChange={(patch) => edit((s) => updateRow(s, row.key, patch))}
+              onToggleGrade={(gradeId) => edit((s) => toggleGrade(s, row.key, gradeId))}
+              onGradeWarranty={(gradeId, warranty) =>
+                edit((s) => setGradeWarranty(s, row.key, gradeId, warranty))
+              }
               onRemove={() => edit((s) => removeRow(s, row.key))}
               testId={`${testId}.row.${row.key}`}
             />
@@ -318,6 +328,89 @@ function ListEditor({
 }
 
 /**
+ * The part grades a repair type is done with, under its name: each grade on the franchise list as a
+ * chip, and the warranty days of each one picked beside it.
+ */
+function GradeTermsField({
+  row,
+  name,
+  grades,
+  manage,
+  showProblems,
+  onToggleGrade,
+  onGradeWarranty,
+  testId,
+}: {
+  readonly row: EditorRow;
+  readonly name: string;
+  readonly grades: readonly IntakeOption[];
+  readonly manage: boolean;
+  /** Saving was tried with a warranty the rules refuse: point at the field. */
+  readonly showProblems: boolean;
+  readonly onToggleGrade: (gradeId: string) => void;
+  readonly onGradeWarranty: (gradeId: string, warranty: string) => void;
+  readonly testId: string;
+}): React.JSX.Element {
+  return (
+    <div
+      className="mb-1 flex flex-wrap items-center gap-x-6 gap-y-2"
+      role="group"
+      aria-label={`${tn('repair.options.grades')}: ${name}`}
+      data-testid={testId}
+    >
+      <span className="text-small text-text-muted">{tn('repair.options.grades')}</span>
+      {grades.map((grade) => {
+        const gradeName = optionLabel('grades', grade);
+        const terms = row.grades.find((offered) => offered.id === grade.id);
+        if (!manage) {
+          return terms === undefined ? null : (
+            <span key={grade.id} className="text-small text-text">
+              {terms.warranty === '' || terms.warranty === '0'
+                ? tn('repair.options.gradeNoWarranty', { grade: gradeName })
+                : tn('repair.options.gradeTerms', {
+                    grade: gradeName,
+                    count: Number(terms.warranty),
+                  })}
+            </span>
+          );
+        }
+        return (
+          <span key={grade.id} className="flex items-center gap-2">
+            <ToggleChip
+              label={gradeName}
+              selected={terms !== undefined}
+              onToggle={() => onToggleGrade(grade.id)}
+              testId={`${testId}.${grade.id}`}
+            />
+            {terms === undefined ? null : (
+              <span className="flex items-center gap-1">
+                <TextField
+                  label={`${tn('repair.options.gradeWarranty', { grade: gradeName })}: ${name}`}
+                  className="w-16 [&>div:first-child]:sr-only"
+                  value={terms.warranty}
+                  onChange={(event) =>
+                    onGradeWarranty(grade.id, event.target.value.replace(/\D/g, ''))
+                  }
+                  inputMode="numeric"
+                  maxLength={3}
+                  error={
+                    showProblems && !gradeWarrantyOk(terms)
+                      ? tn('repair.options.problem.badWarranty')
+                      : undefined
+                  }
+                  data-testid={`${testId}.${grade.id}.warranty`}
+                />
+                <span className="text-small text-text-muted">{tn('repair.options.daysUnit')}</span>
+              </span>
+            )}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
  * One item, typed in place: its name (or a new ready-by row's days), whether this store shows it,
  * and removing it from every store. Someone who may only choose for this store sees the switch.
  */
@@ -329,12 +422,19 @@ function OptionRow({
   handle,
   focus,
   problem,
+  grades,
   onChange,
+  onToggleGrade,
+  onGradeWarranty,
   onRemove,
   testId,
 }: {
   readonly list: IntakeOptionList;
   readonly row: EditorRow;
+  /** The franchise's part grades, which a repair type may be done with. */
+  readonly grades: readonly IntakeOption[];
+  readonly onToggleGrade: (gradeId: string) => void;
+  readonly onGradeWarranty: (gradeId: string, warranty: string) => void;
   readonly manage: boolean;
   readonly hide: boolean;
   readonly handle: ReactNode;
@@ -354,7 +454,7 @@ function OptionRow({
   const problemText = problem === undefined ? undefined : tn(PROBLEM_KEY[problem]);
   return (
     <div
-      className="flex items-start gap-3 border-b border-border px-3 py-2 last:border-b-0"
+      className="flex flex-wrap items-start gap-x-3 border-b border-border px-3 py-2 last:border-b-0"
       data-testid={testId}
     >
       {handle === null ? null : <div className="pt-1">{handle}</div>}
@@ -389,7 +489,11 @@ function OptionRow({
         // Each type's terms: the warranty from pickup, and whether intake needs the ownership video.
         <>
           <div className="w-28 shrink-0">
-            {manage ? (
+            {row.grades.length > 0 ? (
+              <p className="flex min-h-10 items-center text-body text-text-muted">
+                {tn('repair.options.perGrade')}
+              </p>
+            ) : manage ? (
               <TextField
                 label={`${tn('repair.options.warrantyDays')}: ${name}`}
                 className="[&>div:first-child]:sr-only"
@@ -444,6 +548,22 @@ function OptionRow({
             onClick={onRemove}
             size="sm"
             data-testid={`${testId}.remove`}
+          />
+        </div>
+      ) : null}
+      {list === 'repairTypes' && grades.length > 0 ? (
+        // On a line of its own under the row, lined up with the name, so every grade fits beside
+        // the others.
+        <div className={handle === null ? 'basis-full' : 'basis-full pl-11'}>
+          <GradeTermsField
+            row={row}
+            name={name}
+            grades={grades}
+            manage={manage}
+            showProblems={problem === 'badWarranty'}
+            onToggleGrade={onToggleGrade}
+            onGradeWarranty={onGradeWarranty}
+            testId={`${testId}.grades`}
           />
         </div>
       ) : null}

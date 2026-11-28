@@ -718,7 +718,9 @@ function ticketOpenedRows(op: ProjectionOperation): {
     }
     case 2:
     case 3:
-    case 4: {
+    case 4:
+    // v5 repair types name their part grade; they are kept as recorded either way.
+    case 5: {
       const payload = payloadOf<TicketOpenedPayload>(op);
       return {
         payload,

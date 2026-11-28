@@ -32,6 +32,7 @@ import {
   intake,
   openRepairHarness,
   paidHandover,
+  ORIGINAL_PARTS,
   type RepairHarness,
 } from './support/repair-harness.js';
 
@@ -83,6 +84,8 @@ const screen: RecordedRepairType = {
   warrantyDays: 30,
   needsVideo: false,
 };
+/** The screen as intake records it: the customer agreed to the original part. */
+const screenOriginal: RecordedRepairType = { ...screen, grade: { item: 'original', label: null } };
 
 describe('the owner’s list', () => {
   test('ships with common repairs; unlocking needs the ownership video', () => {
@@ -146,8 +149,8 @@ describe('a servisan’s repair types', () => {
     const h = await harness(6102);
     const ticketId = await openTicket(h, ['unlock', 'screen']);
     expect(await types(h, ticketId)).toStrictEqual([
-      { item: 'unlock', label: null, warrantyDays: 0, needsVideo: true },
-      screen,
+      { item: 'unlock', label: null, warrantyDays: 0, needsVideo: true, grade: null },
+      screenOriginal,
     ]);
     expect(await types(h, await openTicket(h, []))).toStrictEqual([]);
   });
@@ -174,25 +177,45 @@ describe('a servisan’s repair types', () => {
       },
       h.ownerId,
     );
-    await h.run('setRepairTypes', { ticketId, repairTypes: ['screen', 'battery'] }, h.technicianId);
+    await h.run(
+      'setRepairTypes',
+      { ticketId, repairTypes: ['screen', 'battery'], grades: ORIGINAL_PARTS },
+      h.technicianId,
+    );
     expect(await types(h, ticketId)).toStrictEqual([
-      screen,
-      { item: 'battery', label: null, warrantyDays: 60, needsVideo: false },
+      screenOriginal,
+      { item: 'battery', label: null, warrantyDays: 60, needsVideo: false, grade: null },
     ]);
   });
 
   test('the counter or a technician changes them; nobody else, and not to the same types', async () => {
     const h = await harness(6105);
     const ticketId = await openTicket(h, ['screen']);
-    await h.run('setRepairTypes', { ticketId, repairTypes: ['screen', 'battery'] }, h.cashierId);
-    await h.run('setRepairTypes', { ticketId, repairTypes: ['battery'] }, h.technicianId);
+    await h.run(
+      'setRepairTypes',
+      { ticketId, repairTypes: ['screen', 'battery'], grades: ORIGINAL_PARTS },
+      h.cashierId,
+    );
+    await h.run(
+      'setRepairTypes',
+      { ticketId, repairTypes: ['battery'], grades: ORIGINAL_PARTS },
+      h.technicianId,
+    );
     expect((await types(h, ticketId)).map((type) => type.item)).toEqual(['battery']);
     await expectCode(
-      h.run('setRepairTypes', { ticketId, repairTypes: ['battery'] }, h.technicianId),
+      h.run(
+        'setRepairTypes',
+        { ticketId, repairTypes: ['battery'], grades: ORIGINAL_PARTS },
+        h.technicianId,
+      ),
       'VALIDATION_FAILED',
     );
     await expectCode(
-      h.run('setRepairTypes', { ticketId, repairTypes: ['screen'] }, h.zeroUserId),
+      h.run(
+        'setRepairTypes',
+        { ticketId, repairTypes: ['screen'], grades: ORIGINAL_PARTS },
+        h.zeroUserId,
+      ),
       'PERMISSION_DENIED',
     );
     const events = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0].events;
@@ -205,7 +228,11 @@ describe('a servisan’s repair types', () => {
     const h = await harness(6106);
     const ticketId = await openTicket(h, ['screen', 'unlock']);
     await h.run('hideIntakeOptions', { list: 'repairTypes', hidden: ['unlock'] }, h.storeOwnerId);
-    await h.run('setRepairTypes', { ticketId, repairTypes: ['unlock'] }, h.cashierId);
+    await h.run(
+      'setRepairTypes',
+      { ticketId, repairTypes: ['unlock'], grades: ORIGINAL_PARTS },
+      h.cashierId,
+    );
     expect((await types(h, ticketId)).map((type) => type.item)).toEqual(['unlock']);
     const offered = DEFAULT_INTAKE_OPTIONS.repairTypes.filter((type) => type.id !== 'unlock');
     const choices = repairTypeChoices(offered, await types(h, ticketId));
@@ -231,7 +258,11 @@ describe('a servisan’s repair types', () => {
     await h.run('cancelTicket', { ticketId: cancelled, reason: 'Batal', fee: 0 }, h.storeOwnerId);
     for (const ticketId of [returned, cancelled]) {
       await expectCode(
-        h.run('setRepairTypes', { ticketId, repairTypes: ['battery'] }, h.cashierId),
+        h.run(
+          'setRepairTypes',
+          { ticketId, repairTypes: ['battery'], grades: ORIGINAL_PARTS },
+          h.cashierId,
+        ),
         'INVALID_TRANSITION',
       );
     }
@@ -241,7 +272,7 @@ describe('a servisan’s repair types', () => {
 describe('older signed changes', () => {
   test('an intake signed before repair types opens a servisan with none', () => {
     const op = repairOperations[REPAIR_OP.ticketOpened]!;
-    expect(op.schemaVersion).toBe(4);
+    expect(op.schemaVersion).toBe(5);
     expect(op.payload).toBe(ticketOpenedPayload);
     expect(op.payloadByVersion?.[2]).toBe(ticketOpenedPayloadV2);
     expect(ticketOpenedPayloadV2.shape).not.toHaveProperty('repairTypes');
@@ -285,7 +316,9 @@ describe('the warranty', () => {
 
   test('records the terms the type had, or refuses one that is not offered', () => {
     const offered = [{ id: 'screen', label: null, warrantyDays: 30, needsVideo: false }];
-    expect(recordRepairTypes(['screen'], offered)).toStrictEqual({ types: [screen] });
+    expect(recordRepairTypes(['screen'], offered)).toStrictEqual({
+      types: [{ ...screen, grade: null }],
+    });
     expect(recordRepairTypes(['screen', 'gone'], offered)).toStrictEqual({ unknown: 'gone' });
     const kept = { ...screen, item: 'gone', warrantyDays: 14 };
     expect(recordRepairTypes(['gone'], offered, [kept])).toStrictEqual({ types: [kept] });

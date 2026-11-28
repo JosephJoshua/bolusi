@@ -384,6 +384,7 @@ describe('one servisan from intake to handover, offline in between', () => {
         { kind: 'labour', description: 'Pasang LCD', amount: 100_000 },
       ],
       repairTypes: ['screen', 'unlock'],
+      grades: { screen: 'original' },
       ownershipVideo: clip,
       photos,
       downPayment: DP,
@@ -400,7 +401,11 @@ describe('one servisan from intake to handover, offline in between', () => {
     await bench.setOnline(false);
     await tech('claimTicket', { ticketId });
     await tech('startWork', { ticketId, beforePhotos: [await photo(bench)] });
-    await tech('setRepairTypes', { ticketId, repairTypes: ['screen', 'unlock', 'battery'] });
+    await tech('setRepairTypes', {
+      ticketId,
+      repairTypes: ['screen', 'unlock', 'battery'],
+      grades: { screen: 'original', battery: 'kw' },
+    });
     const proposal = await tech('proposeQuoteChange', {
       ticketId,
       kind: 'part',
@@ -585,6 +590,7 @@ describe('one servisan from intake to handover, offline in between', () => {
       peripherals: [{ item: 'charger', label: null }],
       quoteLines: [{ kind: 'part', description: 'Port cas', amount: 150_000 }],
       repairTypes: ['chargingPort'],
+      grades: { chargingPort: 'original' },
       photos,
       downPayment: 50_000,
     })) as { ticketId: string };
@@ -697,6 +703,7 @@ describe('one servisan from intake to handover, offline in between', () => {
       peripherals: [],
       quoteLines: [{ kind: 'part', description: 'LCD', amount: 400_000 }],
       repairTypes: ['chargingPort'],
+      grades: { chargingPort: 'original' },
       photos,
       downPayment: 0,
     })) as { ticketId: string };

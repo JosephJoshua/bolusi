@@ -106,7 +106,13 @@ function journey(world: ChainWorld): OpSpec[] {
   const ticket = id(2);
   const cancelledTicket = id(3);
   const note = id(4);
-  const screen = { item: 'screen', label: null, warrantyDays: 30, needsVideo: false };
+  const screen = {
+    item: 'screen',
+    label: null,
+    warrantyDays: 30,
+    needsVideo: false,
+    grade: { item: 'original', label: null },
+  };
   const part = id(8);
   const category = id(9);
   // A part drawn for the servisan while it is being worked on, and the unused one put back.
@@ -401,7 +407,7 @@ function journey(world: ChainWorld): OpSpec[] {
     type: 'repair.ticket_opened',
     entityType: 'repair_ticket',
     entityId: ticketId,
-    schemaVersion: 4,
+    schemaVersion: 5,
     payload: {
       repairTypes,
       claimOf: null,
@@ -561,6 +567,21 @@ function journey(world: ChainWorld): OpSpec[] {
       },
     },
     {
+      type: 'repair.intake_options_changed',
+      entityType: 'repair_intake_options',
+      entityId: world.tenantId,
+      storeId: null,
+      schemaVersion: 4,
+      payload: {
+        list: 'grades',
+        items: [
+          { id: 'original', label: null },
+          { id: 'kw', label: null },
+          { id: 'copotan', label: 'Copotan' },
+        ],
+      },
+    },
+    {
       type: 'repair.store_cancel_fees_changed',
       entityType: 'repair_store_cancel_fees',
       entityId: world.storeId,
@@ -584,6 +605,13 @@ function journey(world: ChainWorld): OpSpec[] {
       entityId: world.storeId,
       schemaVersion: 2,
       payload: { list: 'repairTypes', hidden: ['buka-icloud'] },
+    },
+    {
+      type: 'repair.store_intake_options_changed',
+      entityType: 'repair_store_intake_options',
+      entityId: world.storeId,
+      schemaVersion: 4,
+      payload: { list: 'grades', hidden: ['copotan'] },
     },
     {
       type: 'repair.store_print_settings_changed',
@@ -619,9 +647,21 @@ function journey(world: ChainWorld): OpSpec[] {
     onTicket('repair.ticket_claimed', {}),
     onTicket('repair.work_photos_added', { stage: 'before', photos: [photo(7)] }),
     onTicket('repair.work_started', {}),
-    onTicket('repair.ticket_repair_types_changed', {
-      repairTypes: [screen, { item: 'battery', label: null, warrantyDays: 30, needsVideo: false }],
-    }),
+    {
+      ...onTicket('repair.ticket_repair_types_changed', {
+        repairTypes: [
+          screen,
+          {
+            item: 'battery',
+            label: null,
+            warrantyDays: 30,
+            needsVideo: false,
+            grade: { item: 'kw', label: null },
+          },
+        ],
+      }),
+      schemaVersion: 2,
+    },
     ...partsUsed(),
     ...purchasing(),
     ...transfers(),

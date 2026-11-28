@@ -2,6 +2,7 @@
 // order, each with the name being typed and whether this store hides it, and what saving them means.
 // Platform-free so a desktop or web editor reuses it.
 import {
+  MAX_WARRANTY_DAYS,
   NON_EMPTY_LISTS,
   READY_UNKNOWN,
   intakeListProblems,
@@ -26,6 +27,16 @@ export interface EditorRow {
   readonly warranty: string;
   /** A repair type that needs an ownership video; false on other lists. */
   readonly needsVideo: boolean;
+  /**
+   * A repair type's part grades with each one's warranty days as typed, in the order offered;
+   * empty when it asks for no grade, and on other lists.
+   */
+  readonly grades: readonly EditorGrade[];
+}
+
+export interface EditorGrade {
+  readonly id: string;
+  readonly warranty: string;
 }
 
 export interface EditorState {
@@ -54,6 +65,10 @@ export function editorFor(
       hidden: hidden.has(option.id),
       warranty: option.warrantyDays === undefined ? '' : String(option.warrantyDays),
       needsVideo: option.needsVideo ?? false,
+      grades: (option.grades ?? []).map((grade) => ({
+        id: grade.id,
+        warranty: String(grade.warrantyDays),
+      })),
     })),
   };
 }
@@ -68,7 +83,7 @@ export function addRow(state: EditorState): { state: EditorState; key: string } 
       added: state.added + 1,
       rows: [
         ...state.rows,
-        { key, id: null, text: '', hidden: false, warranty: '', needsVideo: false },
+        { key, id: null, text: '', hidden: false, warranty: '', needsVideo: false, grades: [] },
       ],
     },
   };
@@ -80,6 +95,60 @@ export function updateRow(state: EditorState, key: string, patch: Partial<Editor
     rows: state.rows.map((row) => (row.key === key ? { ...row, ...patch } : row)),
   };
 }
+
+/**
+ * A repair type offered in `gradeId` or not any more. A grade newly offered starts at the type's own
+ * warranty, which is usually what the owner gives every grade.
+ */
+export function toggleGrade(state: EditorState, key: string, gradeId: string): EditorState {
+  return {
+    ...state,
+    rows: state.rows.map((row) => {
+      if (row.key !== key) return row;
+      const offered = row.grades.some((grade) => grade.id === gradeId);
+      return {
+        ...row,
+        grades: offered
+          ? row.grades.filter((grade) => grade.id !== gradeId)
+          : [...row.grades, { id: gradeId, warranty: row.warranty }],
+      };
+    }),
+  };
+}
+
+/** One grade's warranty on a repair type, as typed. */
+export function setGradeWarranty(
+  state: EditorState,
+  key: string,
+  gradeId: string,
+  warranty: string,
+): EditorState {
+  return {
+    ...state,
+    rows: state.rows.map((row) =>
+      row.key !== key
+        ? row
+        : {
+            ...row,
+            grades: row.grades.map((grade) =>
+              grade.id === gradeId ? { ...grade, warranty } : grade,
+            ),
+          },
+    ),
+  };
+}
+
+/** Typed as anything but whole days, the warranty is one the rules refuse. */
+const typedDays = (warranty: string): number => {
+  const trimmed = warranty.trim();
+  return /^[0-9]{1,3}$/.test(trimmed) ? Number(trimmed) : -1;
+};
+
+/** Whether one grade's typed warranty is one the rules take. */
+export const gradeWarrantyOk = (grade: EditorGrade): boolean => {
+  const days = typedDays(grade.warranty);
+  return days >= 0 && days <= MAX_WARRANTY_DAYS;
+};
 
 export function removeRow(state: EditorState, key: string): EditorState {
   return { ...state, rows: state.rows.filter((row) => row.key !== key) };
@@ -103,10 +172,21 @@ export function moveRow(state: EditorState, from: number, to: number): EditorSta
 function optionOf(list: IntakeOptionList, row: EditorRow, builtInName: BuiltInName): IntakeOption {
   const named = namedOption(list, row, builtInName);
   if (list !== 'repairTypes') return named;
-  // Typed as anything but whole days, the warranty is one the rules refuse.
-  const warranty = row.warranty.trim();
-  const days = /^[0-9]{1,3}$/.test(warranty) ? Number(warranty) : -1;
-  return { ...named, warrantyDays: days, needsVideo: row.needsVideo };
+  if (row.grades.length === 0) {
+    return { ...named, warrantyDays: typedDays(row.warranty), needsVideo: row.needsVideo };
+  }
+  // A graded type's own warranty only shows when every grade is hidden at a store, so it takes the
+  // longest of its grades' instead of a field the owner cannot see.
+  const grades = row.grades.map((grade) => ({
+    id: grade.id,
+    warrantyDays: typedDays(grade.warranty),
+  }));
+  return {
+    ...named,
+    warrantyDays: Math.max(...grades.map((grade) => grade.warrantyDays)),
+    needsVideo: row.needsVideo,
+    grades,
+  };
 }
 
 function namedOption(

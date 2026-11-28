@@ -1,7 +1,8 @@
 // The lists the counter picks from at intake, which the owner edits (product-scope.md, "Configurable
 // intake lists"): condition checks, accessories left with the phone, intake photo angles, one-tap
 // brands, ready-by choices, repair types ("Jenis servisan", each with its warranty) and what the
-// counter checks with the customer at handover. The owner keeps one list of each for the whole
+// counter checks with the customer at handover, and the part grades (Original, OEM, KW) a repair
+// type can be done with, each with its own warranty. The owner keeps one list of each for the whole
 // franchise; a store hides the items it does not use. A ticket records the label it showed, so a
 // later rename or removal never rewrites an old servisan.
 //
@@ -16,6 +17,7 @@ export const INTAKE_OPTION_LISTS = [
   'readyBy',
   'repairTypes',
   'handoverChecks',
+  'grades',
 ] as const;
 export type IntakeOptionList = (typeof INTAKE_OPTION_LISTS)[number];
 
@@ -31,6 +33,17 @@ export interface IntakeOption {
   readonly warrantyDays?: number | undefined;
   /** A repair type the counter films the customer's ownership statement for. Repair types only. */
   readonly needsVideo?: boolean | undefined;
+  /**
+   * The part grades a repair type is done with, each with its warranty in days. Absent or empty:
+   * the type asks for no grade (software, cleaning). Repair types only.
+   */
+  readonly grades?: GradeTerms[] | undefined;
+}
+
+/** One grade a repair type offers: a `grades` list item and the warranty a repair with it gets. */
+export interface GradeTerms {
+  readonly id: string;
+  readonly warrantyDays: number;
 }
 
 export type IntakeOptionLists = Readonly<Record<IntakeOptionList, readonly IntakeOption[]>>;
@@ -91,6 +104,23 @@ export type RepairTypeId = (typeof REPAIR_TYPES)[number]['id'];
 export const MAX_WARRANTY_DAYS = 365;
 
 /**
+ * Part grades offered by default: the part the customer pays for decides the price and the
+ * warranty, and the nota says which one went in.
+ */
+export const PART_GRADES = ['original', 'oem', 'kw'] as const;
+export type PartGradeId = (typeof PART_GRADES)[number];
+
+/** Repair types that fit a part, so each is offered in every default grade at its own warranty. */
+const GRADED_REPAIR_TYPES: ReadonlySet<string> = new Set([
+  'screen',
+  'battery',
+  'chargingPort',
+  'camera',
+  'audio',
+  'buttons',
+]);
+
+/**
  * What the counter goes through with the customer before the phone goes home, instead of a separate
  * QC step: they tried it, and what was repaired works. The accessories left at intake come on top.
  */
@@ -111,6 +141,7 @@ export const BUILT_IN_OPTION_IDS: Readonly<Record<IntakeOptionList, readonly str
   readyBy: [],
   repairTypes: REPAIR_TYPES.map((type) => type.id),
   handoverChecks: HANDOVER_CHECKS,
+  grades: PART_GRADES,
 };
 
 /** The most an owner can put on one list: past this, the intake screen stops being quick. */
@@ -129,8 +160,15 @@ export const DEFAULT_INTAKE_OPTIONS: IntakeOptionLists = {
   photoAngles: INTAKE_PHOTO_SLOTS.map(builtIn),
   brands: COMMON_BRANDS.map((name) => ({ id: name.toLowerCase(), label: name })),
   readyBy: ['0', '1', '3', READY_UNKNOWN].map(builtIn),
-  repairTypes: REPAIR_TYPES.map((type) => ({ ...type, label: null })),
+  repairTypes: REPAIR_TYPES.map((type) => ({
+    ...type,
+    label: null,
+    ...(GRADED_REPAIR_TYPES.has(type.id)
+      ? { grades: PART_GRADES.map((id) => ({ id, warrantyDays: type.warrantyDays })) }
+      : {}),
+  })),
   handoverChecks: HANDOVER_CHECKS.map(builtIn),
+  grades: PART_GRADES.map(builtIn),
 };
 
 export const NOTHING_HIDDEN: IntakeOptionSettings['hidden'] = {
@@ -141,6 +179,7 @@ export const NOTHING_HIDDEN: IntakeOptionSettings['hidden'] = {
   readyBy: [],
   repairTypes: [],
   handoverChecks: [],
+  grades: [],
 };
 
 /** Days until a ready-by choice, or null for "not known yet" (and for anything unreadable). */
@@ -181,6 +220,7 @@ export function storeIntakeOptions(settings: IntakeOptionSettings): IntakeOption
     readyBy: pick('readyBy'),
     repairTypes: pick('repairTypes'),
     handoverChecks: pick('handoverChecks'),
+    grades: pick('grades'),
   };
 }
 
@@ -195,17 +235,22 @@ export type IntakeOptionProblem =
   | 'badReadyBy'
   | 'badWarranty';
 
+const isWarrantyDays = (days: number | undefined): days is number =>
+  days !== undefined && Number.isInteger(days) && days >= 0 && days <= MAX_WARRANTY_DAYS;
+
 /** Whether `item` carries a repair type's terms exactly when `list` is the repair types. */
 function termsFit(list: IntakeOptionList, item: IntakeOption): boolean {
-  if (list !== 'repairTypes')
-    return item.warrantyDays === undefined && item.needsVideo === undefined;
-  const days = item.warrantyDays;
+  if (list !== 'repairTypes') {
+    return (
+      item.warrantyDays === undefined && item.needsVideo === undefined && item.grades === undefined
+    );
+  }
+  const grades = item.grades ?? [];
   return (
-    days !== undefined &&
-    Number.isInteger(days) &&
-    days >= 0 &&
-    days <= MAX_WARRANTY_DAYS &&
-    typeof item.needsVideo === 'boolean'
+    isWarrantyDays(item.warrantyDays) &&
+    typeof item.needsVideo === 'boolean' &&
+    grades.every((grade) => isWarrantyDays(grade.warrantyDays)) &&
+    new Set(grades.map((grade) => grade.id)).size === grades.length
   );
 }
 
@@ -253,10 +298,36 @@ export function sameOptions(a: readonly IntakeOption[], b: readonly IntakeOption
         item.id === other.id &&
         item.label === other.label &&
         item.warrantyDays === other.warrantyDays &&
-        item.needsVideo === other.needsVideo
+        item.needsVideo === other.needsVideo &&
+        sameGrades(item.grades ?? [], other.grades ?? [])
       );
     })
   );
+}
+
+function sameGrades(a: readonly GradeTerms[], b: readonly GradeTerms[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((grade, i) => grade.id === b[i]!.id && grade.warrantyDays === b[i]!.warrantyDays)
+  );
+}
+
+/**
+ * The grades the counter picks from for a repair type: those it offers that are on the grades list,
+ * in the list's order, each with the grade's name and the type's warranty for it. Empty: the type
+ * asks for no grade, also when every grade it named was taken off the list since.
+ */
+export function gradeChoices(
+  type: IntakeOption,
+  grades: readonly IntakeOption[],
+): (IntakeOption & { readonly warrantyDays: number })[] {
+  const terms = type.grades ?? [];
+  return grades.flatMap((grade) => {
+    const term = terms.find((t) => t.id === grade.id);
+    return term === undefined
+      ? []
+      : [{ id: grade.id, label: grade.label, warrantyDays: term.warrantyDays }];
+  });
 }
 
 /**
@@ -273,9 +344,24 @@ export function recordedOption(value: unknown): { item: string; label: string | 
 export interface RecordedRepairType {
   readonly item: string;
   readonly label: string | null;
+  /** The warranty it was given: the picked grade's, or the type's own when it asks for none. */
   readonly warrantyDays: number;
   readonly needsVideo: boolean;
+  /**
+   * The part grade the customer agreed to, with the name it showed; null when the type asks for
+   * none. Absent on servisan recorded before grades.
+   */
+  readonly grade?: RecordedGrade | null | undefined;
 }
+
+export interface RecordedGrade {
+  readonly item: string;
+  readonly label: string | null;
+}
+
+/** The picked grade's id, or null: how two recordings of one type are told apart. */
+export const gradeOf = (type: Pick<RecordedRepairType, 'grade'>): string | null =>
+  type.grade?.item ?? null;
 
 /** Whether any of these repair types asks for the customer's ownership video. */
 export function needsOwnershipVideo(
@@ -284,31 +370,58 @@ export function needsOwnershipVideo(
   return types.some((type) => type.needsVideo);
 }
 
+/** The grade picked for each repair type that asks for one, by repair type id. */
+export type GradePicks = Readonly<Record<string, string>>;
+
 /**
- * The repair types picked by id, as a servisan records them. A type the servisan already has keeps
- * the terms it was given, so the owner changing a warranty later never changes one already promised;
- * a new one takes its terms from `offered` (the owner's list now). Returns the first id that is
- * neither, so the caller can refuse it.
+ * The repair types picked by id, as a servisan records them. A type the servisan already has, in the
+ * same grade, keeps the terms it was given, so the owner changing a warranty later never changes one
+ * already promised; a new one, or one in another grade, takes its terms from `offered` (the owner's
+ * list now) and the grade picked for it from `grades`. Returns the first id that is neither on the
+ * list nor kept (`unknown`), or that asks for a grade and has none or one it does not offer
+ * (`gradeNeeded`), so the caller can refuse it.
  */
 export function recordRepairTypes(
   ids: readonly string[],
   offered: readonly IntakeOption[],
   kept: readonly RecordedRepairType[] = [],
-): { readonly types: RecordedRepairType[] } | { readonly unknown: string } {
+  picks: GradePicks = {},
+  grades: readonly IntakeOption[] = [],
+):
+  | { readonly types: RecordedRepairType[] }
+  | { readonly unknown: string }
+  | { readonly gradeNeeded: string } {
   const types: RecordedRepairType[] = [];
   for (const id of ids) {
+    const pick = Object.hasOwn(picks, id) ? picks[id]! : null;
     const recorded = kept.find((type) => type.item === id);
-    if (recorded !== undefined) {
+    const option = offered.find((item) => item.id === id);
+    // A type the list no longer offers can only stay as it was.
+    if (recorded !== undefined && (gradeOf(recorded) === pick || option === undefined)) {
       types.push(recorded);
       continue;
     }
-    const option = offered.find((item) => item.id === id);
     if (option === undefined) return { unknown: id };
-    types.push({
+    const choices = gradeChoices(option, grades);
+    const base = {
       item: option.id,
       label: option.label,
-      warrantyDays: option.warrantyDays ?? 0,
       needsVideo: option.needsVideo ?? false,
+    };
+    // A type that asks no grade (any more) records none, whatever was picked for it.
+    if (choices.length === 0) {
+      const same = recorded !== undefined && gradeOf(recorded) === null;
+      types.push(
+        same ? recorded : { ...base, warrantyDays: option.warrantyDays ?? 0, grade: null },
+      );
+      continue;
+    }
+    const grade = choices.find((choice) => choice.id === pick);
+    if (grade === undefined) return { gradeNeeded: id };
+    types.push({
+      ...base,
+      warrantyDays: grade.warrantyDays,
+      grade: { item: grade.id, label: grade.label },
     });
   }
   return { types };
@@ -350,7 +463,10 @@ export function sameRepairTypes(
   a: readonly RecordedRepairType[],
   b: readonly RecordedRepairType[],
 ): boolean {
-  return a.length === b.length && a.every((type, i) => type.item === b[i]!.item);
+  return (
+    a.length === b.length &&
+    a.every((type, i) => type.item === b[i]!.item && gradeOf(type) === gradeOf(b[i]!))
+  );
 }
 
 /**

@@ -335,11 +335,17 @@ export function IntakeWizard({
           {settings.status === 'loading' ? null : renderStep()}
         </View>
       </StepTransition>
-      {showProblems && (step === 'photos' || step === 'price' || step === 'review') ? (
+      {showProblems &&
+      (step === 'condition' || step === 'photos' || step === 'price' || step === 'review') ? (
         <View style={repairStyles.gap}>
-          {/* A line's own problem shows on its field, so only step-wide ones are listed here. */}
+          {/* A line's own problem shows on its field, so only step-wide ones are listed here. A
+              grade still missing is named here as well: the checks below it can push the type
+              out of sight of the button. The complaint is the step's first field. */}
           {problems
-            .filter((problem) => !FIELD_PROBLEMS.has(problem))
+            .filter(
+              (problem) =>
+                !FIELD_PROBLEMS.has(problem) && !(step === 'condition' && problem === 'complaint'),
+            )
             .map((problem) => (
               <Text key={problem} style={styles.problem} testID={`${testID}.problem.${problem}`}>
                 {tn(INTAKE_PROBLEM_KEY[problem])}
@@ -383,6 +389,7 @@ export function IntakeWizard({
             update={update}
             options={options}
             complaintError={problemText('complaint')}
+            gradeError={problemText('grade')}
             testID={`${testID}.condition`}
           />
         );

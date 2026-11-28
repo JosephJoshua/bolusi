@@ -144,16 +144,25 @@ export const MAX_TICKET_REPAIR_TYPES = 10;
  * A repair type as a servisan recorded it: its name and its terms then, so a later change to the
  * owner's list never changes the warranty a customer was given.
  */
-export const zRecordedRepairType = zRecordedOption
+export const zRecordedRepairTypeV1 = zRecordedOption
   .extend({ warrantyDays: zWarrantyDays, needsVideo: z.boolean() })
   .strict();
 
-export const zRecordedRepairTypes = z
-  .array(zRecordedRepairType)
-  .max(MAX_TICKET_REPAIR_TYPES)
-  .refine((types) => new Set(types.map((type) => type.item)).size === types.length, {
-    message: 'a repair type is listed twice',
-  });
+/** From grades on: the part grade the customer agreed to, as it was named (null: none asked). */
+export const zRecordedRepairType = zRecordedRepairTypeV1
+  .extend({ grade: zRecordedOption.nullable() })
+  .strict();
+
+const recordedTypes = <T extends z.ZodType<{ item: string }>>(type: T) =>
+  z
+    .array(type)
+    .max(MAX_TICKET_REPAIR_TYPES)
+    .refine((types) => new Set(types.map((t) => t.item)).size === types.length, {
+      message: 'a repair type is listed twice',
+    });
+
+export const zRecordedRepairTypesV1 = recordedTypes(zRecordedRepairTypeV1);
+export const zRecordedRepairTypes = recordedTypes(zRecordedRepairType);
 
 export const zIntakePhoto = z
   .object({ slot: zOptionId, label: zRecordedLabel, ref: zMediaRef })
@@ -237,18 +246,31 @@ export const ticketOpenedPayloadV2 = ticketOpenedPayloadV1
  * the servisan this one is a warranty claim on (null for an ordinary one).
  */
 export const ticketOpenedPayloadV3 = ticketOpenedPayloadV2
-  .extend({ repairTypes: zRecordedRepairTypes, claimOf: zUuid.nullable() })
+  .extend({ repairTypes: zRecordedRepairTypesV1, claimOf: zUuid.nullable() })
   .strict();
 
 /**
  * `repair.ticket_opened` v4: the ownership video, when a repair type asks for one (null when none
  * does). The customer is at the counter, so it is taken with the intake.
  */
-export const ticketOpenedPayload = ticketOpenedPayloadV3
+export const ticketOpenedPayloadV4 = ticketOpenedPayloadV3
   .extend({ ownershipVideo: zVideoRef.nullable() })
   .strict();
 
-/** The repair types of an open servisan, replacing the previous ones (after the diagnosis). */
+/** `repair.ticket_opened` v5: each repair type names the part grade the customer agreed to. */
+export const ticketOpenedPayload = ticketOpenedPayloadV4
+  .extend({ repairTypes: zRecordedRepairTypes })
+  .strict();
+
+/** v1, before grades. */
+export const ticketRepairTypesChangedPayloadV1 = z
+  .object({ repairTypes: zRecordedRepairTypesV1 })
+  .strict();
+
+/**
+ * The repair types of an open servisan, replacing the previous ones (after the diagnosis). v2: each
+ * names its part grade.
+ */
 export const ticketRepairTypesChangedPayload = z
   .object({ repairTypes: zRecordedRepairTypes })
   .strict();
@@ -257,6 +279,8 @@ export const ticketRepairTypesChangedPayload = z
 const V1_LISTS = ['checks', 'accessories', 'photoAngles', 'brands', 'readyBy'] as const;
 /** The lists before the handover checks joined them (v2 of both list ops). */
 const V2_LISTS = [...V1_LISTS, 'repairTypes'] as const;
+/** The lists before the part grades joined them (v3 of both list ops). */
+const V3_LISTS = [...V2_LISTS, 'handoverChecks'] as const;
 
 export const intakeOptionsChangedPayloadV1 = z
   .object({
@@ -265,21 +289,35 @@ export const intakeOptionsChangedPayloadV1 = z
   })
   .strict();
 
+const zListItemV3 = z
+  .object({
+    id: zOptionId,
+    label: zRecordedLabel,
+    warrantyDays: zWarrantyDays.optional(),
+    needsVideo: z.boolean().optional(),
+  })
+  .strict();
+
+export const intakeOptionsChangedPayloadV3 = z
+  .object({ list: z.enum(V3_LISTS), items: z.array(zListItemV3).max(MAX_OPTIONS) })
+  .strict();
+
 /**
  * The whole of one franchise list, replacing the previous one (last save wins). v2: repair types,
  * whose items carry their warranty and whether they need an ownership video. v3: handover checks.
+ * v4: part grades, and the grades each repair type offers with their warranty.
  */
 export const intakeOptionsChangedPayload = z
   .object({
     list: z.enum(INTAKE_OPTION_LISTS),
     items: z
       .array(
-        z
-          .object({
-            id: zOptionId,
-            label: zRecordedLabel,
-            warrantyDays: zWarrantyDays.optional(),
-            needsVideo: z.boolean().optional(),
+        zListItemV3
+          .extend({
+            grades: z
+              .array(z.object({ id: zOptionId, warrantyDays: zWarrantyDays }).strict())
+              .max(MAX_OPTIONS)
+              .optional(),
           })
           .strict(),
       )
@@ -295,9 +333,13 @@ export const storeIntakeOptionsChangedPayloadV2 = z
   .object({ list: z.enum(V2_LISTS), hidden: z.array(zOptionId).max(MAX_OPTIONS) })
   .strict();
 
+export const storeIntakeOptionsChangedPayloadV3 = z
+  .object({ list: z.enum(V3_LISTS), hidden: z.array(zOptionId).max(MAX_OPTIONS) })
+  .strict();
+
 /**
  * The whole set of one list's items a store hides, replacing the previous set. v2: repair types;
- * v3: handover checks.
+ * v3: handover checks; v4: part grades.
  */
 export const storeIntakeOptionsChangedPayload = z
   .object({
@@ -306,7 +348,7 @@ export const storeIntakeOptionsChangedPayload = z
   })
   .strict();
 
-export const intakeOptionsChangedPayloadV2 = intakeOptionsChangedPayload
+export const intakeOptionsChangedPayloadV2 = intakeOptionsChangedPayloadV3
   .extend({ list: z.enum(V2_LISTS) })
   .strict();
 
@@ -491,12 +533,13 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     conflict: { key: REPAIR_CONFLICT_KEY.customer, severity: 'minor' },
   },
   [REPAIR_OP.ticketOpened]: {
-    schemaVersion: 4,
+    schemaVersion: 5,
     payload: ticketOpenedPayload,
     payloadByVersion: {
       1: ticketOpenedPayloadV1,
       2: ticketOpenedPayloadV2,
       3: ticketOpenedPayloadV3,
+      4: ticketOpenedPayloadV4,
     },
     // Before v4 the rule skips the ownership-video check.
     minPushVersion: 4,
@@ -625,8 +668,9 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     entityType: REPAIR_TICKET_ENTITY,
   },
   [REPAIR_OP.ticketRepairTypesChanged]: {
-    schemaVersion: 1,
+    schemaVersion: 2,
     payload: ticketRepairTypesChangedPayload,
+    payloadByVersion: { 1: ticketRepairTypesChangedPayloadV1 },
     reversal: 'Reversed by another repair.ticket_repair_types_changed with the previous types.',
     apply: ticketRepairTypesChangedApplier,
     rule: ticketRepairTypesChangedRule,
@@ -701,9 +745,13 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     conflict: { key: REPAIR_CONFLICT_KEY.details, severity: 'minor' },
   },
   [REPAIR_OP.intakeOptionsChanged]: {
-    schemaVersion: 3,
+    schemaVersion: 4,
     payload: intakeOptionsChangedPayload,
-    payloadByVersion: { 1: intakeOptionsChangedPayloadV1, 2: intakeOptionsChangedPayloadV2 },
+    payloadByVersion: {
+      1: intakeOptionsChangedPayloadV1,
+      2: intakeOptionsChangedPayloadV2,
+      3: intakeOptionsChangedPayloadV3,
+    },
     reversal: 'Reversed by saving the previous list again; tickets keep the labels they recorded.',
     apply: intakeOptionsChangedApplier,
     rule: intakeOptionsChangedRule,
@@ -716,11 +764,12 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     scope: 'tenant',
   },
   [REPAIR_OP.storeIntakeOptionsChanged]: {
-    schemaVersion: 3,
+    schemaVersion: 4,
     payload: storeIntakeOptionsChangedPayload,
     payloadByVersion: {
       1: storeIntakeOptionsChangedPayloadV1,
       2: storeIntakeOptionsChangedPayloadV2,
+      3: storeIntakeOptionsChangedPayloadV3,
     },
     reversal: 'Reversed by showing the items again (another store_intake_options_changed).',
     apply: storeIntakeOptionsChangedApplier,

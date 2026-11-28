@@ -366,16 +366,26 @@ test('takes the customer signature at handover, over the handover dialog', async
 test('the pane lists each repair type with its warranty, and the counter changes them', async () => {
   await page.getByText('Maria Kogoya').click();
   const types = page.getByTestId('repair.desk.ticket.repairTypes');
-  await expect(types).toContainText('Ganti konektor cas · garansi 30 hari');
-  await expect(types).toContainText('Ganti baterai · garansi 30 hari');
+  await expect(types).toContainText('Ganti konektor cas (Original) · garansi 30 hari');
+  await expect(types).toContainText('Ganti baterai (Original) · garansi 30 hari');
   await page.getByTestId('repair.desk.ticket.action.repairTypes').click();
   const chips = page.getByTestId('repair.desk.repairTypes.chips');
   await chips.getByText('Ganti baterai').click();
   await chips.getByText('Ganti layar').click();
+  // A part repair added later asks its grade too.
+  await page.getByTestId('repair.desk.repairTypes.submit').click();
+  await expect(page.getByTestId('repair.desk.repairTypes')).toContainText(
+    'Pilih kualitas sparepart terlebih dahulu.',
+  );
+  await page
+    .getByTestId('repair.desk.repairTypes.grade.screen')
+    .getByRole('button', { name: 'KW' })
+    .click();
+  await page.screenshot({ path: 'e2e/artifacts/grades-change.png' });
   await page.getByTestId('repair.desk.repairTypes.submit').click();
   await expect(page.getByTestId('repair.desk.repairTypes')).toBeHidden();
   await expect(types).not.toContainText('Ganti baterai');
-  await expect(types).toContainText('Ganti layar · garansi 30 hari');
+  await expect(types).toContainText('Ganti layar (KW) · garansi 30 hari');
 });
 
 test('the intake offers the store’s repair types next to the complaint', async () => {
@@ -385,13 +395,18 @@ test('the intake offers the store’s repair types next to the complaint', async
   const screen = chips.getByRole('button', { name: 'Ganti layar' });
   await screen.click();
   await expect(screen).toHaveAttribute('aria-pressed', 'true');
+  // The grade the customer agreed to, with its warranty beside it.
+  const grade = page.getByTestId('repair.desk.intake.grade.screen');
+  await grade.getByRole('button', { name: 'Original' }).click();
+  await expect(grade).toContainText('Garansi 30 hari');
+  await page.screenshot({ path: 'e2e/artifacts/grades-intake.png' });
 });
 
 test('a phone back under warranty starts a claim from its servisan, with no types of its own', async () => {
   await page.getByTestId('repair.desk.board.search').fill('K7Q-0005');
   await page.getByText('Yakob Tabuni').click();
   await expect(page.getByTestId('repair.desk.ticket.repairTypes')).toContainText(
-    /Ganti layar · garansi s\/d \d{2}\/\d{2}\/\d{4}/,
+    /Ganti layar \(Original\) · garansi s\/d \d{2}\/\d{2}\/\d{4}/,
   );
   await page.getByTestId('repair.desk.ticket.action.warrantyClaim').click();
   await expect(page.getByTestId('repair.desk.intake')).toBeVisible();

@@ -313,6 +313,12 @@ Agreed with the owner after reviewing what the repair release still lacks.
   another, 1 to 365). The counter and owners see it on the board ("Belum diambil",
   longest waiting first) and on the servisan. A flag only: nothing happens to the
   phone. The days count from when it was last marked repaired, or cancelled.
+- **Part grade (Joseph, 2026-11-28):** a repair type that fits a part asks which
+  grade the customer agrees to (the owner's "Kualitas sparepart" list, default
+  Original, OEM and KW, matching the Kualitas values of parts), at intake and when
+  the types change. Each type sets its warranty per grade, and the nota prints
+  "Ganti layar (KW)". A part taken in another Kualitas is allowed but puts the
+  servisan in Perlu dicek. Customers bringing their own part are not handled.
 - **WhatsApp messages:** "Kabari pelanggan" on a phone ready to collect and "Tanya
   pelanggan" on a price change waiting for the customer open WhatsApp on the
   customer's number with the message written (number, what is owed, the DP). The

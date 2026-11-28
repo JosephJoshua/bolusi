@@ -841,6 +841,20 @@ export const REPAIR_KEYS = [
   'repair.refusal.customerShared',
   'repair.refusal.customerMismatch',
   'repair.correct.handedOverLocked',
+  'repair.grade.original',
+  'repair.grade.oem',
+  'repair.grade.kw',
+  'repair.options.list.grades',
+  'repair.options.hint.grades',
+  'repair.options.grades',
+  'repair.options.gradeWarranty',
+  'repair.options.gradeTerms',
+  'repair.options.gradeNoWarranty',
+  'repair.repairType.withGrade',
+  'repair.condition.grade',
+  'repair.problem.grade',
+  'repair.options.perGrade',
+  'repair.options.daysUnit',
 ] as const;
 
 export type RepairKey = (typeof REPAIR_KEYS)[number];

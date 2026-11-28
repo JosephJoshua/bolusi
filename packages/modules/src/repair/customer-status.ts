@@ -156,10 +156,11 @@ export async function readCustomerStatus(
       description: line.description,
       amount: num(line.amount),
     })),
-    repairTypes: repairTypes.map(({ item, label, warrantyDays }) => ({
+    repairTypes: repairTypes.map(({ item, label, warrantyDays, grade }) => ({
       item,
       label,
       warrantyDays,
+      grade: grade ?? null,
     })),
     returnedAt,
     updatedAt: num(ticket.updatedAt),

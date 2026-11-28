@@ -173,11 +173,19 @@ async function pushServisan(
         estimatedReadyAt: 1_726_200_000_000,
         quoteLines: [{ lineId: id(0x200), kind: 'part', description: 'LCD', amount: 650_000 }],
         photos: INTAKE_PHOTO_SLOTS.map((slot, i) => ({ slot, label: null, ref: photo(0x10 + i) })),
-        repairTypes: [{ item: 'screen', label: null, warrantyDays: 30, needsVideo: false }],
+        repairTypes: [
+          {
+            item: 'screen',
+            label: null,
+            warrantyDays: 30,
+            needsVideo: false,
+            grade: { item: 'original', label: null },
+          },
+        ],
         claimOf: null,
         ownershipVideo: null,
       }),
-      schemaVersion: 4,
+      schemaVersion: 5,
     },
     onTicket('repair.status_link_made', { code: claim ?? code, nonce: NONCE }),
     {
@@ -248,7 +256,9 @@ test('a link code shows the customer their servisan, without a token', async () 
     estimatedReadyAt: 1_726_200_000_000,
     money: { total: 650_000, paid: 100_000 },
     pendingPrices: [{ description: 'Baterai', amount: 250_000 }],
-    repairTypes: [{ item: 'screen', label: null, warrantyDays: 30 }],
+    repairTypes: [
+      { item: 'screen', label: null, warrantyDays: 30, grade: { item: 'original', label: null } },
+    ],
     returnedAt: null,
     updatedAt: expect.any(Number),
   });

@@ -613,22 +613,43 @@ test('the owner sets each repair type’s warranty and which ones need a video',
   await tap(page, 'repair.options.open.repairTypes');
   const list = 'repair.options.list.repairTypes';
   // Each type says its terms without opening it.
-  await expect(page.getByTestId(`${list}.row.screen`)).toContainText('Garansi 30 hari');
+  await expect(page.getByTestId(`${list}.row.screen`)).toContainText(
+    'Original 30 hari · OEM 30 hari · KW 30 hari',
+  );
+  await expect(page.getByTestId(`${list}.row.software`)).toContainText('Garansi 7 hari');
   await expect(page.getByTestId(`${list}.row.unlock`)).toContainText('Perlu video');
   await shoot(page, 'types-list');
-  await tap(page, `${list}.row.battery`);
-  await fill(page, `${list}.row.battery.warranty`, '90');
-  await tap(page, `${list}.row.battery.needsVideo`);
+  await tap(page, `${list}.row.noPower`);
+  await fill(page, `${list}.row.noPower.warranty`, '90');
+  await tap(page, `${list}.row.noPower.needsVideo`);
   await shoot(page, 'types-row-open');
+  await tap(page, `${list}.row.noPower.done`);
+  await expect(page.getByTestId(`${list}.row.noPower`)).toContainText(
+    'Garansi 90 hari · Perlu video',
+  );
+  // A part repair: each grade it is done with gets its own warranty.
+  await tap(page, `${list}.row.battery`);
+  await tap(page, `${list}.row.battery.grade.oem`);
+  await fill(page, `${list}.row.battery.gradeWarranty.kw`, '7');
+  await expect(page.getByTestId(`${list}.row.battery.warranty`)).toHaveCount(0);
+  await shoot(page, 'grades-type-open');
   await tap(page, `${list}.row.battery.done`);
   await expect(page.getByTestId(`${list}.row.battery`)).toContainText(
-    'Garansi 90 hari · Perlu video',
+    'Original 30 hari · KW 7 hari',
   );
   await tap(page, `${list}.primary`);
   await tap(page, 'repair.options.open.repairTypes');
-  await expect(page.getByTestId(`${list}.row.battery`)).toContainText(
+  await expect(page.getByTestId(`${list}.row.noPower`)).toContainText(
     'Garansi 90 hari · Perlu video',
   );
+  await expect(page.getByTestId(`${list}.row.battery`)).toContainText(
+    'Original 30 hari · KW 7 hari',
+  );
+  await tap(page, `${list}.back`);
+  // The grades themselves are one list for every store, renamed and added like any other.
+  await tap(page, 'repair.options.open.grades');
+  await expect(page.getByTestId('repair.options.list.grades.rows')).toContainText('KW');
+  await shoot(page, 'grades-list');
 });
 
 test('intake picks the repair types and the ticket shows each warranty', async ({ page }) => {
@@ -645,6 +666,20 @@ test('intake picks the repair types and the ticket shows each warranty', async (
   await page.getByTestId('repair.intake.condition.repairTypes').scrollIntoViewIfNeeded();
   await shoot(page, 'types-intake');
   await tap(page, 'repair.intake.condition.restOk');
+  // Each part repair asks which grade the customer agreed to before going on.
+  await tap(page, 'repair.intake.primary');
+  await expect(page.getByTestId('repair.intake.condition.grade.error')).toHaveText(
+    'Pilih kualitas sparepart terlebih dahulu.',
+  );
+  await page.getByTestId('repair.intake.condition.grade.screen').scrollIntoViewIfNeeded();
+  await shoot(page, 'grades-intake-missing');
+  await tap(page, 'repair.intake.condition.grade.screen.original');
+  await tap(page, 'repair.intake.condition.grade.battery.kw');
+  await expect(page.getByTestId('repair.intake.condition.grade.screen')).toContainText(
+    'Garansi 30 hari',
+  );
+  await page.getByTestId('repair.intake.condition.grade.battery').scrollIntoViewIfNeeded();
+  await shoot(page, 'grades-intake');
   await tap(page, 'repair.intake.primary');
   for (let shot = 0; shot < 6; shot += 1) await tap(page, 'repair.intake.primary');
   await tap(page, 'repair.intake.primary');
@@ -652,25 +687,26 @@ test('intake picks the repair types and the ticket shows each warranty', async (
   await fill(page, 'repair.intake.price.amount.0', '800000');
   await tap(page, 'repair.intake.primary');
   await expect(page.getByTestId('repair.intake.review.repairTypes')).toContainText(
-    'Ganti layar, Ganti baterai',
+    'Ganti layar (Original), Ganti baterai (KW)',
   );
   await tap(page, 'repair.intake.primary');
   await skipSlip(page);
   await expect(page.getByTestId('repair.ticket.repairTypes')).toContainText(
-    'Ganti layar · garansi 30 hari',
+    'Ganti layar (Original) · garansi 30 hari',
   );
   await expect(page.getByTestId('repair.ticket.repairTypes')).toContainText(
-    'Ganti baterai · garansi 30 hari',
+    'Ganti baterai (KW) · garansi 30 hari',
   );
   await shoot(page, 'types-ticket');
 
-  // The diagnosis shows the battery is fine: the counter takes it off.
+  // The diagnosis shows the battery is fine, and the customer takes an OEM screen instead.
   await tap(page, 'repair.ticket.action.repairTypes');
   await tap(page, 'repair.repairTypes.type.battery');
+  await tap(page, 'repair.repairTypes.grade.screen.oem');
   await shoot(page, 'types-change');
   await tap(page, 'repair.repairTypes.primary');
   await expect(page.getByTestId('repair.ticket.repairTypes')).not.toContainText('Ganti baterai');
-  await expect(page.getByTestId('repair.ticket.repairTypes')).toContainText('Ganti layar');
+  await expect(page.getByTestId('repair.ticket.repairTypes')).toContainText('Ganti layar (OEM)');
 });
 
 test('unlocking takes the ownership video after the intake photos', async ({ page }) => {
@@ -767,7 +803,7 @@ test('a phone back under warranty opens a free claim linked to its servisan', as
 
   const link = page.getByTestId('repair.ticket.claimLink');
   await expect(link).toContainText('K7Q-0005');
-  await expect(link).toContainText(/Ganti layar · garansi s\/d \d{2}\/\d{2}\/\d{4}/);
+  await expect(link).toContainText(/Ganti layar \(Original\) · garansi s\/d \d{2}\/\d{2}\/\d{4}/);
   await expect(page.getByTestId('repair.ticket.repairTypes')).toHaveCount(0);
   await shoot(page, 'claim-ticket');
   // Each servisan links to the other.

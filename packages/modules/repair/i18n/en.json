@@ -139,7 +139,8 @@
     "peripherals": "Left with the phone",
     "restOk": "Mark the rest OK",
     "notesLabel": "Notes",
-    "repairTypes": "Repair type"
+    "repairTypes": "Repair type",
+    "grade": "Grade for {name}"
   },
   "customer": {
     "change": "Choose another customer",
@@ -298,7 +299,8 @@
     "screenLock": "Enter the screen lock, or choose None.",
     "ownershipVideo": "The ownership video isn’t recorded yet.",
     "customerPhone": "This phone number doesn’t look right. Check the digits.",
-    "deviceImei": "This IMEI isn’t right. Check it against the 15 digits *#06# shows."
+    "deviceImei": "This IMEI isn’t right. Check it against the 15 digits *#06# shows.",
+    "grade": "Pick the part grade first."
   },
   "ready": {
     "today": "Today",
@@ -398,7 +400,8 @@
       "brands": "Quick brand choices",
       "readyBy": "Ready-by choices",
       "repairTypes": "Repair types",
-      "handoverChecks": "Handover checks"
+      "handoverChecks": "Handover checks",
+      "grades": "Part grades"
     },
     "hint": {
       "checks": "Checked at the counter in front of the customer, top to bottom.",
@@ -407,7 +410,8 @@
       "brands": "Shown as one-tap choices. Other brands can still be typed.",
       "readyBy": "When the repair can be ready, offered at intake.",
       "repairTypes": "Warranty counts from pickup.",
-      "handoverChecks": "Checked with the customer before the phone goes home. Accessories left with it are checked too."
+      "handoverChecks": "Checked with the customer before the phone goes home. Accessories left with it are checked too.",
+      "grades": "Agreed with the customer at intake and printed on the nota."
     },
     "add": "Add",
     "addUnknown": "Add “Not sure yet”",
@@ -443,7 +447,13 @@
     "needsVideoCaption": "The customer says on video the phone is theirs.",
     "warranty": "{count}-day warranty",
     "noWarranty": "No warranty",
-    "videoShort": "Needs video"
+    "videoShort": "Needs video",
+    "grades": "Part grades",
+    "gradeWarranty": "{grade} warranty (days)",
+    "gradeTerms": "{grade} {count} days",
+    "gradeNoWarranty": "{grade} no warranty",
+    "perGrade": "Per grade",
+    "daysUnit": "days"
   },
   "spec": {
     "battery": "Battery",
@@ -817,7 +827,8 @@
     "noPower": "Won’t power on",
     "software": "Software or reinstall",
     "waterDamage": "Water damage",
-    "unlock": "Unlock or account removal"
+    "unlock": "Unlock or account removal",
+    "withGrade": "{name} ({grade})"
   },
   "warranty": {
     "title": "Warranty",
@@ -987,6 +998,11 @@
     "save": "Save bill",
     "same": "Change the bill first.",
     "short": "Change bill"
+  },
+  "grade": {
+    "original": "Original",
+    "oem": "OEM",
+    "kw": "KW"
   },
   "attention": {
     "title": "To check",

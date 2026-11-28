@@ -23,6 +23,7 @@ import {
   intake,
   openRepairHarness,
   paidHandover,
+  ORIGINAL_PARTS,
   type RepairHarness,
 } from './support/repair-harness.js';
 import { sampleTicket } from './support/repair-rows.js';
@@ -299,7 +300,11 @@ describe('a claim once open', () => {
     const h = await harness(6207);
     const claimId = await claim(h, await pickedUp(h), h.cashierId);
     await expectRefusal(
-      h.run('setRepairTypes', { ticketId: claimId, repairTypes: ['battery'] }, h.cashierId),
+      h.run(
+        'setRepairTypes',
+        { ticketId: claimId, repairTypes: ['battery'], grades: ORIGINAL_PARTS },
+        h.cashierId,
+      ),
       'VALIDATION_FAILED',
       'claimWithTypes',
     );

@@ -81,7 +81,23 @@ for (const [width, height] of [
     await page.keyboard.press('F2');
     await expect(page.getByTestId('repair.desk.intake')).toBeVisible();
     await check(`intake-${size}`);
+    // A part repair picked: its grades, one picked, with the warranty beside it.
+    await page
+      .getByTestId('repair.desk.intake.repairTypes')
+      .getByRole('button', { name: 'Ganti layar' })
+      .click();
+    await page
+      .getByTestId('repair.desk.intake.grade.screen')
+      .getByRole('button', { name: 'Original' })
+      .click();
+    await page.getByTestId('repair.desk.intake.grade').scrollIntoViewIfNeeded();
+    await check(`intake-grade-${size}`);
     await page.keyboard.press('Escape');
+    // Leaving an intake with something typed asks first.
+    const discard = page.getByRole('alertdialog');
+    if (await discard.isVisible().catch(() => false)) {
+      await discard.getByRole('button').last().click();
+    }
 
     for (const place of ['Kas', 'Barang', 'Pengaturan']) {
       await page
@@ -127,5 +143,18 @@ for (const [width, height] of [
       .click();
     await expect(page.getByTestId('purchasing.desk.bill.check')).toBeVisible();
     await check(`bill-${size}`);
+
+    // The owner's repair types, each part repair with its grades and each grade's warranty.
+    await page
+      .getByRole('navigation')
+      .getByRole('button', { name: 'Pengaturan', exact: true })
+      .first()
+      .click();
+    await page.getByRole('button', { name: 'Jenis servisan', exact: true }).first().click();
+    await expect(page.getByTestId('repair.desk.options.repairTypes.rows')).toBeVisible();
+    await check(`repair-types-${size}`);
+    await page.getByRole('button', { name: 'Kualitas sparepart', exact: true }).first().click();
+    await expect(page.getByTestId('repair.desk.options.grades.rows')).toBeVisible();
+    await check(`grades-${size}`);
   });
 }

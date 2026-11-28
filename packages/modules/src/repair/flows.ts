@@ -42,8 +42,10 @@ import {
   HANDOVER_UNDO_WINDOW_MS,
 } from './constants.js';
 import {
+  gradeChoices,
   readyDays,
   warrantyUntil,
+  type GradePicks,
   type IntakeOption,
   type IntakeOptionLists,
 } from './intake-options.js';
@@ -1208,6 +1210,8 @@ const zIntakeDraft = z.strictObject({
   complaint: z.string(),
   /** The repair type ids picked; a draft saved before repair types has none. */
   repairTypes: z.array(z.string()).default([]),
+  /** The part grade picked per repair type id; a draft saved before grades has none. */
+  grades: z.record(z.string(), z.string()).default({}),
   intakeNotes: z.string(),
   checks: z.record(z.string(), z.enum(CHECKLIST_STATES)),
   peripherals: z.array(z.string()),
@@ -1321,6 +1325,7 @@ export function emptyIntakeDraft(): IntakeDraft {
     device: { brand: '', model: '', color: '', imei: '', lockKind: 'none', passcode: '' },
     complaint: '',
     repairTypes: [],
+    grades: {},
     intakeNotes: '',
     checks: {},
     peripherals: [],
@@ -1373,6 +1378,7 @@ export type IntakeProblem =
   | 'deviceModel'
   | 'screenLock'
   | 'complaint'
+  | 'grade'
   | 'photos'
   | 'ownershipVideo'
   | 'quoteLines'
@@ -1391,6 +1397,7 @@ export const INTAKE_PROBLEM_KEY: Readonly<Record<IntakeProblem, RepairKey>> = {
   deviceImei: 'repair.problem.deviceImei',
   screenLock: 'repair.problem.screenLock',
   complaint: 'repair.problem.complaint',
+  grade: 'repair.problem.grade',
   photos: 'repair.problem.photos',
   ownershipVideo: 'repair.problem.ownershipVideo',
   quoteLines: 'repair.problem.quoteLines',
@@ -1430,6 +1437,9 @@ export function stepProblems(
       break;
     case 'condition':
       if (draft.complaint.trim() === '') problems.push('complaint');
+      if (draft.claimOf === null && gradesMissing(draft.repairTypes, draft.grades, options)) {
+        problems.push('grade');
+      }
       break;
     case 'photos':
       if (nextMissingPhoto(draft, options.photoAngles) !== null) problems.push('photos');
@@ -1539,6 +1549,52 @@ export function chosenRepairTypes(
   return offered.filter(({ id }) => draft.repairTypes.includes(id));
 }
 
+/** A picked repair type that asks for a part grade, and the grades it is done with. */
+export interface GradeQuestion {
+  readonly type: IntakeOption;
+  readonly choices: (IntakeOption & { readonly warrantyDays: number })[];
+}
+
+/**
+ * The grade each picked repair type asks for, in list order, on intake and when the repair types
+ * change. A type with no grades on offer asks nothing.
+ */
+export function gradeQuestions(
+  picked: readonly string[],
+  offered: readonly IntakeOption[],
+  grades: readonly IntakeOption[],
+): GradeQuestion[] {
+  return offered.flatMap((type) => {
+    if (!picked.includes(type.id)) return [];
+    const choices = gradeChoices(type, grades);
+    return choices.length === 0 ? [] : [{ type, choices }];
+  });
+}
+
+/** Whether a picked repair type still has no grade, or one it no longer offers. */
+export function gradesMissing(
+  picked: readonly string[],
+  picks: GradePicks,
+  options: Pick<IntakeOptionLists, 'repairTypes' | 'grades'>,
+): boolean {
+  return gradeQuestions(picked, options.repairTypes, options.grades).some(
+    ({ type, choices }) => !choices.some((choice) => choice.id === picks[type.id]),
+  );
+}
+
+/** The grade picks the command takes: one per picked type that asks, nothing for the rest. */
+export function pickedGrades(
+  picked: readonly string[],
+  picks: GradePicks,
+  options: Pick<IntakeOptionLists, 'repairTypes' | 'grades'>,
+): Record<string, string> {
+  return Object.fromEntries(
+    gradeQuestions(picked, options.repairTypes, options.grades).flatMap(({ type }) =>
+      picks[type.id] === undefined ? [] : [[type.id, picks[type.id]!]],
+    ),
+  );
+}
+
 export function intakeTotal(lines: readonly QuoteLineDraft[]): number {
   return validLines(lines).reduce((sum, line) => sum + signedAmount(line.kind, line.amount), 0);
 }
@@ -1592,6 +1648,14 @@ export function toOpenTicketInput(
       draft.claimOf === null
         ? chosenRepairTypes(draft, options.repairTypes).map(({ id }) => id)
         : [],
+    grades:
+      draft.claimOf === null
+        ? pickedGrades(
+            chosenRepairTypes(draft, options.repairTypes).map(({ id }) => id),
+            draft.grades,
+            options,
+          )
+        : {},
     claimOf: draft.claimOf?.ticketId ?? null,
     intakeNotes: draft.intakeNotes.trim(),
     checklist,
