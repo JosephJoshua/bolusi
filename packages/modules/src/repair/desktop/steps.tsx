@@ -21,28 +21,21 @@ import {
 import { Check, Printer, Signature } from 'lucide-react';
 import { Fragment, useState, type ReactNode } from 'react';
 
-import { useChangeCheck } from '../../money/change-check.js';
 import { ChangeCheckDialog, PaymentLines } from '../../money/desktop/PaymentLines.js';
 import { QrisDialog } from '../../money/desktop/QrisDialog.js';
 import { canSimulateQris } from '../../money/qris.js';
 import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
-import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
-import { freeHandoverNeedsOwner } from '../rules.js';
-import { payLaterHintKey, payLaterLines, useHandoverPayment } from '../handover-payment.js';
+import { handoverLineLabel } from '../handover-checks.js';
+import { useHandoverForm } from '../handover-form.js';
+import { payLaterHintKey, payLaterLines } from '../handover-payment.js';
 import { useActionRunner, useCapture, type ActionRunner } from '../../screen-kit/index.js';
-import {
-  REPAIR_PERMISSION,
-  WORK_PHOTOS_MAX,
-  type SlipKind,
-  type WorkPhotoStage,
-} from '../constants.js';
+import { WORK_PHOTOS_MAX, type SlipKind, type WorkPhotoStage } from '../constants.js';
 import { useChangeCancelFee, type CancelFeeTicket } from '../cancel-fee-ask.js';
 import { useDownPaymentForm } from '../down-payment-form.js';
 import {
   amountOwed,
   balanceLabelKey,
   INTAKE_PROBLEM_KEY,
-  ticketBalance,
   capturedThumbnailRef,
   correctionDraft,
   correctionOptions,
@@ -71,13 +64,7 @@ import {
   optionLabel,
   refundLabel,
 } from '../labels.js';
-import {
-  useIntakeOptionSettings,
-  usePaymentAccounts,
-  useTicketQris,
-  useRepairRuntime,
-  type RepairPrinting,
-} from '../runtime.js';
+import { useIntakeOptionSettings, useRepairRuntime, type RepairPrinting } from '../runtime.js';
 import { DESK_PAPERS, paperLabel, useDevicePaper, useDevicePrinters } from '../paper.js';
 import { logSlipPrinted, outputSlip } from '../slip-output.js';
 
@@ -1205,33 +1192,19 @@ export function HandoverDialog({
   readonly customerName: string;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
-  const runner = useActionRunner();
   const [photo, setPhoto] = useState<MediaRef | null>(null);
   const [signature, setSignature] = useState<MediaRef | null>(null);
   const [note, setNote] = useState('');
-  // Until the store's methods load, a method picked earlier would read as cash.
-  const loadedAccounts = usePaymentAccounts();
-  const accounts = loadedAccounts ?? [];
+  const handover = useHandoverForm(ticketId, ticket, { photo, signature, note }, onDone);
+  const { runner, accounts, balance, due, qris, payment, checks, ownerNeeded, changeCheck } =
+    handover;
+  const { settled } = payment;
   const cancelled = ticket.outcome === 'cancelled';
   const { downPayment, reduced } = ticket;
   /** The price, or a cancelled servisan's fee, before any reduction (shown beneath it). */
   const amount = amountOwed(ticket) + reduced;
-  const balance = ticketBalance(ticket);
   const split = balance.kind === 'refund' ? ticket.refunds : [];
-  const due = balance.kind === 'due' ? balance.amount : 0;
-  const qris = useTicketQris(ticketId, ticket.ticketNumber);
-  const payment = useHandoverPayment(ticketId, due, accounts, qris);
-  const { settled } = payment;
-  const checks = useHandoverChecks(ticket);
-  const leave = useLeaveGuard(
-    stale === null &&
-      (photo !== null ||
-        signature !== null ||
-        note.trim() !== '' ||
-        payment.touched ||
-        checks.touched),
-    onClose,
-  );
+  const leave = useLeaveGuard(stale === null && handover.touched, onClose);
   const photoState = usePhotoState(photo === null ? null : capturedThumbnailRef(photo));
   const signatureState = usePhotoState(signature === null ? null : capturedThumbnailRef(signature));
 
@@ -1244,31 +1217,8 @@ export function HandoverDialog({
       if (captured !== undefined && captured !== null) keep(captured.mediaRef);
     });
   };
-  const captured = photo !== null && signature !== null;
-  const ownerNeeded =
-    freeHandoverNeedsOwner(ticket) && !runtime.hasPermission(REPAIR_PERMISSION.warrantyException);
-  const complete =
-    !ownerNeeded && captured && settled && loadedAccounts !== null && checks.ready(note);
-  const changeCheck = useChangeCheck();
-  const submit = (): void => {
-    if (!complete || photo === null || signature === null) return;
-    changeCheck.guard(payment.input.payments, () => {
-      void runner
-        .run(() =>
-          runtime.run('returnDevice', {
-            ticketId,
-            handoverPhoto: photo,
-            signature,
-            note,
-            checklist: [...checks.lines],
-            ...payment.input,
-          }),
-        )
-        .then((result) => {
-          if (result !== undefined) onDone();
-        });
-    });
-  };
+  const complete = handover.ready;
+  const submit = handover.submit;
 
   return (
     <>
