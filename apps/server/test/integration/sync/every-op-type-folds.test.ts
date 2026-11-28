@@ -680,6 +680,9 @@ function journey(world: ChainWorld): OpSpec[] {
         waitsForCustomer: false,
       },
     },
+    // A pause tapped by mistake and taken back with Batalkan.
+    { ...onTicket('repair.work_paused', { note: 'Tunggu sparepart' }), id: id(0x2f0) },
+    onTicket('repair.change_reverted', { undoes: [id(0x2f0)] }),
     onTicket('repair.work_paused', { note: 'Tunggu sparepart' }),
     onTicket('repair.work_started', {}),
     onTicket('repair.work_photos_added', { stage: 'after', photos: [photo(8)] }),

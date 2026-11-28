@@ -64,6 +64,7 @@ import { SettingsPage, type LeaveGuard } from './settings/SettingsPage.js';
 import { DeviceSetupPage, type StoreBasicSetting } from './setup/DeviceSetupPage.js';
 import { PrinterReminder } from './setup/PrinterReminder.js';
 import { BAR_CONTROL, TitleBar } from './TitleBar.js';
+import { UndoHost } from './UndoHost.js';
 import { UpdateNotice } from './updates.js';
 
 type Page =
@@ -536,7 +537,11 @@ export function Counter({
       />
     </AppShell>
   );
-  return <MoneyRuntimeProvider runtime={money}>{shell}</MoneyRuntimeProvider>;
+  return (
+    <MoneyRuntimeProvider runtime={money}>
+      <UndoHost key={person.userId}>{shell}</UndoHost>
+    </MoneyRuntimeProvider>
+  );
 }
 
 function PersonMenu({

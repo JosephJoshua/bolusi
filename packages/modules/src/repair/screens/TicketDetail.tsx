@@ -193,7 +193,7 @@ export function TicketDetail({
   onRegisterDiscardGuard,
   testID = 'repair.ticket',
 }: TicketDetailProps): React.JSX.Element {
-  const { runtime, can, money, runner, query, ticket, reload, done, setDone, runInPlace } =
+  const { runtime, can, money, runner, query, ticket, reload, done, setDone, changed, runInPlace } =
     useTicketPage(ticketId, 'ticket');
   const [step, setStep] = useState<Step>(() =>
     answerRequestId !== undefined
@@ -282,12 +282,21 @@ export function TicketDetail({
           stage={step.kind}
           onDone={() => {
             closeStep();
-            setDone(tn(step.kind === 'before' ? 'repair.done.start' : repairedDoneKey(ticket)));
+            if (step.kind === 'before') changed(tn('repair.done.start'), 'repair.work_started');
+            else changed(tn(repairedDoneKey(ticket)), 'repair.marked_repaired');
           }}
         />
       );
     case 'waitForParts':
-      return <WaitForPartsStep {...stepProps} />;
+      return (
+        <WaitForPartsStep
+          {...stepProps}
+          onDone={() => {
+            closeStep();
+            changed(tn('repair.done.waitForParts'), 'repair.work_paused');
+          }}
+        />
+      );
     case 'undoHandover':
       return (
         <UndoHandoverStep
@@ -337,7 +346,16 @@ export function TicketDetail({
         />
       );
     case 'assign':
-      return <AssignStep {...stepProps} currentTechnicianId={ticket?.technicianId ?? null} />;
+      return (
+        <AssignStep
+          {...stepProps}
+          currentTechnicianId={ticket?.technicianId ?? null}
+          onDone={() => {
+            closeStep();
+            changed(tn('repair.done.assigned'), 'repair.technician_assigned');
+          }}
+        />
+      );
     case 'changePrice':
       return (
         <PriceChangeStep

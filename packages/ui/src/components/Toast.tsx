@@ -30,6 +30,8 @@ export interface ToastProps {
   readonly tone?: ToastTone | undefined;
   /** Called after `TOAST_AUTO_HIDE_MS`. The owner unmounts us. */
   readonly onHide: () => void;
+  /** False when the owner times it itself (Batalkan stays longer than a note). */
+  readonly autoHide?: boolean | undefined;
   /** §3.7: the ONLY permitted action, and it is optional. Already-localized. */
   readonly actionLabel?: string | undefined;
   readonly onAction?: (() => void) | undefined;
@@ -65,14 +67,16 @@ export function Toast({
   onHide,
   actionLabel,
   onAction,
+  autoHide = true,
   testID = 'ui.toast',
 }: ToastProps): React.JSX.Element {
   const { fg, icon } = TONE[tone];
 
   useEffect(() => {
+    if (!autoHide) return;
     const timer = setTimeout(onHide, TOAST_AUTO_HIDE_MS);
     return () => clearTimeout(timer);
-  }, [onHide]);
+  }, [onHide, autoHide]);
 
   const entrance = useEntrance();
 
