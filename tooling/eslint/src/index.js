@@ -89,7 +89,7 @@ export default tseslint.config(
   },
   {
     name: 'bolusi/refusals-in-rules',
-    files: ['packages/modules/src/**/commands.ts', 'packages/core/src/**/commands.ts'],
+    files: ['packages/modules/src/**/{commands,*.commands}.ts', 'packages/core/src/**/commands.ts'],
     rules: {
       'bolusi/refusals-in-rules': 'error',
     },

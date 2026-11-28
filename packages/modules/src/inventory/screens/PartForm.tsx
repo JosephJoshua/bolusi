@@ -30,6 +30,7 @@ import { MAX_COUNTED_QTY, TAG_FACET } from '../constants.js';
 import { ti } from '../i18n.js';
 import { MAX_BARCODE, MAX_PART_CODE, MAX_PART_NAME } from '../operations.js';
 import { useItemForm } from '../item-form.js';
+import { useInventoryCatalog } from '../model-options.js';
 import type { ItemDetailRow, ItemFitRow } from '../queries.js';
 import { useInventoryRuntime } from '../runtime.js';
 import { ModelsField } from './ModelsField.js';
@@ -57,6 +58,7 @@ export function PartForm({
 }: PartFormProps): React.JSX.Element {
   const runtime = useInventoryRuntime();
   const form = useItemForm({ part, categoryId });
+  const catalog = useInventoryCatalog();
   const { draft, set, runner, category, categories, fields, autoName, builtName, nameMissing } =
     form;
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
@@ -145,6 +147,7 @@ export function PartForm({
           <ModelsField
             value={draft.fits}
             onChange={(fits) => set({ fits })}
+            catalog={catalog}
             testID={`${testID}.fits`}
           />
         ) : null}
@@ -271,9 +274,18 @@ function FieldInput({
   readonly onFits: (fits: readonly ItemFitRow[]) => void;
   readonly testID: string;
 }): React.JSX.Element {
+  const catalog = useInventoryCatalog();
   switch (field.kind) {
     case 'phones':
-      return <ModelsField label={field.label} value={fits} onChange={onFits} testID={testID} />;
+      return (
+        <ModelsField
+          label={field.label}
+          value={fits}
+          onChange={onFits}
+          catalog={catalog}
+          testID={testID}
+        />
+      );
     case 'text':
       return (
         <TextInput

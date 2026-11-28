@@ -9,6 +9,7 @@ import { MAX_FIELD_VALUE, type CategoryField } from '../categories.js';
 import { MAX_COUNTED_QTY, TAG_FACET } from '../constants.js';
 import { ti } from '../i18n.js';
 import { useItemForm } from '../item-form.js';
+import { useInventoryCatalog } from '../model-options.js';
 import { MAX_BARCODE, MAX_NOTE, MAX_PART_CODE, MAX_PART_NAME } from '../operations.js';
 import type { ItemDetailRow, ItemFitRow, ItemRow } from '../queries.js';
 import { useInventoryRuntime } from '../runtime.js';
@@ -44,6 +45,7 @@ export function PartDialog({
   onDone,
 }: PartDialogProps): React.JSX.Element {
   const form = useItemForm({ part, categoryId });
+  const catalog = useInventoryCatalog();
   const { draft, set, category, categories, fields, autoName, builtName, nameMissing } = form;
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   const testId = 'inventory.desk.form';
@@ -121,6 +123,7 @@ export function PartDialog({
         <ModelsPicker
           value={draft.fits}
           onChange={(fits) => set({ fits })}
+          catalog={catalog}
           testId={`${testId}.fits`}
         />
       ) : null}
@@ -236,9 +239,18 @@ function FieldInput({
   readonly onFits: (fits: readonly ItemFitRow[]) => void;
   readonly testId: string;
 }): React.JSX.Element {
+  const catalog = useInventoryCatalog();
   switch (field.kind) {
     case 'phones':
-      return <ModelsPicker label={field.label} value={fits} onChange={onFits} testId={testId} />;
+      return (
+        <ModelsPicker
+          label={field.label}
+          value={fits}
+          onChange={onFits}
+          catalog={catalog}
+          testId={testId}
+        />
+      );
     case 'text':
       return (
         <TextField

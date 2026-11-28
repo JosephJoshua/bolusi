@@ -26,7 +26,10 @@
     "ticketRepairTypesChanged": "Repair type changed",
     "handoverReversed": "Handover undone",
     "ticketDetailsCorrected": "Details corrected",
-    "cancelFeeChanged": "Cancellation bill changed"
+    "cancelFeeChanged": "Cancellation bill changed",
+    "priceSaved": "Repair price saved",
+    "priceRemoved": "Repair price removed",
+    "storePricesSet": "Store prices changed"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -747,7 +750,9 @@
     "repairTypeTerms": "The owner changed this repair type. Pick the repair types again.",
     "intakePhotoMissing": "Take photos of the phone from every angle the store asks for first.",
     "feeBelowCharged": "The bill was already recorded on another device. Change the bill again.",
-    "notCancelled": "This repair isn’t cancelled."
+    "notCancelled": "This repair isn’t cancelled.",
+    "priceNotFound": "This price is not in the price list.",
+    "priceRepairType": "This repair type is not in the repair settings."
   },
   "paper": {
     "title": "Slip paper",
@@ -983,5 +988,77 @@
     "save": "Save bill",
     "same": "Change the bill first.",
     "short": "Change bill"
+  },
+  "prices": {
+    "section": "Prices",
+    "title": "Price list",
+    "searchHint": "Search a phone, e.g. A12",
+    "allTypes": "All",
+    "empty": "No prices yet",
+    "emptyHint": "The business owner fills in the price list.",
+    "emptyOwnerHint": "Add repair prices per phone so the counter can answer customers right away.",
+    "noMatches": "No prices match.",
+    "add": "Add price",
+    "addTitle": "Add price",
+    "editTitle": "Edit price",
+    "copyTitle": "Copy price",
+    "copy": "Copy to other phones",
+    "save": "Save",
+    "saveAnother": "Save & add another",
+    "saved": "{price} price saved.",
+    "savedAnother": "{price} price saved. Fill in the next one.",
+    "removed": "Price removed.",
+    "repairType": "Repair type",
+    "models": "For phones",
+    "quality": "Part quality",
+    "qualityShort": "Quality",
+    "qualityPlaceholder": "E.g. Ori or KW (optional)",
+    "amount": "Price",
+    "listAmount": "List price",
+    "storeAmount": "Store price",
+    "storeOwn": "This store charges its own price",
+    "storeOwnCaption": "Only for this store. Other stores keep the list price.",
+    "storePriced": "Store price",
+    "remove": {
+      "action": "Remove price",
+      "title": "Remove this price?",
+      "message": "This price will no longer show in any store.",
+      "confirm": "Remove"
+    },
+    "discard": {
+      "title": "Discard changes?",
+      "message": "Unsaved prices will be lost.",
+      "confirm": "Discard",
+      "keep": "Keep editing"
+    },
+    "problem": {
+      "repairType": "Pick a repair type.",
+      "models": "Name at least one phone.",
+      "amount": "Enter a price.",
+      "repeated": "{models} already has a price for this repair and quality."
+    },
+    "sheet": {
+      "unknownType": "\"{type}\" is not a repair type. Add it in the repair settings first.",
+      "tooManyModels": "At most {max} phones per row.",
+      "tooLong": "At most {max} characters.",
+      "phoneUnknown": "{phones} is not in the phone list, so it is saved as typed.",
+      "phoneNear": "{phones} is not in the phone list. Did you mean {near}?",
+      "badAmount": "Type a number, e.g. 450.000.",
+      "repeated": "{model} is already in row {row} for the same repair and quality.",
+      "saved": "{count} prices saved.",
+      "left": "{count} rows not saved. Check the ones marked red.",
+      "blocked": "{count} incomplete",
+      "save": "Save {count} changes",
+      "saving": "Saving {done} of {total}…",
+      "hint": "Type directly, or copy from Excel and paste with Ctrl+V. Column headings are recognised.",
+      "typeAlias": "Repair type",
+      "modelsHint": "Separate with commas, e.g. Redmi Note 10, Redmi Note 10S",
+      "storeHint": "Leave empty to use the list price",
+      "row": "Row {n}",
+      "deleteRow": "Delete row",
+      "where": "Row {n}, {column}",
+      "discard": "Discard changes",
+      "discardMessage": "Unsaved changes will be lost."
+    }
   }
 }

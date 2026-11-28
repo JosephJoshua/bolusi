@@ -8,7 +8,7 @@ import { StyleSheet, View } from 'react-native';
 import { useState } from 'react';
 
 import { ti } from '../i18n.js';
-import { fitKey, fitLabel, useModelOptions } from '../model-options.js';
+import { fitKey, fitLabel, useModelOptions, type ModelCatalog } from '../model-options.js';
 import type { ItemFitRow } from '../queries.js';
 
 export interface ModelsFieldProps {
@@ -16,6 +16,8 @@ export interface ModelsFieldProps {
   readonly label?: string | undefined;
   readonly value: readonly ItemFitRow[];
   readonly onChange: (next: readonly ItemFitRow[]) => void;
+  /** The phone catalog to pick from (`useInventoryCatalog` on the parts screens). */
+  readonly catalog: ModelCatalog;
   readonly testID: string;
 }
 
@@ -23,11 +25,12 @@ export function ModelsField({
   label = ti('inventory.form.fits'),
   value,
   onChange,
+  catalog,
   testID,
 }: ModelsFieldProps): React.JSX.Element {
   const [text, setText] = useState('');
   const typed = text.trim();
-  const { suggestions, offerTyped, hasCatalog, full } = useModelOptions(text, value);
+  const { suggestions, offerTyped, hasCatalog, full } = useModelOptions(catalog, text, value);
 
   const add = (fit: ItemFitRow): void => {
     onChange([...value, { brand: fit.brand, model: fit.model }]);

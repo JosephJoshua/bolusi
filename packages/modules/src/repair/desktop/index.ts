@@ -3,6 +3,7 @@
 export { RepairBoardPage, type BoardFilters, type RepairBoardPageProps } from './Board.js';
 export { IntakePage, type IntakePageProps } from './Intake.js';
 export { TicketPane, type TicketPaneProps } from './TicketPane.js';
+export { PricesPage, type PricesPageProps } from './PricesPage.js';
 export { PrintSettings } from './PrintSettings.js';
 export { DESK_PAPERS, PAPER_KEY, paperLabel, useDevicePaper, useDevicePrinters } from '../paper.js';
 export { MoneyField } from './parts.js';

@@ -21,6 +21,7 @@ import {
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_OP,
   REPAIR_PERMISSION,
+  REPAIR_PRICE_ENTITY,
   REPAIR_TICKET_ENTITY,
   type DeviceLocation,
   type QuoteLineKind,
@@ -146,6 +147,8 @@ export const REPAIR_REFUSALS = defineRefusals(
     'cancelFeeChanged',
     'repairTypeTerms',
     'intakePhotoMissing',
+    'priceNotFound',
+    'priceRepairType',
   ] as const,
   // Flow guards on the device: a bill that would not change, and the down payment dialog, which
   // corrects only an open servisan's DP that was never handed back. The server judges the ledger
@@ -1557,6 +1560,58 @@ export const intakeOptionsChangedRule: Rule = (op) => {
     );
   }
   return Promise.resolve();
+};
+
+/**
+ * A price row names a repair type the owner's list has had: the price list follows that list, and a
+ * row priced for a type no version ever offered would never be quoted. Any version counts, as a
+ * type the owner renamed or took off may still be on an offline device's list.
+ */
+export const priceSavedRule: Rule = async (op, { db }) => {
+  const { repairType } = payloadOf<{ repairType: string }>(op);
+  const { lists } = await readIntakeOptionSettings(db, op.tenantId, null);
+  const versions = await listVersions(db, op, 'repairTypes', lists.repairTypes);
+  if (!versions.some((items) => items.some((item) => item.id === repairType))) {
+    throw refuse('priceRepairType', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'repairType', issue: `${repairType} was never a repair type` },
+    });
+  }
+};
+
+/** Whether the price list holds this row, removed or not. */
+async function priceExists(db: Db, tenantId: string, priceId: string, active: boolean) {
+  let query = db
+    .selectFrom('repairPrices')
+    .select('id')
+    .where('tenantId', '=', tenantId)
+    .where('id', '=', priceId);
+  if (active) query = query.where('removed', '=', 0);
+  return (await query.executeTakeFirst()) !== undefined;
+}
+
+function priceNotFound(priceId: string): DomainError {
+  return refuse('priceNotFound', {
+    code: 'ENTITY_NOT_FOUND',
+    details: { entityType: REPAIR_PRICE_ENTITY, entityId: priceId },
+  });
+}
+
+/** Only a row on the list can come off it. */
+export const priceRemovedRule: Rule = async (op, { db }) => {
+  if (!(await priceExists(db, op.tenantId, op.entityId, true))) throw priceNotFound(op.entityId);
+};
+
+/**
+ * A store sets prices for itself only, and only for rows the list has (a row since removed still
+ * counts: the store may have priced it before it heard of the removal).
+ */
+export const storePricesSetRule: Rule = async (op, ctx) => {
+  await ownStoreSettingRule(op, ctx);
+  const { prices } = payloadOf<{ prices: readonly { priceId: string }[] }>(op);
+  for (const { priceId } of prices) {
+    if (!(await priceExists(ctx.db, op.tenantId, priceId, false))) throw priceNotFound(priceId);
+  }
 };
 
 /** A store changes only its own settings: the record it writes is the op's own store. */

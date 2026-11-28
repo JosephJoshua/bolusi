@@ -63,7 +63,7 @@ export interface BulkEntry {
 }
 
 /** The catalog's answer for a typed phone: the same spelling, else the closest model. */
-async function lookUpFit(
+export async function lookUpFit(
   search: (text: string, limit: number) => Promise<readonly { brand: string; model: string }[]>,
   typed: string,
 ): Promise<FitMatch> {

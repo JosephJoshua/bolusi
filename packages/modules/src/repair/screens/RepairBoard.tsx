@@ -88,6 +88,8 @@ export interface RepairBoardProps {
    */
   readonly view?: BoardView | null | undefined;
   readonly onViewChange?: ((view: BoardView) => void) | undefined;
+  /** The switch to the Servisan place's other section (Harga), above the search. */
+  readonly sections?: ReactNode;
   readonly testID?: string | undefined;
 }
 
@@ -116,6 +118,7 @@ export function RepairBoard({
   selectedTicketId = null,
   view: heldView,
   onViewChange,
+  sections,
   testID = 'repair.board',
 }: RepairBoardProps): React.JSX.Element {
   const runtime = useRepairRuntime();
@@ -342,6 +345,7 @@ export function RepairBoard({
       }
       testID={testID}
     >
+      {sections}
       <View style={styles.search}>
         <SearchField
           placeholder={tn('repair.board.searchHint')}

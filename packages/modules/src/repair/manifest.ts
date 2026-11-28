@@ -4,7 +4,10 @@ import { defineModule, type ModuleDefinition, type ModuleManifest } from '@bolus
 import {
   repairCustomersTable,
   repairIntakeOptionsTable,
+  repairPriceModelsTable,
+  repairPricesTable,
   repairStoreCancelFeesTable,
+  repairStorePricesTable,
   repairStoreIntakeOptionsTable,
   repairStorePrintSettingsTable,
   repairStoreUncollectedTable,
@@ -69,6 +72,15 @@ import {
 } from './commands.js';
 import { REPAIR_MODULE_ID, REPAIR_PERMISSION, REPAIR_TABLE } from './constants.js';
 import { findDeviceModelQuery, searchDeviceModelsQuery } from './device-models.js';
+import {
+  removePricesHandler,
+  removePricesInput,
+  savePricesHandler,
+  savePricesInput,
+  setStorePricesHandler,
+  setStorePricesInput,
+} from './prices.commands.js';
+import { priceListQuery, priceQualitiesQuery, pricesForModelsQuery } from './prices.queries.js';
 import { REPAIR_REFUSALS } from './rules.js';
 import { repairOperations } from './operations.js';
 import {
@@ -107,6 +119,9 @@ export const repairModuleManifest = {
       [REPAIR_TABLE.storeCancelFees]: repairStoreCancelFeesTable,
       [REPAIR_TABLE.storePrintSettings]: repairStorePrintSettingsTable,
       [REPAIR_TABLE.storeUncollected]: repairStoreUncollectedTable,
+      [REPAIR_TABLE.prices]: repairPricesTable,
+      [REPAIR_TABLE.priceModels]: repairPriceModelsTable,
+      [REPAIR_TABLE.storePrices]: repairStorePricesTable,
     },
   },
 
@@ -203,6 +218,16 @@ export const repairModuleManifest = {
       isDangerous: true,
       decision: true,
       description: 'Can open a warranty claim after the warranty ended, or charge for a claim.',
+    },
+    [REPAIR_PERMISSION.managePrices]: {
+      scope: 'tenant',
+      isDangerous: false,
+      description: 'Can change the repair price list every store quotes from.',
+    },
+    [REPAIR_PERMISSION.setStorePrices]: {
+      scope: 'store',
+      isDangerous: false,
+      description: "Can set the store's own prices instead of the price list's.",
     },
   },
 
@@ -338,6 +363,21 @@ export const repairModuleManifest = {
       input: setUncollectedDaysInput,
       handler: setUncollectedDaysHandler,
     },
+    savePrices: {
+      permission: REPAIR_PERMISSION.managePrices,
+      input: savePricesInput,
+      handler: savePricesHandler,
+    },
+    removePrices: {
+      permission: REPAIR_PERMISSION.managePrices,
+      input: removePricesInput,
+      handler: removePricesHandler,
+    },
+    setStorePrices: {
+      permission: REPAIR_PERMISSION.setStorePrices,
+      input: setStorePricesInput,
+      handler: setStorePricesHandler,
+    },
   },
 
   queries: {
@@ -356,6 +396,9 @@ export const repairModuleManifest = {
     cancelFees: cancelFeesQuery,
     printSettings: printSettingsQuery,
     uncollectedDays: uncollectedDaysQuery,
+    priceList: priceListQuery,
+    priceQualities: priceQualitiesQuery,
+    pricesForModels: pricesForModelsQuery,
   },
 } as const satisfies ModuleManifest<RepairDatabase>;
 

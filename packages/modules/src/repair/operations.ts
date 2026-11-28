@@ -13,6 +13,9 @@ import {
   storeIntakeOptionsChangedApplier,
   storeCancelFeesChangedApplier,
   storeUncollectedDaysChangedApplier,
+  priceRemovedApplier,
+  priceSavedApplier,
+  storePricesSetApplier,
   customerDetailsCorrectedApplier,
   customerRegisteredApplier,
   deviceReturnedApplier,
@@ -49,8 +52,10 @@ import {
   REPAIR_INTAKE_OPTIONS_ENTITY,
   REPAIR_OP,
   REPAIR_PERMISSION,
+  REPAIR_PRICE_ENTITY,
   REPAIR_STORE_CANCEL_FEES_ENTITY,
   REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
+  REPAIR_STORE_PRICES_ENTITY,
   REPAIR_STORE_PRINT_SETTINGS_ENTITY,
   REPAIR_STORE_UNCOLLECTED_ENTITY,
   REPAIR_TICKET_ENTITY,
@@ -76,11 +81,14 @@ import {
   intakeOptionsChangedRule,
   markedRepairedRule,
   ownStoreSettingRule,
+  priceRemovedRule,
+  priceSavedRule,
   quoteChangedRule,
   quoteChangeProposedRule,
   quoteProposalDeclinedRule,
   slipPrintedRule,
   statusLinkMadeRule,
+  storePricesSetRule,
   technicianAssignedRule,
   ticketCancelledRule,
   ticketClaimedRule,
@@ -91,6 +99,8 @@ import {
   workStartedRule,
 } from './rules.js';
 import type { RepairDatabase } from './schema.js';
+import { MAX_PART_FITS } from '../inventory/constants.js';
+import { zPartFit } from '../inventory/operations.js';
 import { STATUS_CODE_PATTERN, STATUS_NONCE_PATTERN } from './status-link.js';
 
 const MAX_TEXT = 2000;
@@ -461,6 +471,47 @@ export const storePrintSettingsChangedPayload = z
   })
   .strict();
 
+/** Phones one price row may cover, as many as a part may fit. */
+export const MAX_PRICE_MODELS = MAX_PART_FITS;
+/** "Ori", "KW", "Original copotan": a few words. */
+export const MAX_PRICE_QUALITY = 40;
+/** Store prices one save may set: a page of the PC's sheet. */
+export const MAX_STORE_PRICES = 500;
+/** What a repair costs at most, as any one price line may. */
+const zPrice = zMoneyIdr.min(1).max(MAX_LINE_AMOUNT);
+
+/**
+ * One row of the business's price list, replacing what it said before (last save wins): what the
+ * repair type costs on these phones, in this quality ('' when the row names none). A removed row
+ * saved again is back on the list.
+ */
+export const priceSavedPayload = z
+  .object({
+    repairType: zOptionId,
+    models: z.array(zPartFit).min(1).max(MAX_PRICE_MODELS),
+    quality: z.string().trim().max(MAX_PRICE_QUALITY),
+    amount: zPrice,
+  })
+  .strict();
+
+export const priceRemovedPayload = z.object({}).strict();
+
+/**
+ * Prices this store charges apart from the business's list, by row: an amount, or null to charge
+ * the list's price again. Rows left out keep what they had.
+ */
+export const storePricesSetPayload = z
+  .object({
+    prices: z
+      .array(z.object({ priceId: zUuidV7, amount: zPrice.nullable() }).strict())
+      .min(1)
+      .max(MAX_STORE_PRICES)
+      .refine((prices) => new Set(prices.map((p) => p.priceId)).size === prices.length, {
+        message: 'a price is listed twice',
+      }),
+  })
+  .strict();
+
 const NO_UNDO = 'Corrected by a later op on the same ticket; the original stays in the log.';
 
 export const repairOperations: Readonly<Record<string, OperationDeclaration<RepairDatabase>>> = {
@@ -782,5 +833,38 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     permission: REPAIR_PERMISSION.setUncollectedDays,
     read: REPAIR_PERMISSION.read,
     entityType: REPAIR_STORE_UNCOLLECTED_ENTITY,
+  },
+  [REPAIR_OP.priceSaved]: {
+    schemaVersion: 1,
+    payload: priceSavedPayload,
+    reversal: 'Reversed by saving the row again as it was; servisan keep the prices they quoted.',
+    apply: priceSavedApplier,
+    rule: priceSavedRule,
+    permission: REPAIR_PERMISSION.managePrices,
+    read: REPAIR_PERMISSION.read,
+    entityType: REPAIR_PRICE_ENTITY,
+    // One list for the whole business, on every device. Two owners saving one row: the later wins.
+    scope: 'tenant',
+  },
+  [REPAIR_OP.priceRemoved]: {
+    schemaVersion: 1,
+    payload: priceRemovedPayload,
+    reversal: 'Reversed by saving the row again (repair.price_saved).',
+    apply: priceRemovedApplier,
+    rule: priceRemovedRule,
+    permission: REPAIR_PERMISSION.managePrices,
+    read: REPAIR_PERMISSION.read,
+    entityType: REPAIR_PRICE_ENTITY,
+    scope: 'tenant',
+  },
+  [REPAIR_OP.storePricesSet]: {
+    schemaVersion: 1,
+    payload: storePricesSetPayload,
+    reversal: 'Reversed by setting the earlier prices again, or null to follow the list.',
+    apply: storePricesSetApplier,
+    rule: storePricesSetRule,
+    permission: REPAIR_PERMISSION.setStorePrices,
+    read: REPAIR_PERMISSION.read,
+    entityType: REPAIR_STORE_PRICES_ENTITY,
   },
 };

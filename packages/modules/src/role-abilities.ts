@@ -55,6 +55,7 @@ export const ROLE_ABILITY_GROUPS = [
           R.setCancelFees,
           R.setPrintSettings,
           R.setUncollectedDays,
+          R.setStorePrices,
         ],
         requires: ['repairView'],
       },

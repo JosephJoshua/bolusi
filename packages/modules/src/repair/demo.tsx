@@ -27,6 +27,7 @@ import {
 import { normalizePhone } from './contact.js';
 import { partsInWork, ticketMoneyTarget, undoableHandover } from './flows.js';
 import { catalogModelSearch } from './model-picker.js';
+import { demoPrices } from './price-demo.js';
 import { PURCHASING_PERMISSION } from '../purchasing/constants.js';
 import { demoPurchasingRuntime } from '../purchasing/demo.js';
 import {
@@ -159,6 +160,7 @@ export const DEMO_REPAIR_ROLES = {
       P.setCancelFees,
       P.correctDownPayment,
       P.setPrintSettings,
+      P.setStorePrices,
       P.setUncollectedDays,
       P.warrantyException,
       // Categories are the business owner's alone.
@@ -857,6 +859,12 @@ export function demoRepairRuntime(
   const notify = (): void => {
     for (const listener of listeners) listener();
   };
+  // The business's price list and this store's own prices.
+  const prices = demoPrices({
+    now,
+    notify,
+    typeOrder: () => options.lists.repairTypes.map((type) => type.id),
+  });
 
   // Recorded as the command does: the store's list now, a kept type keeps its terms.
   const recordedTypes = (
@@ -1105,9 +1113,11 @@ export function demoRepairRuntime(
     cancelFees: () => page([cancelFees]),
     printSettings: () => page([printSettings]),
     uncollectedDays: () => page([{ days: uncollectedLimit }]),
+    ...prices.queries,
   };
 
   const commands: Record<string, (input: Input) => unknown> = {
+    ...prices.commands,
     openTicket: (input) => {
       // The wizard mints the id when intake starts (so a double submit opens one ticket).
       const id =

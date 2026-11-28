@@ -16,6 +16,10 @@ export const REPAIR_STORE_CANCEL_FEES_ENTITY = 'repair_store_cancel_fees' as con
 export const REPAIR_STORE_PRINT_SETTINGS_ENTITY = 'repair_store_print_settings' as const;
 /** When one store flags a phone nobody collected: one entity per store, keyed by the store id. */
 export const REPAIR_STORE_UNCOLLECTED_ENTITY = 'repair_store_uncollected' as const;
+/** One row of the business's price list: a repair type, the phones it covers, a quality, a price. */
+export const REPAIR_PRICE_ENTITY = 'repair_price' as const;
+/** The prices one store charges apart from the business's list: one entity per store. */
+export const REPAIR_STORE_PRICES_ENTITY = 'repair_store_prices' as const;
 
 export const REPAIR_TABLE = {
   customers: 'repair_customers',
@@ -28,6 +32,9 @@ export const REPAIR_TABLE = {
   storeCancelFees: 'repair_store_cancel_fees',
   storePrintSettings: 'repair_store_print_settings',
   storeUncollected: 'repair_store_uncollected',
+  prices: 'repair_prices',
+  priceModels: 'repair_price_models',
+  storePrices: 'repair_store_prices',
 } as const;
 
 export const REPAIR_OP = {
@@ -64,6 +71,9 @@ export const REPAIR_OP = {
   statusLinkMade: 'repair.status_link_made',
   storePrintSettingsChanged: 'repair.store_print_settings_changed',
   storeUncollectedDaysChanged: 'repair.store_uncollected_days_changed',
+  priceSaved: 'repair.price_saved',
+  priceRemoved: 'repair.price_removed',
+  storePricesSet: 'repair.store_prices_set',
 } as const;
 
 /**
@@ -95,6 +105,10 @@ export const REPAIR_PERMISSION = {
   setUncollectedDays: 'repair.set_uncollected_days',
   /** Store-scoped: open a warranty claim after the warranty ended, or charge for one (owners). */
   warrantyException: 'repair.warranty_exception',
+  /** Tenant-scoped: edit the price list every store quotes from. */
+  managePrices: 'repair.manage_prices',
+  /** Store-scoped: charge a different price than the business's list at this store. */
+  setStorePrices: 'repair.set_store_prices',
 } as const;
 
 /** The slips a servisan prints: the intake receipt, and the handover slip (pickup or cancel). */

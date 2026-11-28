@@ -1,12 +1,12 @@
 // The phones a part fits, picked from the phone catalog the intake uses, on the phone and the PC:
 // type a few letters, pick the model. A phone the catalog does not know can still be added as typed.
-import { useSettledValue } from '../screen-kit/index.js';
+import { useLiveQuery, useSettledValue, type LiveSource } from '../screen-kit/index.js';
 import { compactModel } from '../shared/model-key.js';
 
 import { MAX_PART_FITS } from './constants.js';
 import type { PhoneModelOption } from './model-option.js';
 import type { ItemFitRow } from './queries.js';
-import { useInventoryQuery, useInventoryRuntime } from './runtime.js';
+import { useInventoryRuntime } from './runtime.js';
 
 const SUGGESTIONS = 5;
 
@@ -30,16 +30,35 @@ export interface ModelOptions {
   readonly current: boolean;
 }
 
-export function useModelOptions(text: string, value: readonly ItemFitRow[]): ModelOptions {
+/** The phone catalog a picker searches, and the runtime whose changes re-run the search. */
+export interface ModelCatalog {
+  readonly source: LiveSource;
+  /** Absent where the catalog cannot be reached: only typed models can be added then. */
+  readonly search:
+    ((text: string, limit: number) => Promise<readonly PhoneModelOption[]>) | undefined;
+}
+
+/** The parts list's catalog: the one its runtime was given. */
+export function useInventoryCatalog(): ModelCatalog {
   const runtime = useInventoryRuntime();
+  return { source: runtime, search: runtime.searchModels };
+}
+
+export function useModelOptions(
+  catalog: ModelCatalog,
+  text: string,
+  value: readonly ItemFitRow[],
+): ModelOptions {
+  const { search } = catalog;
   const typed = text.trim();
   const settled = useSettledValue(typed);
   const searchText = typed === '' ? '' : settled;
-  const found = useInventoryQuery(
-    async (rt) =>
-      searchText === '' || rt.searchModels === undefined
+  const found = useLiveQuery(
+    catalog.source,
+    async () =>
+      searchText === '' || search === undefined
         ? []
-        : rt.searchModels(searchText, SUGGESTIONS + value.length),
+        : search(searchText, SUGGESTIONS + value.length),
     `fitModels:${searchText}`,
   );
   const picked = new Set(value.map(fitKey));
@@ -55,7 +74,7 @@ export function useModelOptions(text: string, value: readonly ItemFitRow[]): Mod
       !suggestions.some((option) =>
         [fitKey(option), compactModel(option.model)].includes(typedKey),
       ),
-    hasCatalog: runtime.searchModels !== undefined,
+    hasCatalog: search !== undefined,
     full: value.length >= MAX_PART_FITS,
     current: settled === typed && found.status !== 'loading',
   };

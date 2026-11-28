@@ -193,6 +193,47 @@ export interface RepairStoreUncollectedTable {
 }
 
 /**
+ * One row of the business's price list: what a repair type costs on the phones it names, in one
+ * quality. A removed row stays (removed = 1) so a row saved again keeps its id.
+ */
+export interface RepairPricesTable {
+  id: string;
+  tenantId: string;
+  /** The repair type's id in the owner's list. */
+  repairType: string;
+  /** '' when the row names no quality. */
+  quality: string;
+  /** Integer IDR. */
+  amount: number;
+  /** JSON array of `{ brand, model }`, as picked. */
+  modelsJson: string;
+  removed: number;
+  createdAt: number;
+  updatedBy: string;
+  updatedAt: number;
+}
+
+/**
+ * The ways a price row's phones may be written (`catalogKeys`), one row each, so a servisan's
+ * phone finds its prices by an index instead of reading the whole list.
+ */
+export interface RepairPriceModelsTable {
+  priceId: string;
+  modelKey: string;
+  tenantId: string;
+}
+
+/** What one store charges for a row of the list instead of the list's price. */
+export interface RepairStorePricesTable {
+  storeId: string;
+  priceId: string;
+  tenantId: string;
+  amount: number;
+  updatedBy: string;
+  updatedAt: number;
+}
+
+/**
  * The phone catalog (client migration 8, server migration 0016). Not a repair projection: no op
  * writes it, the device downloads it (apps/mobile bootstrap/phone-catalog.ts). Repair reads it to
  * suggest models at intake (device-models.ts). The server's table has the same columns and more.
@@ -227,4 +268,7 @@ export interface RepairDatabase {
   repairStoreCancelFees: RepairStoreCancelFeesTable;
   repairStorePrintSettings: RepairStorePrintSettingsTable;
   repairStoreUncollected: RepairStoreUncollectedTable;
+  repairPrices: RepairPricesTable;
+  repairPriceModels: RepairPriceModelsTable;
+  repairStorePrices: RepairStorePricesTable;
 }

@@ -14,16 +14,20 @@ import {
   Handover,
   IntakeWizard,
   NoTicketOpen,
+  PricesSurface,
   RepairBoard,
   RepairRuntimeProvider,
   TicketDetail,
+  tn,
   type DiscardGuard,
   type RepairRuntime,
   type StepBack,
 } from '@bolusi/modules/repair/screens';
-import { ListDetail, useListDetailSplit } from '@bolusi/ui';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PlaceStep } from '@bolusi/modules/screen-kit';
+import { ListDetail, SegmentedControl, space, useListDetailSplit } from '@bolusi/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import type { SurfaceNav } from '../../navigation/surface.js';
 
@@ -84,6 +88,13 @@ export function RepairHome({
           ? { kind: 'intake' }
           : { kind: 'board' },
   );
+  // The place's two sections: the servisan, and the price list everyone quotes from.
+  const [section, setSection] = useState<'board' | 'prices'>('board');
+  const [priceStep, setPriceStep] = useState<PlaceStep | null>(null);
+  const priceGuard = useRef<DiscardGuard | null>(null);
+  const registerPriceGuard = useCallback((guard: DiscardGuard | null): void => {
+    priceGuard.current = guard;
+  }, []);
   const split = useListDetailSplit() && view.kind !== 'intake';
   // Inside a flow the header keeps only the sync chip: the title needs the width, and switching
   // user or language belongs on the board, not halfway through a step. Beside the board, whose
@@ -113,6 +124,25 @@ export function RepairHome({
   }, []);
 
   useEffect(() => {
+    if (section === 'prices') {
+      if (priceStep === null) {
+        onRegisterSurfaceNav?.(null);
+        return;
+      }
+      onRegisterSurfaceNav?.({
+        handleBack: () => {
+          priceStep.back();
+          return true;
+        },
+        requestLeave: (proceed) => {
+          const guard = priceGuard.current;
+          if (guard === null) proceed();
+          else guard(proceed);
+        },
+        listBeside: false,
+      });
+      return () => onRegisterSurfaceNav?.(null);
+    }
     if (view.kind === 'board') {
       onRegisterSurfaceNav?.(null);
       return;
@@ -132,7 +162,25 @@ export function RepairHome({
       listBeside: split,
     });
     return () => onRegisterSurfaceNav?.(null);
-  }, [view, split, onRegisterSurfaceNav, runLeave]);
+  }, [view, split, section, priceStep, onRegisterSurfaceNav, runLeave]);
+
+  const sections = (
+    <View style={styles.sections}>
+      <SegmentedControl<'board' | 'prices'>
+        options={[
+          { value: 'board', label: tn('repair.board.title') },
+          { value: 'prices', label: tn('repair.prices.section') },
+        ]}
+        value={section}
+        onChange={setSection}
+        testID="repair.sections"
+      />
+    </View>
+  );
+  const place = useMemo(
+    () => ({ title: tn('repair.board.title'), sections, onOpenSyncStatus }),
+    [section, onOpenSyncStatus],
+  );
 
   const board = (
     <RepairBoard
@@ -159,6 +207,7 @@ export function RepairHome({
             : 'claim'
       }
       onOpenSyncStatus={onOpenSyncStatus}
+      sections={sections}
     />
   );
 
@@ -194,6 +243,19 @@ export function RepairHome({
       />
     ) : null;
 
+  if (section === 'prices') {
+    return (
+      <RepairRuntimeProvider runtime={runtime}>
+        <PricesSurface
+          chrome={priceStep === null ? { syncChip, avatar } : { syncChip, avatar: null }}
+          place={place}
+          onRegisterPlaceStep={setPriceStep}
+          onRegisterDiscardGuard={registerPriceGuard}
+        />
+      </RepairRuntimeProvider>
+    );
+  }
+
   return (
     <RepairRuntimeProvider runtime={runtime}>
       <ListDetail
@@ -225,3 +287,7 @@ export function RepairHome({
     </RepairRuntimeProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  sections: { marginBottom: space.md },
+});

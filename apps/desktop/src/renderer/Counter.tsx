@@ -25,6 +25,7 @@ import {
 } from '@bolusi/modules/purchasing/desktop';
 import {
   IntakePage,
+  PricesPage,
   RepairBoardPage,
   moneyRuntimeOf,
   tn,
@@ -49,6 +50,7 @@ import {
   Package,
   Settings,
   ShoppingCart,
+  Tags,
   Wrench,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -65,6 +67,7 @@ type Page =
   // A warranty claim's intake starts from a draft made from the servisan it claims on.
   | { readonly kind: 'intake'; readonly claim?: IntakeDraft }
   | { readonly kind: 'parts' }
+  | { readonly kind: 'prices' }
   | { readonly kind: 'purchasing' }
   | { readonly kind: 'transfers' }
   | { readonly kind: 'kas' }
@@ -209,6 +212,8 @@ export function Counter({
   const itemSections = showsPurchasing || showsTransfers;
   // Stok, Belanja and Kiriman sit under Barang, which is no page of its own: its crumb only names the place.
   const itemsTrail = [{ key: 'items', label: ti('inventory.list.title') }];
+  // Daftar harga sits under Servisan beside the board, for everyone who reads servisan.
+  const repairTrail = [{ key: 'repair', label: tn('repair.board.title') }];
   // Kas is for whoever counts the drawer or reads the store's money, as on the phone.
   const showsKas = opensKas(money);
   // Settings asks before it is left with unsaved changes.
@@ -293,17 +298,30 @@ export function Counter({
           onToggle={toggleSidebar}
           nav={[
             {
-              key: 'repair',
+              key: 'repairPlace',
               label: tn('repair.board.title'),
-              icon: Wrench,
-              active:
-                page.kind === 'board' ||
-                page.kind === 'intake' ||
-                (page.kind === 'kas' && !showsKas) ||
-                (page.kind === 'parts' && !showsParts) ||
-                (page.kind === 'purchasing' && !showsPurchasing) ||
-                (page.kind === 'transfers' && !showsTransfers),
-              onSelect: () => go({ kind: 'board' }),
+              items: [
+                {
+                  key: 'repair',
+                  label: tn('repair.board.title'),
+                  icon: Wrench,
+                  active:
+                    page.kind === 'board' ||
+                    page.kind === 'intake' ||
+                    (page.kind === 'kas' && !showsKas) ||
+                    (page.kind === 'parts' && !showsParts) ||
+                    (page.kind === 'purchasing' && !showsPurchasing) ||
+                    (page.kind === 'transfers' && !showsTransfers),
+                  onSelect: () => go({ kind: 'board' }),
+                },
+                {
+                  key: 'prices',
+                  label: tn('repair.prices.title'),
+                  icon: Tags,
+                  active: page.kind === 'prices',
+                  onSelect: () => go({ kind: 'prices' }),
+                },
+              ],
             },
             ...(showsKas
               ? [
@@ -428,6 +446,8 @@ export function Counter({
             place={{ title: ti('inventory.transfer.section'), trail: itemsTrail }}
           />
         </InventoryRuntimeProvider>
+      ) : page.kind === 'prices' ? (
+        <PricesPage trail={repairTrail} onRegisterLeaveGuard={registerLeaveGuard} />
       ) : page.kind === 'kas' && showsKas ? (
         <KasPage now={Date.now} />
       ) : page.kind === 'intake' ? (

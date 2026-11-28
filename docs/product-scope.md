@@ -641,6 +641,26 @@ governance notes in "Decision" where they differ.
 - `apps/web` is the start of the later back-office web app: customer pages need
   no sign-in, staff screens join it with their own routes.
 
+## Repair price list (2026-11-28)
+
+Agreed with Joseph:
+
+- A row is a repair type, the phones it covers, an optional part quality (Ori, KW) and a price.
+  One business-wide list that the main owner edits; a store owner may set this store's own price.
+- Everyone who sees servisan looks prices up in Servisan › Harga (phone) or Daftar harga (PC),
+  found by phone with the fuzzy search. The PC edits the list as a sheet that takes paste from
+  Excel; the phone adds one row at a time with "Simpan & tambah lagi" and copies a row to other
+  phones.
+- At intake the price fills in by itself. The counter may raise it; anything lower is a discount
+  under the usual limits, checked on the server. Phones with no price are typed by hand, and
+  check-first jobs keep the proposal flow. No "mulai dari" ranges.
+- Prices stay fixed. When a part's buy price rises and the margin falls under the owner's minimum,
+  the row goes to Perlu dicek with a suggested price to accept in one tap. Nothing is priced from
+  cost automatically, since staff could work the cost back out. Suggestions from past servisan
+  prices and part costs (costs shown only to owners) and a "Belum ada harga" list help fill it.
+- Built in three steps: the list itself; the price at intake with the server floor; then
+  suggestions, the gap list and the margin flag.
+
 ## Blocking a lost device (2026-11-25)
 
 - Pengaturan › Perangkat (phone and PC) lists the store's devices with their last

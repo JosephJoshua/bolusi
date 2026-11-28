@@ -6,7 +6,7 @@ import { useId, useState } from 'react';
 
 import { MAX_FIELD_VALUE } from '../categories.js';
 import { ti } from '../i18n.js';
-import { fitKey, fitLabel, useModelOptions } from '../model-options.js';
+import { fitKey, fitLabel, useModelOptions, type ModelCatalog } from '../model-options.js';
 import type { ItemFitRow } from '../queries.js';
 
 /** Values picked from chips; one more can be typed in place, and then reads as a chip too. */
@@ -98,16 +98,23 @@ export function ModelsPicker({
   label = ti('inventory.form.fits'),
   value,
   onChange,
+  catalog,
   testId,
 }: {
   readonly label?: string | undefined;
   readonly value: readonly ItemFitRow[];
   readonly onChange: (value: readonly ItemFitRow[]) => void;
+  /** The phone catalog to pick from (`useInventoryCatalog` on the parts screens). */
+  readonly catalog: ModelCatalog;
   readonly testId: string;
 }): React.JSX.Element {
   const [text, setText] = useState('');
   const listId = useId();
-  const { suggestions, offerTyped, hasCatalog, full, current } = useModelOptions(text, value);
+  const { suggestions, offerTyped, hasCatalog, full, current } = useModelOptions(
+    catalog,
+    text,
+    value,
+  );
   const add = (fit: ItemFitRow): void => {
     onChange([...value, { brand: fit.brand, model: fit.model }]);
     setText('');

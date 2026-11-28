@@ -278,6 +278,7 @@ export async function openRepairHarness(
                 P.setCancelFees,
                 P.correctDownPayment,
                 P.setPrintSettings,
+                P.setStorePrices,
                 P.setUncollectedDays,
                 P.warrantyException,
                 // Categories are the business owner's alone (a tenant-wide permission).

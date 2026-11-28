@@ -768,6 +768,52 @@ function journey(world: ChainWorld): OpSpec[] {
       }),
       schemaVersion: 3,
     },
+    // the business's price list, with one store's own price; one row is then removed
+    {
+      type: 'repair.price_saved',
+      entityType: 'repair_price',
+      entityId: id(0x800),
+      storeId: null,
+      payload: {
+        repairType: 'screen',
+        models: [
+          { brand: 'Samsung', model: 'Galaxy A12' },
+          { brand: '', model: 'A12s' },
+        ],
+        quality: 'Ori',
+        amount: 450_000,
+      },
+    },
+    {
+      type: 'repair.price_saved',
+      entityType: 'repair_price',
+      entityId: id(0x801),
+      storeId: null,
+      payload: {
+        repairType: 'battery',
+        models: [{ brand: 'Xiaomi', model: 'Redmi Note 10' }],
+        quality: '',
+        amount: 150_000,
+      },
+    },
+    {
+      type: 'repair.store_prices_set',
+      entityType: 'repair_store_prices',
+      entityId: world.storeId,
+      payload: {
+        prices: [
+          { priceId: id(0x800), amount: 475_000 },
+          { priceId: id(0x801), amount: null },
+        ],
+      },
+    },
+    {
+      type: 'repair.price_removed',
+      entityType: 'repair_price',
+      entityId: id(0x801),
+      storeId: null,
+      payload: {},
+    },
     opened(cancelledTicket, formatTicketNumber(world.deviceId, 2), id(0x210)),
     {
       type: 'repair.technician_assigned',

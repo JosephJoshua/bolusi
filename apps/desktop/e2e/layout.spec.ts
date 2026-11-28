@@ -83,19 +83,32 @@ for (const [width, height] of [
     await check(`intake-${size}`);
     await page.keyboard.press('Escape');
 
-    for (const place of ['Kas', 'Barang', 'Pengaturan']) {
+    for (const [place, name] of [
+      ['Daftar harga', 'prices'],
+      ['Kas', 'kas'],
+      ['Barang', 'barang'],
+      ['Pengaturan', 'pengaturan'],
+    ] as const) {
       await page
         .getByRole('navigation')
         .getByRole('button', { name: place, exact: true })
         .first()
         .click();
-      await check(`${place.toLowerCase()}-${size}`);
+      await check(`${name}-${size}`);
     }
 
     // The owner's pages under Barang: Belanja and Kiriman, each with its first row open.
     await page.getByTestId('desktop.person').click();
     await page.getByRole('menuitem', { name: 'Andi Pratama' }).click();
     await page.getByTestId('repair.desk.board').waitFor();
+    // The owner's price list is a sheet to type or paste into.
+    await page
+      .getByRole('navigation')
+      .getByRole('button', { name: 'Daftar harga', exact: true })
+      .first()
+      .click();
+    await expect(page.getByTestId('repair.desk.prices.grid')).toBeVisible();
+    await check(`prices-sheet-${size}`);
     for (const [place, row] of [
       ['Belanja', 'purchasing.desk.table'],
       ['Kiriman', 'inventory.desk.transfers.table'],

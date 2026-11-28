@@ -26,7 +26,10 @@
     "ticketRepairTypesChanged": "Jenis servisan diubah",
     "handoverReversed": "Penyerahan dibatalkan",
     "ticketDetailsCorrected": "Data servisan diubah",
-    "cancelFeeChanged": "Tagihan pembatalan diubah"
+    "cancelFeeChanged": "Tagihan pembatalan diubah",
+    "priceSaved": "Harga servis disimpan",
+    "priceRemoved": "Harga servis dihapus",
+    "storePricesSet": "Harga toko diubah"
   },
   "action": {
     "applyPrice": "Gunakan harga baru",
@@ -747,7 +750,9 @@
     "repairTypeTerms": "Jenis servisan ini sudah diubah pemilik. Pilih kembali jenis servisan.",
     "intakePhotoMissing": "Foto HP dari semua sisi yang diminta toko terlebih dahulu.",
     "notCancelled": "Servisan ini tidak dibatalkan.",
-    "feeBelowCharged": "Tagihan sudah dicatat di perangkat lain. Ubah tagihan kembali."
+    "feeBelowCharged": "Tagihan sudah dicatat di perangkat lain. Ubah tagihan kembali.",
+    "priceNotFound": "Harga ini tidak ada di daftar harga.",
+    "priceRepairType": "Jenis servisan ini tidak ada di pengaturan servisan."
   },
   "paper": {
     "title": "Kertas nota",
@@ -983,5 +988,77 @@
     "save": "Simpan tagihan",
     "same": "Ubah tagihan terlebih dahulu.",
     "short": "Ubah tagihan"
+  },
+  "prices": {
+    "section": "Harga",
+    "title": "Daftar harga",
+    "searchHint": "Cari HP, misalnya A12",
+    "allTypes": "Semua",
+    "empty": "Belum ada harga",
+    "emptyHint": "Pemilik usaha yang mengisi daftar harga.",
+    "emptyOwnerHint": "Tambahkan harga servis per jenis HP agar kasir bisa langsung menjawab pelanggan.",
+    "noMatches": "Tidak ada harga yang cocok.",
+    "add": "Tambah harga",
+    "addTitle": "Tambah harga",
+    "editTitle": "Ubah harga",
+    "copyTitle": "Salin harga",
+    "copy": "Salin ke HP lain",
+    "save": "Simpan",
+    "saveAnother": "Simpan & tambah lagi",
+    "saved": "Harga {price} disimpan.",
+    "savedAnother": "Harga {price} disimpan. Isi harga berikutnya.",
+    "removed": "Harga dihapus.",
+    "repairType": "Jenis servisan",
+    "models": "Untuk HP",
+    "quality": "Kualitas sparepart",
+    "qualityShort": "Kualitas",
+    "qualityPlaceholder": "Misalnya Ori atau KW (boleh kosong)",
+    "amount": "Harga",
+    "listAmount": "Harga daftar",
+    "storeAmount": "Harga toko",
+    "storeOwn": "Toko ini memakai harga sendiri",
+    "storeOwnCaption": "Hanya berlaku di toko ini. Toko lain tetap memakai harga daftar.",
+    "storePriced": "Harga toko",
+    "remove": {
+      "action": "Hapus harga",
+      "title": "Hapus harga ini?",
+      "message": "Harga ini tidak akan muncul lagi di semua toko.",
+      "confirm": "Hapus"
+    },
+    "discard": {
+      "title": "Buang perubahan?",
+      "message": "Harga yang belum disimpan akan hilang.",
+      "confirm": "Buang",
+      "keep": "Lanjut mengisi"
+    },
+    "problem": {
+      "repairType": "Pilih jenis servisan.",
+      "models": "Tulis minimal satu HP.",
+      "amount": "Isi harga.",
+      "repeated": "{models} sudah punya harga untuk servis dan kualitas ini."
+    },
+    "sheet": {
+      "unknownType": "\"{type}\" tidak ada di jenis servisan. Tambahkan dulu di pengaturan servisan.",
+      "tooManyModels": "Maksimal {max} HP per baris.",
+      "tooLong": "Maksimal {max} huruf.",
+      "phoneUnknown": "{phones} belum ada di daftar HP, jadi disimpan sesuai yang ditulis.",
+      "phoneNear": "{phones} belum ada di daftar HP. Apakah maksudnya {near}?",
+      "badAmount": "Tulis angka, misalnya 450.000.",
+      "repeated": "{model} sudah ada di baris {row} untuk servis dan kualitas yang sama.",
+      "saved": "{count} harga disimpan.",
+      "left": "{count} baris belum disimpan. Periksa yang ditandai merah.",
+      "blocked": "{count} belum lengkap",
+      "save": "Simpan {count} perubahan",
+      "saving": "Menyimpan {done} dari {total}…",
+      "hint": "Ketik langsung, atau salin dari Excel lalu tempel dengan Ctrl+V. Judul kolom ikut dikenali.",
+      "typeAlias": "Jenis servisan",
+      "modelsHint": "Pisahkan dengan koma, misalnya Redmi Note 10, Redmi Note 10S",
+      "storeHint": "Kosongkan untuk memakai harga daftar",
+      "row": "Baris {n}",
+      "deleteRow": "Hapus baris",
+      "where": "Baris {n}, {column}",
+      "discard": "Buang perubahan",
+      "discardMessage": "Perubahan yang belum disimpan akan hilang."
+    }
   }
 }

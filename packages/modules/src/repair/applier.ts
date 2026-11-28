@@ -33,8 +33,10 @@ import {
   REPAIR_CUSTOMER_ENTITY,
   REPAIR_OP,
   REPAIR_INTAKE_OPTIONS_ENTITY,
+  REPAIR_PRICE_ENTITY,
   REPAIR_STORE_CANCEL_FEES_ENTITY,
   REPAIR_STORE_INTAKE_OPTIONS_ENTITY,
+  REPAIR_STORE_PRICES_ENTITY,
   REPAIR_STORE_PRINT_SETTINGS_ENTITY,
   REPAIR_STORE_UNCOLLECTED_ENTITY,
   REPAIR_TICKET_ENTITY,
@@ -44,6 +46,7 @@ import {
   type RepairOutcome,
   type WorkPhotoStage,
 } from './constants.js';
+import { catalogKeys } from './device-models.js';
 import type { RecordedRepairType } from './intake-options.js';
 import type { RepairDatabase } from './schema.js';
 
@@ -255,6 +258,52 @@ export const repairStoreUncollectedTable: ProjectionTableManifest = {
   },
   primaryKey: ['store_id'],
   entityType: REPAIR_STORE_UNCOLLECTED_ENTITY,
+  entityIdColumn: 'store_id',
+  projectionVersion: 1,
+};
+
+export const repairPricesTable: ProjectionTableManifest = {
+  columns: {
+    id: 'text',
+    tenant_id: 'text',
+    repair_type: 'text',
+    quality: 'text',
+    amount: 'integer',
+    models_json: 'text',
+    removed: 'integer',
+    created_at: 'integer',
+    updated_by: 'text',
+    updated_at: 'integer',
+  },
+  primaryKey: ['id'],
+  entityType: REPAIR_PRICE_ENTITY,
+  entityIdColumn: 'id',
+  projectionVersion: 1,
+};
+
+export const repairPriceModelsTable: ProjectionTableManifest = {
+  columns: {
+    price_id: 'text',
+    model_key: 'text',
+    tenant_id: 'text',
+  },
+  primaryKey: ['price_id', 'model_key'],
+  entityType: REPAIR_PRICE_ENTITY,
+  entityIdColumn: 'price_id',
+  projectionVersion: 1,
+};
+
+export const repairStorePricesTable: ProjectionTableManifest = {
+  columns: {
+    store_id: 'text',
+    price_id: 'text',
+    tenant_id: 'text',
+    amount: 'integer',
+    updated_by: 'text',
+    updated_at: 'integer',
+  },
+  primaryKey: ['store_id', 'price_id'],
+  entityType: REPAIR_STORE_PRICES_ENTITY,
   entityIdColumn: 'store_id',
   projectionVersion: 1,
 };
@@ -1396,6 +1445,76 @@ export const storeCancelFeesChangedApplier: ProjectionApplier<RepairDatabase> = 
     .values({ storeId, tenantId: op.tenantId, ...values })
     .onConflict((oc) => oc.column('storeId').doUpdateSet(values))
     .execute();
+};
+
+/** A row of the price list saved: its terms replaced, and the phones it covers indexed anew. */
+export const priceSavedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const payload = payloadOf<{
+    repairType: string;
+    models: readonly { brand: string; model: string }[];
+    quality: string;
+    amount: number;
+  }>(op);
+  const values = {
+    repairType: payload.repairType,
+    quality: payload.quality,
+    amount: payload.amount,
+    modelsJson: canonicalJson(payload.models),
+    removed: 0,
+    updatedBy: op.userId,
+    updatedAt: op.timestamp,
+  };
+  await db
+    .insertInto('repairPrices')
+    .values({ id: op.entityId, tenantId: op.tenantId, createdAt: op.timestamp, ...values })
+    .onConflict((oc) => oc.column('id').doUpdateSet(values))
+    .execute();
+  await db.deleteFrom('repairPriceModels').where('priceId', '=', op.entityId).execute();
+  const keys = new Set(
+    payload.models.flatMap((m) => catalogKeys(m.brand, m.model)).filter((key) => key !== ''),
+  );
+  if (keys.size === 0) return;
+  await db
+    .insertInto('repairPriceModels')
+    .values(
+      [...keys].map((modelKey) => ({ priceId: op.entityId, modelKey, tenantId: op.tenantId })),
+    )
+    .execute();
+};
+
+/** A row taken off the list. Kept, so saving it again brings the same row back. */
+export const priceRemovedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  await db
+    .updateTable('repairPrices')
+    .set({ removed: 1, updatedBy: op.userId, updatedAt: op.timestamp })
+    .where('id', '=', op.entityId)
+    .where('tenantId', '=', op.tenantId)
+    .execute();
+};
+
+/** A store's own prices for some rows set, or cleared to charge the list's price. */
+export const storePricesSetApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const storeId = storeIdOf(op);
+  if (op.entityId !== storeId) return;
+  const { prices } = payloadOf<{ prices: readonly { priceId: string; amount: number | null }[] }>(
+    op,
+  );
+  for (const { priceId, amount } of prices) {
+    if (amount === null) {
+      await db
+        .deleteFrom('repairStorePrices')
+        .where('storeId', '=', storeId)
+        .where('priceId', '=', priceId)
+        .execute();
+      continue;
+    }
+    const values = { amount, updatedBy: op.userId, updatedAt: op.timestamp };
+    await db
+      .insertInto('repairStorePrices')
+      .values({ storeId, priceId, tenantId: op.tenantId, ...values })
+      .onConflict((oc) => oc.columns(['storeId', 'priceId']).doUpdateSet(values))
+      .execute();
+  }
 };
 
 export const storePrintSettingsChangedApplier: ProjectionApplier<RepairDatabase> = async (
