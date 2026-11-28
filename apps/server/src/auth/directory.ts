@@ -10,13 +10,21 @@ import {
   findDeviceByTokenHash,
   findLoginCredential,
   findStatusLink,
+  findUnpaidQrisCharges,
   type ControlSessionAuthRecord,
   type DeviceAuthRecord,
   type LoginCredentialRecord,
   type StatusLinkRecord,
+  type UnpaidQrisChargeRecord,
 } from '@bolusi/db-server';
 
-export type { DeviceAuthRecord, ControlSessionAuthRecord, LoginCredentialRecord, StatusLinkRecord };
+export type {
+  DeviceAuthRecord,
+  ControlSessionAuthRecord,
+  LoginCredentialRecord,
+  StatusLinkRecord,
+  UnpaidQrisChargeRecord,
+};
 
 export interface AuthDirectory {
   findDeviceByTokenHash(tokenHashHex: string): Promise<DeviceAuthRecord | undefined>;
@@ -26,6 +34,11 @@ export interface AuthDirectory {
   findLoginCredential(loginIdentifier: string): Promise<LoginCredentialRecord | undefined>;
   /** A customer's status link code → its servisan (routes/public-status.ts). */
   findStatusLink(code: string): Promise<StatusLinkRecord | undefined>;
+  /** Unpaid, unsettled QRIS charges whose QR expires after `expiresAfter` (qris/service.ts sweep). */
+  findUnpaidQrisCharges(
+    expiresAfter: number,
+    settleMs: number,
+  ): Promise<readonly UnpaidQrisChargeRecord[]>;
 }
 
 /** Production binding — the db-server D14 exports (getDb → bolusi_app → definer functions). */
@@ -34,4 +47,5 @@ export const dbAuthDirectory: AuthDirectory = {
   findControlSessionByTokenHash,
   findLoginCredential,
   findStatusLink,
+  findUnpaidQrisCharges,
 };

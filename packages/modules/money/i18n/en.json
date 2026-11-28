@@ -265,13 +265,20 @@
       "amountRefused": "Xendit does not accept this amount.",
       "unavailable": "Xendit cannot be reached. Try again later.",
       "refused": "This payment cannot be recorded.",
-      "unexpected": "Something went wrong. Try again."
+      "unexpected": "Something went wrong. Try again.",
+      "chargeOpen": "This bill still has an unpaid QR. Cancel it first."
     },
     "showKey": "Show key",
     "hideKey": "Hide key",
     "cancel": "Cancel",
-    "unresolved": "The earlier QR for {amount} is not paid yet. If the customer paid, wait a moment.",
-    "unresolvedMany": "{count} earlier QRs are not paid yet. If the customer paid, wait a moment."
+    "unresolved": "The {amount} QR is not paid yet. Cancel it first to take another method.",
+    "cancelQr": "Cancel QR",
+    "cancelling": "Cancelling the QR…",
+    "cancelled": "QR cancelled",
+    "cancelledMessage": "If the customer still pays this QR, the money is recorded as an overpayment to give back.",
+    "cancelFailed": "The QR could not be cancelled: no connection.",
+    "letGo": "Let it go on this device",
+    "blockedHint": "Cancel the unpaid QR first."
   },
   "refund": {
     "limit": "Your refund limit is {amount}.",

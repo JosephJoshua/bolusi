@@ -11,6 +11,7 @@ import { HTTPException } from 'hono/http-exception';
 import { requestId } from 'hono/request-id';
 
 import { resolveDeps, type ServerDeps } from './deps.js';
+import { startQrisSweep } from './qris/service.js';
 import type { AppEnv } from './env.js';
 import { ApiError, respondError } from './errors.js';
 import { PermissionDeniedError, recordPermissionDenial } from './identity/denial-audit.js';
@@ -69,6 +70,10 @@ function isMedia(path: string): boolean {
 export function createApp(overrides: Partial<ServerDeps> = {}) {
   const deps = resolveDeps(overrides);
   const app = new Hono<AppEnv>();
+
+  // Unpaid QRIS QRs are followed by the server itself, so a payment is recorded even when Xendit's
+  // webhook is lost and no device is asking (qris/service.ts).
+  if (deps.qrisSweep === true && deps.qris !== undefined) startQrisSweep(deps);
 
   // PUSH `device` ALERT ON REVOCATION (api/04-push §3; task 134). The revoke handler fires this hook
   // post-commit (routes/devices.ts → revocationHooks.fire), the SAME registry the realtime

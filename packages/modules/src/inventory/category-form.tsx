@@ -108,8 +108,15 @@ export function exampleName(draft: CategoryDraft): string {
   ]);
 }
 
+/** The first thing to fix, in the order the form shows them: the screen brings it into sight. */
+export type CategoryProblemAt =
+  | { readonly at: 'name' }
+  | { readonly at: 'field'; readonly field: string }
+  | { readonly at: 'list' }
+  | { readonly at: 'format' };
+
 export type CategorySaveOutcome =
-  | { readonly status: 'blocked'; readonly field: string | undefined }
+  | ({ readonly status: 'blocked' } & CategoryProblemAt)
   | { readonly status: 'saved'; readonly notice: string | null }
   | { readonly status: 'refused' };
 
@@ -232,6 +239,8 @@ export function useCategoryForm(category: CategoryRow | undefined): CategoryForm
   });
 
   const run = async (archived: boolean): Promise<CategorySaveOutcome> => {
+    // Read before saving: a runtime may hand back the same row, already changed.
+    const archiving = category !== undefined && archived !== category.archived;
     const renamed = await runner.run(async () => {
       if (category === undefined) {
         await runtime.run('addCategory', shape());
@@ -245,10 +254,12 @@ export function useCategoryForm(category: CategoryRow | undefined): CategoryForm
       return result.renamed;
     });
     if (renamed === undefined) return { status: 'refused' };
+    // Archiving or restoring says so; an edit saved alongside it is part of the same step.
     return {
       status: 'saved',
-      notice:
-        renamed > 0
+      notice: archiving
+        ? ti(archived ? 'inventory.category.archivedNotice' : 'inventory.category.restoredNotice')
+        : renamed > 0
           ? ti('inventory.category.savedRenamed', { count: renamed })
           : ti('inventory.category.saved'),
     };
@@ -258,7 +269,11 @@ export function useCategoryForm(category: CategoryRow | undefined): CategoryForm
     setTried(true);
     setUntouched(new Set());
     if (!blocked) return null;
-    return { status: 'blocked', field: draft.fields.find((f) => found.fields.has(f.id))?.id };
+    const field = draft.fields.find((f) => found.fields.has(f.id))?.id;
+    if (found.name !== null) return { status: 'blocked', at: 'name' };
+    if (field !== undefined) return { status: 'blocked', at: 'field', field };
+    if (found.list.length > 0) return { status: 'blocked', at: 'list' };
+    return { status: 'blocked', at: 'format' };
   };
 
   return {

@@ -3,6 +3,7 @@
 // holds the one action that opens the ticket (Ctrl+Enter). The draft is the phone's (flows.ts): the
 // same checks, the same `openTicket` input, kept across an idle lock and released only on save or
 // discard.
+import { useIntakeDraft } from '../intake-draft.js';
 import { formatMoney, formatPhone, t } from '@bolusi/i18n';
 import {
   Button,
@@ -36,7 +37,6 @@ import { CHECKLIST_STATES, type ChecklistState } from '../constants.js';
 import {
   capturedThumbnailRef,
   chosenReady,
-  emptyIntakeDraft,
   intakeDirty,
   intakeNeedsVideo,
   intakeTotal,
@@ -83,7 +83,7 @@ import {
 import type { PaymentAccountRow } from '../../money/queries.js';
 import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
 import type { MediaRef } from '@bolusi/schemas';
-import { useOwnershipVideo, useRestoredVideoCheck } from '../ownership-video.js';
+import { useOwnershipVideo } from '../ownership-video.js';
 import { OwnershipVideoField } from './video.js';
 
 import { ActionError } from '../../screen-kit/desktop/index.js';
@@ -156,17 +156,16 @@ export function IntakePage({
   const runner = useActionRunner();
   // "Simpan servisan" does not spin under the camera or the video player.
   const media = useCapture(runner);
-  const [draft, setDraft] = useState<IntakeDraft>(() => restoredDraft ?? emptyIntakeDraft());
+  const { draft, setDraft, photosExpired, videoExpired } = useIntakeDraft(
+    restoredDraft,
+    (ticketId) => {
+      onDraftChange?.(null);
+      onOpened(ticketId);
+    },
+  );
   const [startedAs] = useState(draft);
   const [showProblems, setShowProblems] = useState(false);
   const [leaving, setLeaving] = useState(false);
-  const [photosExpired, setPhotosExpired] = useState(false);
-  const [restoredOnce] = useState(restoredDraft ?? null);
-  const [videoExpired, setVideoExpired] = useState(false);
-  useRestoredVideoCheck(restoredOnce, () => {
-    setDraft((current) => ({ ...current, ownershipVideo: null }));
-    setVideoExpired(true);
-  });
   const pageRef = useRef<HTMLDivElement>(null);
 
   // The store's lists, live; if they cannot be read the built-in ones stand in, and the command
@@ -199,37 +198,6 @@ export function IntakePage({
   useEffect(() => {
     onDraftChange?.(dirty ? draft : null);
   }, [dirty, draft, onDraftChange]);
-
-  // A draft kept across a lock can outlive its photos (a capture no ticket refers to is deleted a
-  // day after it was taken). Photos that no longer load are dropped so they are asked for again.
-  useEffect(() => {
-    if (restoredOnce === null) return;
-    let live = true;
-    void Promise.all(
-      Object.values(restoredOnce.photos).map(async (ref) => {
-        if (ref === undefined) return null;
-        const state = await runtime
-          .loadThumbnail(capturedThumbnailRef(ref))
-          .catch(() => ({ kind: 'unavailable' }) as const);
-        return state.kind === 'ready' ? null : ref.mediaId;
-      }),
-    ).then((results) => {
-      const gone = new Set(results.filter((id): id is string => id !== null));
-      if (!live || gone.size === 0) return;
-      setDraft((current) => ({
-        ...current,
-        photos: Object.fromEntries(
-          Object.entries(current.photos).filter(
-            ([, ref]) => ref === undefined || !gone.has(ref.mediaId),
-          ),
-        ),
-      }));
-      setPhotosExpired(true);
-    });
-    return () => {
-      live = false;
-    };
-  }, [restoredOnce, runtime]);
 
   const requestLeave = (): void => {
     if (!dirty) {

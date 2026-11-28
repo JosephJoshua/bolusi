@@ -43,6 +43,17 @@ describe('paymentEntry', () => {
     expect(entry.payments).toEqual([]);
     expect(entry.problems).toEqual({ a: 'method' });
   });
+
+  test('while a QR the customer can still pay is open, nothing is taken another way', () => {
+    const line = { ...newPaymentLine('a', 100_000, CASH_ACCOUNT), tendered: '100000' };
+    const blocked = paymentEntry(100_000, [line], [QRIS], new Set(), 1);
+    expect(blocked).toMatchObject({ blocked: true, complete: false, payments: [] });
+    expect(blocked.problems).toEqual({});
+    expect(paymentEntry(100_000, [line], [QRIS], new Set(), 0)).toMatchObject({
+      blocked: false,
+      complete: true,
+    });
+  });
 });
 
 describe('the method is picked by the counter, never guessed', () => {

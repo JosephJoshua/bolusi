@@ -442,7 +442,8 @@ describe('counter app over demo data', () => {
     await openTicket('Benny Kambu');
     fireEvent.click(byTestId('repair.desk.ticket.action.cancel'));
     const dialog = await screen.findByTestId('repair.desk.cancel');
-    expect(within(dialog).getByRole('heading').textContent).toBe('Pembatalan servisan');
+    // Named as the phone names it: the counter asks for the cancel, it does not cancel.
+    expect(within(dialog).getByRole('heading').textContent).toBe('Minta pembatalan');
     expect(byTestId('repair.desk.cancel.asks').textContent).toBe('Perlu persetujuan pemilik toko.');
     fireEvent.change(byTestId('repair.desk.cancel.reason'), {
       target: { value: 'Pelanggan tidak jadi' },

@@ -4,6 +4,9 @@
 // here is the other lines, and with none left the step is simply done.
 import { useMemo, useRef, useState } from 'react';
 
+import { useActionRunner } from '../screen-kit/index.js';
+
+import { useChangeCheck } from './change-check.js';
 import type { NamedBalance } from './kas.js';
 import { debtPayment, type DebtPayment } from './kas.js';
 import { tm } from './i18n.js';
@@ -65,10 +68,11 @@ export function useDebtReceipt(balance: NamedBalance): DebtReceipt {
     setLines,
     recorded,
     newId: () => runtime.newId(),
+    untouched: typed === null,
   });
   const accountRows: readonly PaymentAccountRow[] =
     accounts.status === 'ready' ? accounts.data : [];
-  const payment = debtPayment(owed, qris.lines, accountRows, qris.qrAccounts);
+  const payment = debtPayment(owed, qris.lines, accountRows, qris.qrAccounts, qris.blocking);
   const ready = accounts.status === 'ready' && payment.taken !== null && payment.taken.complete;
   const paidByQr = qris.received > 0 && qris.lines.length === 0;
   const input =
@@ -94,6 +98,35 @@ export function useDebtReceipt(balance: NamedBalance): DebtReceipt {
         ? null
         : Object.values(payment.entry.problems).includes('qr')
           ? tm('money.receive.waitQr')
-          : tm('money.receive.hint'),
+          : payment.entry.blocked
+            ? tm('money.qris.blockedHint')
+            : tm('money.receive.hint'),
   };
+}
+
+/**
+ * Taking the payment: the lines are recorded, with a large change checked first. Paid by QR with
+ * nothing else to record, the step is simply done.
+ */
+export function useReceiveDebt(balance: NamedBalance, onDone: () => void) {
+  const runtime = useMoneyRuntime();
+  const runner = useActionRunner();
+  const receipt = useDebtReceipt(balance);
+  const changeCheck = useChangeCheck();
+  const submit = (): void => {
+    if (receipt.paidByQr) {
+      onDone();
+      return;
+    }
+    const { input } = receipt;
+    if (input === null) return;
+    changeCheck.guard(input.payments, () => {
+      void runner
+        .run(() => runtime.run('receivePayments', input))
+        .then((result) => {
+          if (result !== undefined) onDone();
+        });
+    });
+  };
+  return { receipt, runner, changeCheck, submit };
 }

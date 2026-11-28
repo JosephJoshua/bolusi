@@ -597,9 +597,12 @@ export interface QrisCharges {
   accountId: string;
   amount: Int8;
   callbackTokenHash: string;
+  cancelledAt: Int8 | null;
+  cancelledBy: string | null;
   checkedAt: Int8 | null;
   createdAt: Int8;
   deviceId: string;
+  documentId: string;
   documentJson: string;
   environment: string;
   expiresAt: Int8;
