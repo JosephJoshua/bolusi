@@ -1416,6 +1416,15 @@ export const changeRevertedRule: Rule = async (op, { db, holdsPermission }) => {
     throw invalidTransition(ticket, op.type, 'undoNotYours', 'someone else made the change');
   }
   const latestAt = Math.max(...targets.map((event) => Number(event.at)));
+  // A clock set back would date the undo before its change and fold it first, undoing nothing.
+  if (op.timestamp <= latestAt) {
+    throw invalidTransition(
+      ticket,
+      op.type,
+      'undoChangedSince',
+      'the undo is dated before the change',
+    );
+  }
   if (op.timestamp - latestAt > REPAIR_UNDO_GRACE_MS) {
     throw invalidTransition(ticket, op.type, 'undoExpired', 'the change was too long ago');
   }

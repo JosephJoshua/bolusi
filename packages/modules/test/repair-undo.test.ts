@@ -129,7 +129,7 @@ describe('what the server refuses', () => {
     ).toBe('repair.refusal.undoChangedSince');
   });
 
-  test('someone else’s change, a late undo, an undo of an undo, and one without the permission', async () => {
+  test('someone else’s change, a late undo, one dated before its change, an undo of an undo, and one without the permission', async () => {
     const h = await harness(961);
     const ticketId = await opened(h);
     await h.run('startWork', { ticketId, beforePhotos: [h.photo(1)] }, h.technicianId);
@@ -159,6 +159,12 @@ describe('what the server refuses', () => {
         await h.checkRule(undo(h.technicianId, at + REPAIR_UNDO_GRACE_MS + 1)).catch((e) => e),
       ),
     ).toBe('repair.refusal.undoExpired');
+    expect(refusalKeyOf(await h.checkRule(undo(h.technicianId, at)).catch((e) => e))).toBe(
+      'repair.refusal.undoChangedSince',
+    );
+    expect(refusalKeyOf(await h.checkRule(undo(h.technicianId, at - 60_000)).catch((e) => e))).toBe(
+      'repair.refusal.undoChangedSince',
+    );
     expect(
       refusalKeyOf(
         await h
