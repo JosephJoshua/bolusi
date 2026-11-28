@@ -29,7 +29,7 @@ import { useChangeCancelFee, type CancelFeeTicket } from '../cancel-fee-ask.js';
 import { useDownPaymentForm } from '../down-payment-form.js';
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { type QuoteLineRow, type TicketDetailRow } from '../queries.js';
-import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
+import { type DiscardGuard } from '../../screen-kit/index.js';
 import { groupedRupiah } from '../../shared/rupiah.js';
 
 import { useAssignTechnician } from '../assign-technician.js';
@@ -84,8 +84,7 @@ export function WorkPhotosStep({
   readonly testID?: string | undefined;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const { photos, setPhotos, note, setNote, copy, dirty, submit } = useWorkPhotos(
+  const { runner, photos, setPhotos, note, setNote, copy, dirty, submit } = useWorkPhotos(
     ticketId,
     stage,
     onDone,

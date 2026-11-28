@@ -195,8 +195,7 @@ export function WorkPhotosDialog({
   onClose,
 }: StepDialogProps & { readonly stage: WorkPhotoStage }): React.JSX.Element {
   const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const { photos, setPhotos, note, setNote, copy, dirty, submit } = useWorkPhotos(
+  const { runner, photos, setPhotos, note, setNote, copy, dirty, submit } = useWorkPhotos(
     ticketId,
     stage,
     onDone,
