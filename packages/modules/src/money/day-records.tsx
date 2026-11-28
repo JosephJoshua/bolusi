@@ -9,6 +9,9 @@ import type { QueryState } from '../screen-kit/index.js';
 /** The most `moneyEntries` returns at once: a day rarely needs a second page. */
 const PAGE = 500;
 
+/** Enough pages for any real day, for a table that searches, sorts and pages the whole day. */
+export const WHOLE_DAY = 20;
+
 /** Local midnight `days` days from the day starting at `day`, whatever the clock change. */
 export function shiftDay(day: number, days: number): number {
   const date = new Date(day);

@@ -16,7 +16,6 @@ import {
   Banner,
   Button,
   Card,
-  DataTable,
   OverflowText,
   PageHeader,
   RollingText,
@@ -30,8 +29,10 @@ import { ArrowDownUp, ChevronLeft, ChevronRight, Inbox, ReceiptText } from 'luci
 import { useMemo, useState, type ReactNode } from 'react';
 
 import { QueryPanel } from '../../screen-kit/desktop/index.js';
+import { ChoiceFacet, TableFrame } from '../../screen-kit/desktop/table.js';
+import { changeView, tableView, useTableView, viewRows } from '../../screen-kit/table-view.js';
 
-import { historyEmptyKey, shiftDay, useDayRecords } from '../day-records.js';
+import { historyEmptyKey, shiftDay, useDayRecords, WHOLE_DAY } from '../day-records.js';
 import { APPROVAL_PERMISSION } from '../../approvals/constants.js';
 import { drawerLabel } from '../drawers.js';
 import { tm } from '../i18n.js';
@@ -504,6 +505,16 @@ function Line({
 
 // ── Riwayat ────────────────────────────────────────────────────────────────────────────────────
 
+interface HistoryFacets {
+  /** What the records are, by the label Riwayat gives them. */
+  readonly kinds: readonly string[];
+  /** Who recorded them. */
+  readonly staff: readonly string[];
+}
+
+const NO_HISTORY_FACETS: HistoryFacets = { kinds: [], staff: [] };
+const HISTORY_SORTABLE = ['time', 'amount'] as const;
+
 function History({
   now,
   day: chosen,
@@ -524,35 +535,73 @@ function History({
     runtime.approvals.hasPermission(APPROVAL_PERMISSION.use),
   );
   const mayVoid = can.payments || can.askPayments || can.cashMoves;
-  const [pages, setPages] = useState(1);
   const [nonce, setNonce] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const today = dayStart(now());
   const day = chosen ?? today;
-  const records = useDayRecords(day, pages, nonce);
+  // The whole day is read at once (a store's day is hundreds of records at most), so the table
+  // searches, filters, sorts and pages all of it.
+  const records = useDayRecords(day, WHOLE_DAY, nonce);
   const loaded = records.status === 'ready' ? records.data : null;
   const testId = 'money.desk.history';
+  const [view, setView] = useTableView('money.history', () => tableView(NO_HISTORY_FACETS), {
+    sortable: HISTORY_SORTABLE,
+  });
 
   const goTo = (next: number): void => {
-    setPages(1);
     setSelected(null);
+    // Another day's records: the same filters, from its first page.
+    setView(changeView(view, {}));
     onDay(next >= today ? null : next);
   };
 
+  // Each record as Riwayat reads it, worked out once for its cells, its search and its filters.
+  const lines = useMemo(
+    () =>
+      new Map(
+        (loaded?.rows ?? []).map((entry) => [
+          entry.id,
+          historyLine(
+            entry,
+            loaded?.accounts ?? [],
+            loaded?.drawers ?? [],
+            entry.documentId === null ? null : (loaded?.customers.get(entry.documentId) ?? null),
+          ),
+        ]),
+      ),
+    [loaded],
+  );
+  const lineOf = (entry: MoneyEntryRow) => lines.get(entry.id) ?? historyLine(entry, [], []);
+  const shown = useMemo(
+    () =>
+      viewRows(loaded?.rows ?? [], view, {
+        id: (entry) => entry.id,
+        document: (entry) => {
+          const line = lineOf(entry);
+          return {
+            text: [tm(line.label), ...line.details, entry.createdByName],
+            numbers: [String(entry.amount)],
+            codes: [entry.documentLabel, entry.reference],
+          };
+        },
+        matches: (entry, facets) =>
+          (facets.kinds.length === 0 || facets.kinds.includes(lineOf(entry).label)) &&
+          (facets.staff.length === 0 || facets.staff.includes(entry.createdBy)),
+        value: (entry, column) => (column === 'amount' ? entry.amount : entry.createdAt),
+      }),
+    // `lineOf` reads `lines`.
+    [loaded, view, lines],
+  );
+  const kindOptions = [...new Set([...lines.values()].map((line) => line.label))]
+    .map((label) => ({ value: label, label: tm(label) }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'id'));
+  const staffOptions = [
+    ...new Map((loaded?.rows ?? []).map((entry) => [entry.createdBy, entry.createdByName ?? '–'])),
+  ].map(([value, label]) => ({ value, label }));
+  const setFacets = (patch: Partial<HistoryFacets>): void =>
+    setView(changeView(view, { facets: { ...view.facets, ...patch } }));
+
   const columns = useMemo((): ColumnDef<MoneyEntryRow, unknown>[] => {
-    // Each record as Riwayat reads it, worked out once for its cells.
-    const lines = new Map(
-      (loaded?.rows ?? []).map((entry) => [
-        entry.id,
-        historyLine(
-          entry,
-          loaded?.accounts ?? [],
-          loaded?.drawers ?? [],
-          entry.documentId === null ? null : (loaded?.customers.get(entry.documentId) ?? null),
-        ),
-      ]),
-    );
-    const lineOf = (entry: MoneyEntryRow) => lines.get(entry.id) ?? historyLine(entry, [], []);
     // An owner said no to this person's ask: said on the record, which can be asked about again.
     const turnedDownOf = (entry: MoneyEntryRow) =>
       entry.voidedAt === null && !asks.waiting.has(entry.id)
@@ -572,6 +621,7 @@ function History({
       {
         id: 'record',
         header: tm('money.history.col.record'),
+        enableSorting: false,
         meta: { track: 'minmax(240px, 1fr)' },
         cell: ({ row: { original: entry } }) => {
           const line = lineOf(entry);
@@ -597,6 +647,7 @@ function History({
       },
       {
         id: 'amount',
+        accessorFn: (row) => row.amount,
         header: tm('money.pay.amount'),
         meta: { track: '136px', align: 'end' },
         cell: ({ row: { original: entry } }) => {
@@ -619,6 +670,7 @@ function History({
             {
               id: 'action',
               header: '',
+              enableSorting: false,
               // Wide enough for a cancel button or, once asked, "Menunggu persetujuan" on one line.
               meta: { track: '176px', align: 'end' as const },
               cell: ({ row: { original: entry } }: { row: { original: MoneyEntryRow } }) =>
@@ -649,7 +701,7 @@ function History({
           ]
         : []),
     ];
-  }, [loaded, mayVoid, can, onVoid, waiting, asks]);
+  }, [loaded, lines, mayVoid, can, onVoid, waiting, asks]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid={testId}>
@@ -686,36 +738,57 @@ function History({
           />
         )}
       </div>
-      {records.status === 'unauthorized' || records.status === 'error' ? (
-        <QueryPanel query={records} onRetry={() => setNonce((n) => n + 1)}>
-          {() => null}
-        </QueryPanel>
-      ) : (
-        <DataTable
-          rows={loaded?.rows ?? []}
-          columns={columns}
-          getRowId={(row) => row.id}
-          selectedId={selected}
-          onSelect={(row) => setSelected(row.id)}
-          onActivate={(row) => {
-            if (!waiting.has(row.id) && voidable(row, can)) onVoid(row, loaded?.accounts ?? []);
-          }}
-          // Newest first, as the query reads them across pages.
-          sortable={false}
-          scrollKey={String(day)}
-          onEndReached={loaded?.more === true ? () => setPages((n) => n + 1) : undefined}
-          loading={records.status === 'loading'}
-          empty={
-            <StatePanel
-              icon={day === today ? Inbox : ReceiptText}
-              title={tm(historyEmptyKey(day, today))}
-              testId={`${testId}.empty`}
+      <TableFrame
+        view={view}
+        onViewChange={setView}
+        rows={shown.rows}
+        total={loaded === null ? null : shown.total}
+        loading={records.status === 'loading'}
+        columns={columns}
+        lockedColumns={['record']}
+        getRowId={(row) => row.id}
+        filters={
+          <>
+            <ChoiceFacet
+              label={tm('money.history.filter.kind')}
+              options={kindOptions}
+              selected={view.facets.kinds}
+              onChange={(kinds) => setFacets({ kinds })}
+              testId={`${testId}.filter.kind`}
             />
-          }
-          label={tm('money.history.title')}
-          testId={`${testId}.table`}
-        />
-      )}
+            <ChoiceFacet
+              label={tm('money.history.filter.staff')}
+              options={staffOptions}
+              selected={view.facets.staff}
+              onChange={(staff) => setFacets({ staff })}
+              testId={`${testId}.filter.staff`}
+            />
+          </>
+        }
+        filtered={view.facets.kinds.length + view.facets.staff.length > 0}
+        onResetFilters={() => setView(changeView(view, { facets: NO_HISTORY_FACETS }))}
+        selectedId={selected}
+        onSelect={(row) => setSelected(row.id)}
+        onActivate={(row) => {
+          if (!waiting.has(row.id) && voidable(row, can)) onVoid(row, loaded?.accounts ?? []);
+        }}
+        empty={
+          <StatePanel
+            icon={day === today ? Inbox : ReceiptText}
+            title={tm(historyEmptyKey(day, today))}
+            testId={`${testId}.empty`}
+          />
+        }
+        problem={
+          records.status === 'unauthorized' || records.status === 'error' ? (
+            <QueryPanel query={records} onRetry={() => setNonce((n) => n + 1)}>
+              {() => null}
+            </QueryPanel>
+          ) : undefined
+        }
+        label={tm('money.history.title')}
+        testId={`${testId}.table`}
+      />
     </div>
   );
 }

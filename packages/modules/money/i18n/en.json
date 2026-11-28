@@ -175,7 +175,11 @@
       "record": "Record"
     },
     "voidLabel": "Cancel the {amount} payment at {time}",
-    "voidCashLabel": "Cancel the cash record of {amount} at {time}"
+    "voidCashLabel": "Cancel the cash record of {amount} at {time}",
+    "filter": {
+      "kind": "Type",
+      "staff": "Recorded by"
+    }
   },
   "void": {
     "title": "Payment cancellation",

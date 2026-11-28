@@ -123,6 +123,8 @@ export const MONEY_KEYS = [
   'money.history.voidLabel',
   'money.history.col.time',
   'money.history.col.record',
+  'money.history.filter.kind',
+  'money.history.filter.staff',
   'money.methods.thisStore',
   'money.kas.title',
   'money.kas.expected',
