@@ -184,3 +184,11 @@ export function opensTransfers(reader: { hasPermission(permissionId: string): bo
       reader.hasPermission(INVENTORY_PERMISSION.settleTransfer))
   );
 }
+
+/**
+ * Whether a count needs a reason: one that lowers the stock writes parts off, so it says why (the
+ * server rule refuses it otherwise). A count that matches or finds more needs none.
+ */
+export function countNeedsReason(counted: number, expected: number): boolean {
+  return counted < expected;
+}

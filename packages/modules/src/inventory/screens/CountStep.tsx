@@ -10,7 +10,7 @@ import { StyleSheet, View } from 'react-native';
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
 import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js';
-import { MAX_COUNTED_QTY } from '../constants.js';
+import { countNeedsReason, MAX_COUNTED_QTY } from '../constants.js';
 import { ti } from '../i18n.js';
 import { MAX_NOTE } from '../operations.js';
 import type { ItemRow } from '../queries.js';
@@ -38,6 +38,7 @@ export function CountStep({
   const recorded = part.onHand;
   const [counted, setCounted] = useState(Math.max(0, recorded));
   const [note, setNote] = useState('');
+  const [noReason, setNoReason] = useState(false);
   const discard = useDiscardConfirm({
     dirty: counted !== Math.max(0, recorded) || note !== '',
     copy: {
@@ -50,8 +51,13 @@ export function CountStep({
     testID,
   });
   const difference = counted - recorded;
+  const needsReason = countNeedsReason(counted, recorded);
 
   const save = (): void => {
+    if (needsReason && note.trim() === '') {
+      setNoReason(true);
+      return;
+    }
     void runner
       .run(() =>
         runtime.run('countStock', {
@@ -98,9 +104,13 @@ export function CountStep({
           testID={`${testID}.counted`}
         />
         <TextInput
-          label={ti('inventory.count.note')}
+          label={ti(needsReason ? 'inventory.count.reason' : 'inventory.count.note')}
           value={note}
-          onChangeText={setNote}
+          onChangeText={(text) => {
+            setNote(text);
+            setNoReason(false);
+          }}
+          errorMessage={needsReason && noReason ? ti('inventory.count.reasonMissing') : undefined}
           maxLength={MAX_NOTE}
           multiline
           testID={`${testID}.note`}
