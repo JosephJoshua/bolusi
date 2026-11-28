@@ -10,6 +10,8 @@ import type { Page } from '@playwright/test';
 
 import { expect, shoot as check, test } from './qa';
 
+import { toServisan } from './shell.js';
+
 import * as tokens from '@bolusi/ui/tokens';
 
 const UPRIGHT = { width: 800, height: 1280 };
@@ -20,7 +22,7 @@ const shoot = (page: Page, name: string) => check(page, 'tablet', name);
 
 async function open(page: Page, role: 'owner' | 'counter', phone = false): Promise<void> {
   await page.goto(`/?screen=repair&state=${role}${phone ? '' : '&frame=tablet'}`);
-  await expect(page.getByTestId('repair.board')).toBeVisible();
+  await toServisan(page);
 }
 
 async function openItems(page: Page, section: 'stock' | 'orders'): Promise<void> {

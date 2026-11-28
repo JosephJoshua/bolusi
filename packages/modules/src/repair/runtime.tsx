@@ -9,8 +9,6 @@ import type { IntakeOptionSettings } from './intake-options.js';
 import type { DeviceModelPhoto } from './device-models.js';
 import type { CancelFees, PrintSettings } from './queries.js';
 import type { ApprovalsPort } from '../approvals/runtime.js';
-import { APPROVAL_PERMISSION } from '../approvals/constants.js';
-import type { ApprovalRow } from '../approvals/queries.js';
 import type { InventoryRuntime } from '../inventory/runtime.js';
 import type { PurchasingRuntime } from '../purchasing/runtime.js';
 import { useCashDrawerOf, type CashDrawer } from '../money/drawers.js';
@@ -413,15 +411,4 @@ export function useModelPhoto(photo: DeviceModelPhoto | null): string | null {
   return loaded !== null && loaded.key === key ? loaded.uri : null;
 }
 
-/**
- * The approval requests a screen shows: a servisan's (`targetId`), or the ones waiting on this
- * user. None for someone without approvals, so their board and servisan still read.
- */
-export async function readApprovals(
-  runtime: RepairRuntime,
-  targetId?: string,
-): Promise<readonly ApprovalRow[]> {
-  if (!runtime.approvals.hasPermission(APPROVAL_PERMISSION.use)) return [];
-  const input = targetId === undefined ? {} : { targetId };
-  return (await runtime.approvals.query('approvalRequests', input)).rows;
-}
+export { readApprovals } from './attention.js';

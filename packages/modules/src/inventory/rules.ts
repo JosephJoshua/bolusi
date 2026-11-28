@@ -9,6 +9,7 @@ import type { SignedOperation } from '@bolusi/schemas';
 
 import { categoryProblem, type CategoryShape } from './categories.js';
 import {
+  countNeedsReason,
   INVENTORY_CATEGORY_ENTITY,
   INVENTORY_ITEM_ENTITY,
   INVENTORY_MOVEMENT_ENTITY,
@@ -177,7 +178,20 @@ export const categoryEditedRule: Rule = async (op, { db }) => {
 
 export const stockCountedRule: Rule = async (op, { db }) => {
   await requireFreshMovement(db, op);
-  await requirePart(db, op, payloadOf<{ itemId: string }>(op).itemId);
+  const payload = payloadOf<{
+    itemId: string;
+    counted: number;
+    expected: number;
+    note: string | null;
+  }>(op);
+  await requirePart(db, op, payload.itemId);
+  // Lowering stock writes parts off: whoever does it says why, as a lost transfer line does.
+  if (countNeedsReason(payload.counted, payload.expected) && (payload.note ?? '').trim() === '') {
+    throw refuse('reasonRequired', {
+      code: 'VALIDATION_FAILED',
+      details: { field: 'note', issue: 'required to lower stock' },
+    });
+  }
 };
 
 async function checkUse(

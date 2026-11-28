@@ -24,6 +24,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoreView } from '../src/renderer/use-core.js';
 
 import { ALL, FakeCore, OWNER, ready, session, signedIn, TECH } from './fake-core.js';
+import { onBoard } from './desk.js';
 
 let core: FakeCore;
 
@@ -884,6 +885,6 @@ describe('repair settings on the PC', () => {
     // Leaving Settings for the board asks too.
     fireEvent.click(byTestId('nav.repair'));
     fireEvent.click(await screen.findByTestId('desktop.settings.discard.confirm'));
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
   });
 });

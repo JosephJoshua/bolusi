@@ -286,10 +286,48 @@ describe('the parts list and counts', () => {
   test('a count sets the stock and records what the phone showed before', async () => {
     const h = await harness(6302);
     const lcd = await addItem(h, 'LCD', 4);
-    await h.runInventory('countStock', { counts: [{ itemId: lcd, counted: 3 }] }, h.storeOwnerId);
+    await h.runInventory(
+      'countStock',
+      { counts: [{ itemId: lcd, counted: 3 }], note: 'Satu pecah' },
+      h.storeOwnerId,
+    );
     const part = (await h.queryInventory('getItem', { itemId: lcd }, h.ownerId)).rows[0];
     expect(part.onHand).toBe(3);
     expect(part.movements[0]).toMatchObject({ kind: 'counted', counted: 3, qty: -1 });
+  });
+
+  test('a count that lowers stock says why, here and on the server; one that finds more need not', async () => {
+    const h = await harness(6311);
+    const lcd = await addItem(h, 'LCD', 4);
+    await expectRefused(
+      h.runInventory('countStock', { counts: [{ itemId: lcd, counted: 3 }] }, h.storeOwnerId),
+      'VALIDATION_FAILED',
+    );
+    expect(await onHand(h, lcd)).toBe(4);
+    await h.runInventory('countStock', { counts: [{ itemId: lcd, counted: 6 }] }, h.storeOwnerId);
+    expect(await onHand(h, lcd)).toBe(6);
+    await h.runInventory(
+      'countStock',
+      { counts: [{ itemId: lcd, counted: 5 }], note: 'Satu rusak' },
+      h.storeOwnerId,
+    );
+    // A device that skips the check: the rule refuses the same write-off with no reason.
+    const lowered = (await h.ownOps())
+      .filter((op) => op.type === 'inventory.stock_counted')
+      .at(-1)!;
+    const forged = {
+      ...lowered,
+      entityId: '0b5e0f2a-6c1d-4e7b-9a3f-2d8c4b6e1a90',
+      payload: { ...(lowered.payload as object), note: null },
+    };
+    await expectRefused(
+      h.checkRule(forged as never),
+      'VALIDATION_FAILED',
+      'inventory.refusal.reasonRequired',
+    );
+    await expect(
+      h.checkRule({ ...lowered, entityId: '0b5e0f2a-6c1d-4e7b-9a3f-2d8c4b6e1a91' } as never),
+    ).resolves.toBeUndefined();
   });
 
   /**
@@ -347,7 +385,7 @@ describe('the parts list and counts', () => {
     // The owner counts the shelf after the part left it, on a phone that has not heard of the take.
     await late.runInventory(
       'countStock',
-      { counts: [{ itemId: lcd, counted: 4 }] },
+      { counts: [{ itemId: lcd, counted: 4 }], note: 'Satu dipakai' },
       late.storeOwnerId,
     );
     await sync();
@@ -377,12 +415,12 @@ describe('the parts list and counts', () => {
     const { early, late, lcd, sync, both } = await twoPhones(6307);
     await early.runInventory(
       'countStock',
-      { counts: [{ itemId: lcd, counted: 3 }] },
+      { counts: [{ itemId: lcd, counted: 3 }], note: 'Selisih' },
       early.storeOwnerId,
     );
     await late.runInventory(
       'countStock',
-      { counts: [{ itemId: lcd, counted: 2 }] },
+      { counts: [{ itemId: lcd, counted: 2 }], note: 'Selisih' },
       late.storeOwnerId,
     );
     await sync();

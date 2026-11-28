@@ -4,9 +4,18 @@
 // refers to that no longer load are dropped, so they are taken again.
 import { useEffect, useRef, useState } from 'react';
 
-import { capturedThumbnailRef, emptyIntakeDraft, type IntakeDraft } from './flows.js';
+import type { PaymentAccountRow } from '../money/queries.js';
+import type { ActionRunner } from '../screen-kit/index.js';
+
+import {
+  capturedThumbnailRef,
+  emptyIntakeDraft,
+  toOpenTicketInput,
+  type IntakeDraft,
+} from './flows.js';
+import type { IntakeOptionLists } from './intake-options.js';
 import { useRestoredVideoCheck } from './ownership-video.js';
-import { useRepairRuntime } from './runtime.js';
+import { useRepairCashDrawer, useRepairRuntime } from './runtime.js';
 
 /** `onOpenedAlready` gets the id of a kept draft's servisan that was opened before the app died. */
 export function useIntakeDraft(
@@ -73,4 +82,31 @@ export function useIntakeDraft(
   }, [restoredOnce, runtime]);
 
   return { draft, setDraft, photosExpired, videoExpired };
+}
+
+/**
+ * Opens the servisan the draft describes, dated when it is saved (`now`), under the step's own
+ * runner so the save shows busy and refused where the step shows it.
+ */
+export function useOpenTicket(
+  runner: ActionRunner,
+  now: () => number,
+  onOpened: (ticketId: string) => void,
+) {
+  const runtime = useRepairRuntime();
+  // A cash DP goes into the drawer this device takes cash into.
+  const cash = useRepairCashDrawer();
+  return (
+    draft: IntakeDraft,
+    options: IntakeOptionLists,
+    accounts: readonly PaymentAccountRow[],
+  ): void => {
+    void runner
+      .run(() =>
+        runtime.run('openTicket', toOpenTicketInput(draft, options, now(), accounts, cash.ref)),
+      )
+      .then((opened) => {
+        if (opened !== undefined) onOpened(opened.ticketId);
+      });
+  };
 }

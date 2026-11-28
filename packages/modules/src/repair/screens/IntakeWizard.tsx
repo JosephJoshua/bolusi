@@ -5,7 +5,7 @@
  * (SEC-AUTH-08, the same retention notes uses) and released only when the user saves or discards.
  */
 
-import { useIntakeDraft } from '../intake-draft.js';
+import { useIntakeDraft, useOpenTicket } from '../intake-draft.js';
 import {
   ConfirmSheet,
   StepHeader,
@@ -36,7 +36,6 @@ import {
   intakeNeedsVideo,
   nextMissingPhoto,
   stepProblems,
-  toOpenTicketInput,
   type IntakeDraft,
   INTAKE_PROBLEM_KEY,
   type IntakeProblem,
@@ -49,12 +48,7 @@ import {
 import { FlowScreen, repairStyles, type RepairChrome } from './parts.js';
 import { usePhotoBrowser } from './photos.js';
 import { useOwnershipVideo } from '../ownership-video.js';
-import {
-  useIntakeOptionSettings,
-  usePaymentAccounts,
-  useRepairCashDrawer,
-  useRepairRuntime,
-} from '../runtime.js';
+import { useIntakeOptionSettings, usePaymentAccounts, useRepairRuntime } from '../runtime.js';
 
 import {
   ConditionStep,
@@ -128,7 +122,6 @@ export function IntakeWizard({
   // Null while loading: a restored draft's DP method waits for them rather than becoming cash.
   const loadedAccounts = usePaymentAccounts();
   const accounts = loadedAccounts ?? [];
-  const cash = useRepairCashDrawer();
   const problems = stepProblems(draft, step, options, accounts);
   const dirty = intakeDirty(draft);
   const update = (patch: Partial<IntakeDraft>): void => setDraft((d) => ({ ...d, ...patch }));
@@ -229,6 +222,10 @@ export function IntakeWizard({
     draft.ownershipVideo === null &&
     recordVideo !== undefined;
 
+  const openTicket = useOpenTicket(runner, now, (ticketId) => {
+    onDraftChange?.(null);
+    onOpened(ticketId);
+  });
   const next = (): void => {
     if (missingPhoto !== null) {
       takePhoto(missingPhoto);
@@ -247,15 +244,7 @@ export function IntakeWizard({
       return;
     }
     if (loadedAccounts === null) return;
-    void runner
-      .run(() =>
-        runtime.run('openTicket', toOpenTicketInput(draft, options, now(), accounts, cash.ref)),
-      )
-      .then((opened) => {
-        if (opened === undefined) return;
-        onDraftChange?.(null);
-        onOpened(opened.ticketId);
-      });
+    openTicket(draft, options, accounts);
   };
 
   const back = (): void => (stepIndex === 0 ? requestLeave(onCancel) : goTo(stepIndex - 1));

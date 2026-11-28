@@ -10,7 +10,6 @@
  * delivers its lifecycle events (device QA covers that).
  */
 import { DEVICE_WORK_KEY } from '@bolusi/core';
-import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
 import { sql } from 'kysely';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
@@ -43,6 +42,7 @@ import type { AppSessionController } from '@bolusi/device/bootstrap/session';
 import {
   bootFixture,
   closeClientDb,
+  COUNTER_REPAIR_PERMISSIONS,
   enrolledDevice,
   fireOn,
   mountRoot,
@@ -57,7 +57,7 @@ import {
   type MountOptions,
 } from './live-shell-support.js';
 
-const COUNTER_PERMISSIONS = [...NOTES_PERMISSIONS, ...Object.values(REPAIR_PERMISSION)];
+const COUNTER_PERMISSIONS = [...NOTES_PERMISSIONS, ...COUNTER_REPAIR_PERMISSIONS];
 
 const CUSTOMER = 'Yohanis Wenda';
 const PHONE = '0812-4455-6677';

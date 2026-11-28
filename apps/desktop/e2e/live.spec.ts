@@ -125,6 +125,9 @@ async function registerAndSignIn(page: Page, name: string): Promise<void> {
   await page.getByTestId('desktop.setup.next').click();
   await expect(page.getByTestId('desktop.setup.capture')).toBeVisible();
   await page.getByTestId('desktop.setup.later').click();
+  // The owner opens on Perlu dicek; the board is a sidebar item away.
+  await expect(page.getByTestId('repair.desk.attention')).toBeVisible();
+  await page.getByTestId('nav.repair').click();
   await expect(page.getByTestId('repair.desk.board.newIntake')).toBeVisible();
 }
 

@@ -55,8 +55,7 @@ export const TICKET_STATUSES: readonly TicketStatus[] = [...REPAIR_OUTCOMES, 're
 
 /**
  * The statuses worth offering in a queue: the ones it can hold. Search spans every ticket, so it
- * offers them all. The returned and cancelled queues each hold one status, so they offer none;
- * the approvals list is short enough to read whole.
+ * offers them all. The returned and cancelled queues each hold one status, so they offer none.
  */
 export function statusChoices(view: BoardView | 'search'): readonly TicketStatus[] {
   switch (view) {
@@ -71,7 +70,6 @@ export function statusChoices(view: BoardView | 'search'): readonly TicketStatus
       return ['repaired', 'cancelled'];
     case 'returned':
     case 'cancelled':
-    case 'approvals':
       return [];
   }
 }
@@ -142,9 +140,8 @@ export function tableFilter(
   userId: string,
   readyBefore: number,
   facets: TicketFacets,
-  approvalIds: readonly string[] = [],
 ): TicketFilter {
-  const base: TicketFilter = boardFilter(view, userId, readyBefore, approvalIds) ?? {};
+  const base: TicketFilter = boardFilter(view, userId, readyBefore) ?? {};
   const filter: { -readonly [K in keyof TicketFilter]: TicketFilter[K] } = { ...base };
   if (facets.statuses.length > 0) {
     // Only the statuses this queue holds (every queue that offers a status keeps its phones in the

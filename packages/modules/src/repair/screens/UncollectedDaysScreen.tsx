@@ -7,12 +7,12 @@ import { ConfirmSheet, TextInput, Text } from '@bolusi/ui';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
+import { type DiscardGuard } from '../../screen-kit/index.js';
 
-import { parseUncollectedDays } from '../constants.js';
 import { tn } from '../i18n.js';
 import { FlowScreen, QueryView, repairStyles, type RepairChrome } from './parts.js';
-import { useRepairRuntime, useUncollectedLimit } from '../runtime.js';
+import { useUncollectedLimit } from '../runtime.js';
+import { useUncollectedDaysForm } from '../settings-forms.js';
 
 export interface UncollectedDaysScreenProps {
   readonly chrome: RepairChrome;
@@ -63,35 +63,14 @@ function DaysForm({
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
   readonly testID: string;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [text, setText] = useState(String(saved));
-  const [baseline, setBaseline] = useState(saved);
-  const [notice, setNotice] = useState<string | null>(null);
+  const form = useUncollectedDaysForm(saved);
+  const { runner, dirty } = form;
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
-
-  const days = parseUncollectedDays(text);
-  const dirty = days !== baseline;
 
   useEffect(() => {
     onRegisterDiscardGuard?.(dirty ? (proceed) => setPendingLeave(() => proceed) : null);
     return () => onRegisterDiscardGuard?.(null);
   }, [dirty, onRegisterDiscardGuard]);
-
-  const save = (): void => {
-    if (days === null) return;
-    if (!dirty) {
-      onClose();
-      return;
-    }
-    void runner
-      .run(() => runtime.run('setUncollectedDays', { days }))
-      .then((result) => {
-        if (result === undefined) return;
-        setBaseline(result.days);
-        setNotice(tn('repair.uncollected.saved'));
-      });
-  };
 
   return (
     <FlowScreen
@@ -99,14 +78,14 @@ function DaysForm({
       title={tn('repair.uncollected.title')}
       onBack={() => (dirty ? setPendingLeave(() => onClose) : onClose())}
       primaryLabel={tn('repair.uncollected.save')}
-      onPrimary={save}
-      primaryDisabled={days === null}
+      onPrimary={() => form.save(onClose)}
+      primaryDisabled={form.days === null}
       primaryHint={tn('repair.uncollected.hint')}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
-      notice={notice}
-      onClearNotice={() => setNotice(null)}
+      notice={form.notice}
+      onClearNotice={form.clearNotice}
       overlay={
         pendingLeave === null ? null : (
           <ConfirmSheet
@@ -130,12 +109,8 @@ function DaysForm({
       <View style={repairStyles.gap}>
         <TextInput
           label={tn('repair.uncollected.days')}
-          value={text}
-          onChangeText={(next) => {
-            const digits = next.replace(/\D/g, '').slice(0, 3);
-            setNotice(null);
-            setText(digits);
-          }}
+          value={form.text}
+          onChangeText={form.setText}
           keyboardType="number-pad"
           testID={`${testID}.days`}
         />

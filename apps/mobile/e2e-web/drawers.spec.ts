@@ -5,6 +5,7 @@
 import type { Page } from '@playwright/test';
 
 import { expect, shoot as check, test } from './qa';
+import { toServisan } from './shell';
 
 const tap = (page: Page, testID: string) => page.getByTestId(testID).first().click();
 const fill = (page: Page, testID: string, text: string) =>
@@ -15,7 +16,7 @@ test('an owner adds a drawer for the Manajer, then moves cash into it from Kas',
   page,
 }) => {
   await page.goto('/?screen=repair&state=owner');
-  await expect(page.getByTestId('repair.board')).toBeVisible();
+  await toServisan(page);
   await tap(page, 'ui.avatarButton');
   await tap(page, 'shell-open-settings');
   await tap(page, 'settings-payment-methods');

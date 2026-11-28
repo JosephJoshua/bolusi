@@ -73,7 +73,6 @@
     "searchHint": "Cari nama, no. HP, no. servisan",
     "title": "Servisan",
     "view": {
-      "approvals": "Persetujuan ({count})",
       "active": "Aktif",
       "mine": "Tugas saya",
       "pickup": "Siap diambil",
@@ -91,7 +90,6 @@
     "waited": "{days} hari belum diambil",
     "pickupWaiting": "{count} HP siap diambil",
     "empty": {
-      "approvals": "Tidak ada yang menunggu persetujuan.",
       "active": "Belum ada servisan aktif.",
       "mine": "Belum ada tugas untuk Anda.",
       "unassigned": "Semua servisan sudah ada teknisinya.",
@@ -983,5 +981,21 @@
     "save": "Simpan tagihan",
     "same": "Ubah tagihan terlebih dahulu.",
     "short": "Ubah tagihan"
+  },
+  "attention": {
+    "title": "Perlu dicek",
+    "requests": "Persetujuan ({count})",
+    "elsewhere": "Lainnya",
+    "uncollected": "HP belum diambil",
+    "belowZero": "Stok minus",
+    "partlyReceived": "Belanja diterima sebagian",
+    "refused": "Perubahan Anda ditolak",
+    "empty": "Tidak ada yang perlu dicek.",
+    "emptyHint": "Permintaan persetujuan dan hal lain yang perlu Anda tangani muncul di sini.",
+    "col": {
+      "request": "Permintaan",
+      "ticket": "Servisan",
+      "asked": "Diminta"
+    }
   }
 }

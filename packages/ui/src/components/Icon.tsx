@@ -124,6 +124,8 @@ export const ICON_GLYPHS = Object.freeze({
   parts: 'package-variant-closed',
   /** Buying parts from suppliers ("Belanja"). */
   buy: 'cart-outline',
+  /** Perlu dicek: what waits on an owner or Manajer. */
+  attention: 'clipboard-alert-outline',
   /** QuantityStepper: one fewer. (`add` is one more.) */
   decrease: 'minus',
   /** Stock: a count of what is on the shelf. */
