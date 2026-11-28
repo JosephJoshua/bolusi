@@ -122,6 +122,7 @@ export type { QrCodeProps } from './components/QrCode.js';
 export type { QuantityStepperProps } from './components/QuantityStepper.js';
 export type { SearchFieldProps } from './components/SearchField.js';
 export type { SegmentedControlProps, SegmentedOption } from './components/SegmentedControl.js';
+export type { PlaceSectionsProps } from './components/PlaceSections.js';
 export type { ReorderableListProps } from './components/ReorderableList.js';
 export type { SheetProps } from './components/Sheet.js';
 export type { SwitchRowProps } from './components/SwitchRow.js';

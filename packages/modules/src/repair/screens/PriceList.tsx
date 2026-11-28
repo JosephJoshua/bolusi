@@ -9,15 +9,14 @@ import {
   AppShell,
   Banner,
   Button,
-  ChipRow,
   color,
   List,
   type ListState,
   numeric,
   SearchField,
+  SegmentedControl,
   space,
   Text,
-  ToggleChip,
   touch,
   type,
 } from '@bolusi/ui';
@@ -39,6 +38,8 @@ import type { PriceRow } from '../prices.queries.js';
 import { useRepairQuery, useRepairRuntime } from '../runtime.js';
 
 const PAGE = 50;
+/** The type row's choice for every type; no repair type id is empty. */
+const ALL = '';
 
 export interface PriceListProps {
   readonly chrome: ScreenChrome;
@@ -201,23 +202,18 @@ export function PriceList({
       </View>
       {types === null || types.length === 0 ? null : (
         <View style={styles.chips}>
-          <ChipRow testID={`${testID}.types`}>
-            <ToggleChip
-              label={tn('repair.prices.allTypes')}
-              selected={repairType === null}
-              onToggle={() => pick(null)}
-              testID={`${testID}.type.all`}
-            />
-            {types.map((type) => (
-              <ToggleChip
-                key={type.id}
-                label={type.label}
-                selected={repairType === type.id}
-                onToggle={() => pick(repairType === type.id ? null : type.id)}
-                testID={`${testID}.type.${type.id}`}
-              />
-            ))}
-          </ChipRow>
+          <SegmentedControl
+            options={[
+              { value: ALL, label: tn('repair.prices.allTypes') },
+              ...types.map((type) => ({ value: type.id, label: type.label })),
+            ]}
+            value={repairType ?? ALL}
+            onChange={(value) => pick(value === ALL ? null : value)}
+            // One compact row that scrolls sideways to the screen edges, as the board's queues do.
+            size="compact"
+            bleed
+            testID={`${testID}.type`}
+          />
         </View>
       )}
       <List

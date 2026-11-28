@@ -239,7 +239,6 @@ export const INVENTORY_KEYS = [
   'inventory.bulk.hint.name',
   'inventory.bulk.hint.fits',
   'inventory.bulk.hint.list',
-  'inventory.bulk.hint.sheet',
   'inventory.bulk.row',
   'inventory.bulk.deleteRow',
   'inventory.bulk.where',

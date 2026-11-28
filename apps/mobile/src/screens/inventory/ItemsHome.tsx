@@ -21,7 +21,7 @@ import {
   type PurchasingRuntime,
 } from '@bolusi/modules/purchasing/screens';
 import type { DiscardGuard, PlaceStep } from '@bolusi/modules/screen-kit';
-import { SegmentedControl, space } from '@bolusi/ui';
+import { PlaceSections, space } from '@bolusi/ui';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -115,7 +115,7 @@ export function ItemsHome({
   const sections =
     options.length > 1 ? (
       <View style={styles.sections}>
-        <SegmentedControl<Section>
+        <PlaceSections<Section>
           options={options}
           value={section}
           onChange={setPicked}

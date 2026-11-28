@@ -77,8 +77,6 @@ export interface EditableGridProps {
   readonly problems?: ReadonlyMap<string, Readonly<Record<string, CellProblem>>> | undefined;
   /** A problem with a whole row, such as a save that was refused, by row id. */
   readonly rowProblems?: ReadonlyMap<string, string> | undefined;
-  /** Shown under the grid while the selected cell has nothing to say. */
-  readonly hint?: ReactNode;
   /** At the end of the line under the grid, such as how many rows still need fixing. */
   readonly aside?: ReactNode;
   readonly disabled?: boolean | undefined;
@@ -157,7 +155,6 @@ export function EditableGrid({
   newRow,
   problems = NO_PROBLEMS,
   rowProblems = NO_ROW_PROBLEMS,
-  hint,
   aside,
   disabled = false,
   historyKey,
@@ -516,6 +513,8 @@ export function EditableGrid({
   const cellId = (row: number, col: number): string => `${gridId}-${String(row)}-${String(col)}`;
   const focusShown = virtualizer.getVirtualItems().some((item) => item.index === focus.row);
 
+  const speaks =
+    activeProblem !== undefined || activeRowProblem !== undefined || aside !== undefined;
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid={testId}>
       <div
@@ -774,10 +773,13 @@ export function EditableGrid({
           ))}
         </ul>
       )}
+      {/* A cell's or row's problem, and the aside; nothing while all is well. */}
       <p
         role="status"
         aria-live="polite"
         className={clsx(
+          // The line under the grid speaks only when there is something to say.
+          !speaks && 'sr-only',
           'flex min-h-9 items-center gap-4 px-6 py-2 text-small',
           activeProblem?.tone === 'danger' || (activeProblem === undefined && activeRowProblem)
             ? 'text-danger'
@@ -812,9 +814,7 @@ export function EditableGrid({
                 {activeRowProblem}
               </span>
             </>
-          ) : (
-            hint
-          )}
+          ) : null}
         </span>
         {aside === undefined ? null : <span className="shrink-0">{aside}</span>}
       </p>

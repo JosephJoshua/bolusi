@@ -305,8 +305,7 @@
     "hint": {
       "name": "Kosongkan untuk nama otomatis: {format}",
       "fits": "Pisahkan dengan koma, misalnya Redmi Note 10, Redmi Note 10S",
-      "list": "Pisahkan dengan koma",
-      "sheet": "Ketik langsung, atau salin dari Excel lalu tempel dengan Ctrl+V. Judul kolom ikut dikenali."
+      "list": "Pisahkan dengan koma"
     },
     "row": "Baris {n}",
     "deleteRow": "Hapus baris",

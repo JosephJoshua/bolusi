@@ -42,6 +42,7 @@ export { ReorderableList } from './ReorderableList.js';
 export { RowDivider, Rows } from './Rows.js';
 export { SearchField } from './SearchField.js';
 export { SegmentedControl } from './SegmentedControl.js';
+export { PlaceSections } from './PlaceSections.js';
 export { Sheet } from './Sheet.js';
 export { StepHeader } from './StepHeader.js';
 export { SwitchRow } from './SwitchRow.js';

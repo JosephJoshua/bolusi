@@ -70,7 +70,7 @@ export function PricesPage({ trail, onRegisterLeaveGuard }: PricesPageProps): Re
     ...(types ?? []).map((type) => ({ value: type.id, label: type.label })),
   ];
   const filters = (
-    <div className="flex h-12 items-center gap-2 px-6" data-testid={`${testId}.filters`}>
+    <div className="flex shrink-0 items-center gap-2" data-testid={`${testId}.filters`}>
       <FilterPopover
         label={tn('repair.prices.repairType')}
         summary={repairType === null ? null : priceTypeLabel(types, repairType)}
@@ -88,17 +88,21 @@ export function PricesPage({ trail, onRegisterLeaveGuard }: PricesPageProps): Re
       </FilterPopover>
     </div>
   );
+  // The type filter sits beside the search, so the sheet keeps every row of height it can.
   const search = (
-    <div className="w-full max-w-[520px]">
-      <SearchField
-        value={text}
-        onChange={setText}
-        placeholder={tn('repair.prices.searchHint')}
-        label={t('core.action.search')}
-        clearLabel={tn('repair.board.clearSearch')}
-        shortcut="/"
-        testId={`${testId}.search`}
-      />
+    <div className="flex w-full max-w-[680px] items-center gap-3">
+      <div className="min-w-0 flex-1">
+        <SearchField
+          value={text}
+          onChange={setText}
+          placeholder={tn('repair.prices.searchHint')}
+          label={t('core.action.search')}
+          clearLabel={tn('repair.board.clearSearch')}
+          shortcut="/"
+          testId={`${testId}.search`}
+        />
+      </div>
+      {filters}
     </div>
   );
 
@@ -111,7 +115,6 @@ export function PricesPage({ trail, onRegisterLeaveGuard }: PricesPageProps): Re
         storeColumn={can.store}
         trail={trail}
         search={search}
-        filters={filters}
         onRegisterLeaveGuard={onRegisterLeaveGuard}
         testId={testId}
       />
@@ -122,7 +125,6 @@ export function PricesPage({ trail, onRegisterLeaveGuard }: PricesPageProps): Re
       <PageHeader title={tn('repair.prices.title')} trail={trail} trailLabel={t('core.nav.trail')}>
         {search}
       </PageHeader>
-      {filters}
       <PriceTable
         types={types}
         text={searchText}
@@ -358,7 +360,6 @@ function PriceSheetPage({
   storeColumn,
   trail,
   search,
-  filters,
   onRegisterLeaveGuard,
   testId,
 }: {
@@ -368,7 +369,6 @@ function PriceSheetPage({
   readonly storeColumn: boolean;
   readonly trail: readonly Crumb[] | undefined;
   readonly search: React.ReactNode;
-  readonly filters: React.ReactNode;
   readonly onRegisterLeaveGuard: ((guard: PricesLeaveGuard | null) => void) | undefined;
   readonly testId: string;
 }): React.JSX.Element {
@@ -485,7 +485,6 @@ function PriceSheetPage({
       >
         {search}
       </PageHeader>
-      {filters}
       {sheet.notice === null ? null : (
         <div className="px-6 pb-3">
           <Banner
@@ -510,7 +509,6 @@ function PriceSheetPage({
           rowProblems={sheet.refused}
           disabled={saving}
           historyKey={sheet.saves}
-          hint={tn('repair.prices.sheet.hint')}
           aside={
             sheet.blocked > 0 ? (
               <span className="font-semibold text-danger" data-testid={`${testId}.blocked`}>

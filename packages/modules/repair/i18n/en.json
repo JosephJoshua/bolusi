@@ -1050,7 +1050,6 @@
       "blocked": "{count} incomplete",
       "save": "Save {count} changes",
       "saving": "Saving {done} of {total}…",
-      "hint": "Type directly, or copy from Excel and paste with Ctrl+V. Column headings are recognised.",
       "typeAlias": "Repair type",
       "modelsHint": "Separate with commas, e.g. Redmi Note 10, Redmi Note 10S",
       "storeHint": "Leave empty to use the list price",

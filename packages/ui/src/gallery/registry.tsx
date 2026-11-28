@@ -434,6 +434,35 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
   ],
 
   /** One choice from a short set; the selected option is filled AND announced. */
+  PlaceSections: [
+    {
+      id: 'two-sections',
+      render: (l) => (
+        <componentInventory.PlaceSections
+          options={[
+            { value: 'a', label: l.primaryText },
+            { value: 'b', label: l.secondaryText },
+          ]}
+          value="a"
+          onChange={noop}
+        />
+      ),
+    },
+    {
+      id: 'three-sections',
+      render: (l) => (
+        <componentInventory.PlaceSections
+          options={[
+            { value: 'a', label: l.primaryText },
+            { value: 'b', label: l.secondaryText },
+            { value: 'c', label: l.title },
+          ]}
+          value="c"
+          onChange={noop}
+        />
+      ),
+    },
+  ],
   SegmentedControl: [
     {
       id: 'first-selected',

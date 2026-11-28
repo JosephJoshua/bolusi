@@ -24,7 +24,7 @@ import {
   type StepBack,
 } from '@bolusi/modules/repair/screens';
 import type { PlaceStep } from '@bolusi/modules/screen-kit';
-import { ListDetail, SegmentedControl, space, useListDetailSplit } from '@bolusi/ui';
+import { ListDetail, PlaceSections, space, useListDetailSplit } from '@bolusi/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -166,7 +166,7 @@ export function RepairHome({
 
   const sections = (
     <View style={styles.sections}>
-      <SegmentedControl<'board' | 'prices'>
+      <PlaceSections<'board' | 'prices'>
         options={[
           { value: 'board', label: tn('repair.board.title') },
           { value: 'prices', label: tn('repair.prices.section') },

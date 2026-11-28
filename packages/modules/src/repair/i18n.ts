@@ -878,7 +878,6 @@ export const REPAIR_KEYS = [
   'repair.prices.sheet.blocked',
   'repair.prices.sheet.save',
   'repair.prices.sheet.saving',
-  'repair.prices.sheet.hint',
   'repair.prices.sheet.typeAlias',
   'repair.prices.sheet.modelsHint',
   'repair.prices.sheet.storeHint',

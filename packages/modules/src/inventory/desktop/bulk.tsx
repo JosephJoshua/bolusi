@@ -200,7 +200,6 @@ export function BulkAddPage({ onBack, onRegisterLeaveGuard }: BulkAddPageProps):
         rowProblems={entry.refused}
         disabled={saving}
         historyKey={entry.saves}
-        hint={ti('inventory.bulk.hint.sheet')}
         aside={
           blocked > 0 ? (
             <span className="font-semibold text-danger" data-testid={`${testId}.blocked`}>

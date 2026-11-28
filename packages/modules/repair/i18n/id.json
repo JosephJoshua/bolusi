@@ -1050,7 +1050,6 @@
       "blocked": "{count} belum lengkap",
       "save": "Simpan {count} perubahan",
       "saving": "Menyimpan {done} dari {total}…",
-      "hint": "Ketik langsung, atau salin dari Excel lalu tempel dengan Ctrl+V. Judul kolom ikut dikenali.",
       "typeAlias": "Jenis servisan",
       "modelsHint": "Pisahkan dengan koma, misalnya Redmi Note 10, Redmi Note 10S",
       "storeHint": "Kosongkan untuk memakai harga daftar",

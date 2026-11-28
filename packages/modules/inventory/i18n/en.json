@@ -305,8 +305,7 @@
     "hint": {
       "name": "Leave empty for the automatic name: {format}",
       "fits": "Separate with commas, such as Redmi Note 10, Redmi Note 10S",
-      "list": "Separate with commas",
-      "sheet": "Type straight in, or copy from Excel and paste with Ctrl+V. Column headings are recognised."
+      "list": "Separate with commas"
     },
     "row": "Row {n}",
     "deleteRow": "Delete row",
