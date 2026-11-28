@@ -78,7 +78,7 @@ test('a store owner adds a method the counter can then take payments with', asyn
   // Only the business owner adds one for every store.
   expect(screen.query('money.methodForm.central')).toBeNull();
   await press(screen, 'money.methodForm.primary');
-  expect(text(screen, 'money.methodForm.name')).toContain('Isi namanya.');
+  expect(text(screen, 'money.methodForm.name')).toContain('Isi nama.');
   await press(screen, 'money.methodForm.kind.edc');
   type(screen, 'money.methodForm.name', 'EDC Mandiri');
   await settle();
@@ -149,7 +149,7 @@ test('the business owner gives a method to some stores only, and can give it to 
   await press(owner, 'money.methodForm.scope.some');
   // Picking none is not "every store" by accident.
   await press(owner, 'money.methodForm.primary');
-  expect(text(owner, 'money.methodForm.stores')).toContain('Pilih paling sedikit satu toko.');
+  expect(text(owner, 'money.methodForm.stores')).toContain('Pilih minimal satu toko.');
   await press(owner, `money.methodForm.store.${sorong}`);
   await press(owner, 'money.methodForm.primary');
 

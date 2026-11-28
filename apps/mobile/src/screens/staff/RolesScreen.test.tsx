@@ -1,4 +1,4 @@
-// "Tugas karyawan": the main owner's role editor. Mounts the real screen over fake server calls to
+// "Jabatan karyawan": the main owner's role editor. Mounts the real screen over fake server calls to
 // prove the switches send the right permissions (with what they need), a made role is named,
 // renamed and deleted only while nobody holds it, a name is never a preset's, and offline never
 // looks like success.

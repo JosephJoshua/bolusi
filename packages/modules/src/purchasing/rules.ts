@@ -45,6 +45,13 @@ export const PURCHASING_REFUSALS = defineRefusals(
     'nothingToCancel',
     'numberNotThisDevice',
     'numberUsed',
+    'billNotFound',
+    'billVoid',
+    'orderOtherSupplier',
+    'orderNotPlaced',
+    'billNumberNotThisDevice',
+    'billNumberUsed',
+    'notaUsed',
   ] as const,
   // A draft names a part archived since it was written. The order itself stays valid.
   ['partArchived'] as const,
@@ -55,14 +62,18 @@ function payloadOf<T>(op: SignedOperation): T {
   return op.payload as unknown as T;
 }
 
-function alreadyRecorded(field: string): Error {
+export function alreadyRecorded(field: string): Error {
   return refuse('alreadyRecorded', {
     code: 'VALIDATION_FAILED',
     details: { field, issue: 'already exists' },
   });
 }
 
-async function requireSupplier(db: Db, op: SignedOperation, supplierId: string): Promise<void> {
+export async function requireSupplier(
+  db: Db,
+  op: SignedOperation,
+  supplierId: string,
+): Promise<void> {
   const row = await db
     .selectFrom('purchasingSuppliers')
     .select('id')
@@ -78,7 +89,7 @@ async function requireSupplier(db: Db, op: SignedOperation, supplierId: string):
 }
 
 /** Every part on the lines is on this business's list (archived ones too: the list is history). */
-async function requireItems(
+export async function requireItems(
   db: Db,
   op: SignedOperation,
   itemIds: readonly string[],

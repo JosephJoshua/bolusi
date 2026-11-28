@@ -156,7 +156,7 @@ describe('overlays never open under the keyboard', () => {
         title="Buang?"
         confirmLabel="Buang"
         onConfirm={vi.fn()}
-        cancelLabel="Lanjut isi"
+        cancelLabel="Lanjutkan mengisi"
         onCancel={vi.fn()}
       />,
     );

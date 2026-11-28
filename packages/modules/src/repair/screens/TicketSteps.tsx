@@ -3,7 +3,7 @@
  * a price change and deciding a technician's proposal. Each runs one command, stays put with the
  * refusal shown when it fails, and calls `onDone` when it lands.
  */
-import { formatMoney, formatNumber } from '@bolusi/i18n';
+import { formatMoney } from '@bolusi/i18n';
 import {
   color,
   Icon,
@@ -42,6 +42,7 @@ import {
   type TicketDetailRow,
 } from '../queries.js';
 import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
+import { groupedRupiah } from '../../shared/rupiah.js';
 
 import { tn, type RepairKey } from '../i18n.js';
 import {
@@ -402,7 +403,7 @@ export function CancelStep({
                   <TextButton
                     label={tn('repair.cancel.changeFee')}
                     accessibilityLabel={tn('repair.cancel.changeFeeLabel')}
-                    onPress={() => setFeeText(groupedAmount(String(standard ?? 0)))}
+                    onPress={() => setFeeText(groupedRupiah(String(standard ?? 0)))}
                     testID={`${testID}.changeFee`}
                   />
                 </View>
@@ -434,7 +435,7 @@ export function CancelStep({
             label={tn('repair.cancel.feeInput')}
             value={feeText}
             onChangeText={(text) => {
-              if (acceptsRupiahText(text)) setFeeText(groupedAmount(text));
+              if (acceptsRupiahText(text)) setFeeText(groupedRupiah(text));
             }}
             keyboardType="number-pad"
             selectTextOnFocus
@@ -555,7 +556,7 @@ export function ChangeCancelFeeStep({
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
   const runner = useActionRunner();
-  const [feeText, setFeeText] = useState(groupedAmount(String(current)));
+  const [feeText, setFeeText] = useState(groupedRupiah(String(current)));
   const [reason, setReason] = useState('');
   const fee = parseRupiah(feeText);
   const changed = fee !== null && fee !== current;
@@ -618,7 +619,7 @@ export function ChangeCancelFeeStep({
         label={tn('repair.cancelFee.input')}
         value={feeText}
         onChangeText={(text) => {
-          if (acceptsRupiahText(text)) setFeeText(groupedAmount(text));
+          if (acceptsRupiahText(text)) setFeeText(groupedRupiah(text));
         }}
         keyboardType="number-pad"
         selectTextOnFocus
@@ -762,7 +763,7 @@ export function DownPaymentStep({
           label={tn(correcting ? 'repair.downPayment.newAmount' : 'repair.downPayment.amount')}
           value={amountText}
           onChangeText={(text) => {
-            if (acceptsRupiahText(text)) setAmountText(groupedAmount(text));
+            if (acceptsRupiahText(text)) setAmountText(groupedRupiah(text));
           }}
           keyboardType="number-pad"
           selectTextOnFocus
@@ -1121,7 +1122,7 @@ export function PriceChangeStep({
           label={tn(kind === 'discount' ? 'repair.price.discountAmount' : 'repair.price.amount')}
           value={amountText}
           onChangeText={(text) => {
-            if (acceptsRupiahText(text)) setAmountText(groupedAmount(text));
+            if (acceptsRupiahText(text)) setAmountText(groupedRupiah(text));
           }}
           keyboardType="number-pad"
           selectTextOnFocus
@@ -1286,9 +1287,3 @@ const styles = StyleSheet.create({
   feeLabel: { ...type.caption, color: color.textMuted },
   feeAction: { marginLeft: 'auto', marginRight: -space.sm, marginVertical: -space.md },
 });
-
-/** Typed rupiah shown with thousands dots as it is typed, like the intake prices ("650.000"). */
-function groupedAmount(text: string): string {
-  const digits = text.replace(/\D/g, '');
-  return digits === '' ? '' : formatNumber(Number(digits));
-}

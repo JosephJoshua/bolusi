@@ -225,7 +225,7 @@ describe('Settings on the PC', () => {
     renderApp();
     await openSettings('devices');
     const error = await screen.findByTestId('desktop.settings.devices.error');
-    expect(error.textContent).toContain('Butuh internet');
+    expect(error.textContent).toContain('Perlu internet');
   });
 
   it('counts the locked colleagues beside "PIN karyawan"', async () => {
@@ -304,7 +304,7 @@ describe('Settings on the PC', () => {
 
     fireEvent.click(byTestId(`desktop.settings.staffPins.unlock.${TECH.id}`));
     fireEvent.click(await screen.findByTestId('desktop.settings.staffPins.unlockConfirm.confirm'));
-    await screen.findByText('Budi Santoso sudah bisa masuk lagi.');
+    await screen.findByText('Budi Santoso sudah dapat masuk kembali.');
     expect(callsTo('session.clearLockout')).toEqual([[OWNER.id, TECH.id]]);
 
     fireEvent.click(byTestId(`desktop.settings.staffPins.reset.${TECH.id}`));
@@ -347,10 +347,10 @@ describe('Settings on the PC', () => {
 
     // Nothing is sent before the form is right.
     fireEvent.click(byTestId('desktop.staff.add.save'));
-    expect(dialog.textContent).toContain('Tulis namanya dulu.');
+    expect(dialog.textContent).toContain('Tulis nama terlebih dahulu.');
     fireEvent.change(byTestId('desktop.staff.add.name'), { target: { value: 'Maria Kambu' } });
     fireEvent.click(byTestId('desktop.staff.add.save'));
-    expect(dialog.textContent).toContain('Pilih tugasnya dulu.');
+    expect(dialog.textContent).toContain('Pilih jabatan terlebih dahulu.');
     expect(callsTo('staff.create')).toEqual([]);
 
     fireEvent.click(within(byTestId('desktop.staff.add.role.cashier')).getByRole('checkbox'));
@@ -439,7 +439,7 @@ describe('Settings on the PC', () => {
     // A blank name is not sent.
     fireEvent.change(field, { target: { value: '   ' } });
     fireEvent.click(byTestId('desktop.rename.save'));
-    expect(byTestId('desktop.rename').textContent).toContain('Isi namanya dulu');
+    expect(byTestId('desktop.rename').textContent).toContain('Isi nama terlebih dahulu');
     expect(callsTo('device.rename')).toEqual([]);
 
     fireEvent.change(field, { target: { value: ' Kasir depan ' } });
@@ -557,7 +557,7 @@ describe('Settings on the PC', () => {
     const name = await screen.findByTestId('desktop.roles.add.name');
     fireEvent.change(name, { target: { value: 'kasir' } });
     fireEvent.click(byTestId('desktop.roles.add.save'));
-    await screen.findByText('Nama ini sudah dipakai tugas lain.');
+    await screen.findByText('Nama ini sudah dipakai jabatan lain.');
     expect(callsTo('staff.createRole')).toEqual([]);
 
     fireEvent.change(name, { target: { value: '  Kasir pagi ' } });
@@ -631,7 +631,7 @@ describe('repair settings on the PC', () => {
 
     // An empty new row is pointed out, not saved.
     fireEvent.click(byTestId('repair.desk.options.accessories.save'));
-    await screen.findByText('Isi namanya dulu.');
+    await screen.findByText('Isi nama terlebih dahulu.');
     expect(callsTo('repair.run')).toEqual([]);
 
     fireEvent.change(added, { target: { value: 'Tali gantungan' } });

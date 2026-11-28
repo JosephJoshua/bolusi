@@ -1,5 +1,5 @@
 // Typing money in whole rupiah, shared by every module's amount fields.
-import { formatMoney } from '@bolusi/i18n';
+import { formatMoney, formatNumber } from '@bolusi/i18n';
 
 /**
  * Whole rupiah from what was typed ("650.000", "Rp 650000"); null when there are no digits or the
@@ -21,4 +21,10 @@ export function acceptsRupiahText(text: string, max: number): boolean {
 export function rupiahFieldText(digits: string, max: number): string {
   const amount = parseRupiah(digits, max);
   return amount === null ? '' : formatMoney(amount);
+}
+
+/** What was typed, with thousands dots as it is typed ("650.000"); empty stays empty. */
+export function groupedRupiah(text: string): string {
+  const digits = text.replace(/\D/g, '');
+  return digits === '' ? '' : formatNumber(Number(digits));
 }

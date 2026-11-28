@@ -61,7 +61,7 @@ test('a new category needs a format that names only its fields', async ({ page }
   await page.mouse.wheel(0, -5000);
   await tap(page, 'inventory.categoryForm.primary');
   await expect(
-    page.getByText('Format menyebut isian yang tidak ada: Warna.').first(),
+    page.getByText('Format menyebut kolom yang tidak ada: Warna.').first(),
   ).toBeVisible();
   await expect(async () => {
     const field = await page.getByTestId('inventory.categoryForm.format').first().boundingBox();

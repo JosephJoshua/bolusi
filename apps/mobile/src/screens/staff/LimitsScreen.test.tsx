@@ -148,7 +148,7 @@ test('several limited roles: a list first, each with its amounts', async () => {
   expect(list).toContain(t('role.manager.name'));
   expect(list).toContain(
     // Breaks only between amounts, never inside one.
-    'Diskon\u00a0Rp\u00a050.000 · Refund\u00a0Rp\u00a00 · Bayar\u00a0nanti\u00a0Rp\u00a0100.000',
+    'Diskon\u00a0Rp\u00a050.000 · Pengembalian\u00a0dana\u00a0Rp\u00a00 · Bayar\u00a0nanti\u00a0Rp\u00a0100.000',
   );
   press('limits-role-manager');
   expect(screen.query('limits-form-manager')).not.toBeNull();

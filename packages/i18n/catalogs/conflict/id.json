@@ -1,10 +1,10 @@
 {
   "list": {
-    "banner": "{count} data bentrok butuh keputusan",
+    "banner": "{count} data bentrok perlu diputuskan",
     "title": "Data Bentrok"
   },
   "status": {
-    "surfaced": "Butuh keputusan",
+    "surfaced": "Perlu diputuskan",
     "autoResolved": "Digabung otomatis",
     "acknowledged": "Sudah diputuskan"
   },
@@ -15,7 +15,7 @@
     "decide": "Putuskan"
   },
   "decision": {
-    "saved": "Keputusan tersimpan"
+    "saved": "Keputusan disimpan"
   },
   "autoResolved": {
     "toast": "Dua perubahan digabung otomatis"
