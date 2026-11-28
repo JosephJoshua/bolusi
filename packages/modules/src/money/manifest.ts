@@ -25,6 +25,8 @@ import {
   saveCentralAccountInput,
   voidPaymentHandler,
   voidPaymentInput,
+  checkPaymentHandler,
+  checkPaymentInput,
   voidCashMoveHandler,
   voidCashMoveInput,
 } from './commands.js';
@@ -38,6 +40,7 @@ import {
   moneyEntriesQuery,
   createOpenBalancesQuery,
   paymentAccountsQuery,
+  paymentChecksQuery,
 } from './queries.js';
 import { MONEY_REFUSALS } from './rules.js';
 import type { MoneyDatabase } from './schema.js';
@@ -85,6 +88,14 @@ function moneyManifest(sources: MoneyDocumentSources) {
         decision: true,
         description: 'Can cancel a payment that was recorded by mistake.',
         limit: 'refund',
+      },
+      [MONEY_PERMISSION.checkPayments]: {
+        scope: 'store',
+        // Whoever ticks payments off decides which missing ones get noticed.
+        isDangerous: true,
+        decision: true,
+        description:
+          'Can tick transfer, QRIS and card payments off against the bank statement, or flag one as missing.',
       },
       [MONEY_PERMISSION.moveCash]: {
         scope: 'store',
@@ -147,6 +158,11 @@ function moneyManifest(sources: MoneyDocumentSources) {
         input: voidPaymentInput,
         handler: voidPaymentHandler,
       },
+      checkPayment: {
+        permission: MONEY_PERMISSION.checkPayments,
+        input: checkPaymentInput,
+        handler: checkPaymentHandler,
+      },
       refund: {
         permission: MONEY_PERMISSION.receive,
         input: refundInput,
@@ -184,6 +200,7 @@ function moneyManifest(sources: MoneyDocumentSources) {
       documentMoney: documentMoneyQuery,
       cashDrawer: cashDrawerQuery,
       moneyEntries: moneyEntriesQuery,
+      paymentChecks: paymentChecksQuery,
       openBalances: createOpenBalancesQuery(sources),
       voidCount: createVoidCountQuery(sources),
     },

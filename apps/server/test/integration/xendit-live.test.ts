@@ -124,6 +124,7 @@ describe.skipIf(!LIVE)('the server’s QRIS flow over Xendit test mode', () => {
     expect(ops[0]!.payload).toMatchObject({
       amount: 15_000,
       reference: expect.stringMatching(/^test:/),
+      provider: 'xendit',
     });
   }, 120_000);
 

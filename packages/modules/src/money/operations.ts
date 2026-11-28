@@ -12,6 +12,7 @@ import {
   accountSavedApplier,
   cashMoveVoidedApplier,
   entryRecordedApplier,
+  paymentCheckedApplier,
   paymentVoidedApplier,
 } from './applier.js';
 import {
@@ -25,6 +26,8 @@ import {
   MONEY_OP,
   MONEY_PERMISSION,
   PAYMENT_ACCOUNT_KINDS,
+  PAYMENT_CHECK_OUTCOMES,
+  PAYMENT_PROVIDERS,
   REVENUE_ACCOUNTS,
 } from './constants.js';
 import { zDocument, type MoneyDocument, type MoneyDocumentSources } from './documents.js';
@@ -74,8 +77,15 @@ export const paymentReceivedPayload = z
     tendered: zMoneyIdr.min(1).max(MAX_AMOUNT).nullable(),
     /** The payment this one is recorded in place of (a corrected DP), voided right after it. */
     replaces: zUuid.optional(),
+    /**
+     * Confirmed by its provider: only the server records these (qris/service.ts), signed by the
+     * tenant's system device. A device's payment naming one is refused (rules.ts).
+     */
+    provider: z.enum(PAYMENT_PROVIDERS).optional(),
   })
   .strict();
+
+export const paymentCheckedPayload = z.object({ outcome: z.enum(PAYMENT_CHECK_OUTCOMES) }).strict();
 
 export const paymentVoidedPayload = z.object({ reason: zReason }).strict();
 
@@ -190,6 +200,16 @@ export function createMoneyOperations(
       apply: paymentVoidedApplier,
       rule: rules.paymentVoidedRule,
       permission: MONEY_PERMISSION.voidPayment,
+      read: MONEY_PERMISSION.read,
+      entityType: MONEY_ENTRY_ENTITY,
+    },
+    [MONEY_OP.paymentChecked]: {
+      schemaVersion: 1,
+      payload: paymentCheckedPayload,
+      reversal: 'Checked again with the other outcome.',
+      apply: paymentCheckedApplier,
+      rule: rules.paymentCheckedRule,
+      permission: MONEY_PERMISSION.checkPayments,
       read: MONEY_PERMISSION.read,
       entityType: MONEY_ENTRY_ENTITY,
     },

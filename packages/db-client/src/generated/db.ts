@@ -268,6 +268,9 @@ export interface MoneyAccounts {
 export interface MoneyEntries {
   account: string | null;
   amount: number;
+  checkedAt: number | null;
+  checkedBy: string | null;
+  checkedOutcome: string | null;
   createdAt: number;
   createdBy: string;
   documentId: string | null;
@@ -275,6 +278,7 @@ export interface MoneyEntries {
   documentLabel: string | null;
   id: string | null;
   kind: string;
+  provider: string | null;
   reason: string | null;
   reference: string | null;
   relatedEntryId: string | null;

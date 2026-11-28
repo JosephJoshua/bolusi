@@ -220,19 +220,22 @@ describe('recording the payment', () => {
         // A test-mode payment says so.
         reference: 'test:qrpy_qr_1',
         tendered: null,
+        // Xendit confirmed it: the owner's statement check skips it.
+        provider: 'xendit',
       },
     });
     expect(verifyOp(op, world.systemPublicKey, serverCryptoPort)).toBe(true);
 
     const entry = await world.h.idb.db
       .selectFrom('moneyEntries')
-      .select(['kind', 'amount', 'documentId'])
+      .select(['kind', 'amount', 'documentId', 'provider'])
       .where('id', '=', chargeId)
       .executeTakeFirstOrThrow();
     expect(entry).toEqual({
       kind: 'payment_received',
       amount: '150000',
       documentId: world.ticketId,
+      provider: 'xendit',
     });
     expect(world.h.pokes).toContainEqual({ tenantId: world.tenantId, storeId: world.storeId });
 

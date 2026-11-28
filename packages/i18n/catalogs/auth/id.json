@@ -414,6 +414,8 @@
       "moneyRefundHint": "Mengembalikan uang ke pelanggan",
       "moneyVoid": "Batalkan pembayaran",
       "moneyVoidHint": "Membatalkan pembayaran yang salah dicatat",
+      "moneyCheck": "Cocokkan mutasi",
+      "moneyCheckHint": "Menandai pembayaran transfer, QRIS, dan EDC yang ada di mutasi bank",
       "moneyCredit": "Bayar nanti",
       "moneyCreditHint": "Menyerahkan HP sebelum lunas",
       "moneyAdjust": "Sesuaikan selisih kas",

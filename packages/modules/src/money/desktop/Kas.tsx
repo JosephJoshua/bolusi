@@ -50,6 +50,7 @@ import { approvalByLine } from '../../approvals/copy.js';
 import type { CashCountRow, MoneyEntryRow, PaymentAccountRow } from '../queries.js';
 import { targetOf, type MoneyTarget } from '../kas.js';
 import { useMoneyRuntime } from '../runtime.js';
+import { checksCount, useMayCheckPayments, usePaymentChecks } from '../payment-checks.js';
 
 import {
   CountCashDialog,
@@ -59,8 +60,9 @@ import {
   SettleCountDialog,
   VoidPaymentDialog,
 } from './KasDialogs.js';
+import { PaymentChecks } from './PaymentChecks.js';
 
-type KasTab = 'today' | 'history';
+type KasTab = 'today' | 'history' | 'checks';
 
 type Task =
   | { readonly kind: 'count' }
@@ -104,6 +106,10 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
   const turnedDown = turnedDownLines(asks, dayStart(now()), about).filter(
     (line) => !seen.has(line.id),
   );
+  // An owner's Cocokkan mutasi, with how many still wait on its tab.
+  const mayCheck = useMayCheckPayments();
+  const checks = usePaymentChecks(1, 0);
+  const toCheck = checks.status === 'ready' ? checksCount(checks.data) : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="money.desk.kas">
@@ -160,6 +166,15 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
             items={[
               { value: 'today', label: tm('money.history.today') },
               { value: 'history', label: tm('money.history.open') },
+              ...(mayCheck
+                ? [
+                    {
+                      value: 'checks' as const,
+                      label: tm('money.checks.title'),
+                      ...(toCheck === null || toCheck.open === 0 ? {} : { count: toCheck.open }),
+                    },
+                  ]
+                : []),
             ]}
             value={tab}
             onChange={setTab}
@@ -168,7 +183,9 @@ export function KasPage({ now }: KasPageProps): React.JSX.Element {
           />
         </div>
       ) : null}
-      {tab === 'history' && may.read ? (
+      {tab === 'checks' && mayCheck ? (
+        <PaymentChecks />
+      ) : tab === 'history' && may.read ? (
         <History
           now={now}
           day={historyDay}

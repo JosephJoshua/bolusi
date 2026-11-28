@@ -30,6 +30,7 @@ import { useKasDay } from '../kas-day.js';
 import type { CashCountRow } from '../queries.js';
 import { useMoneyRuntime } from '../runtime.js';
 import { useAskedAbout, useVoidRequests } from '../void-ask.js';
+import { checksCount, usePaymentChecks } from '../payment-checks.js';
 import { approvalKindKey, ta } from '../../approvals/i18n.js';
 
 export interface KasBoardProps {
@@ -43,6 +44,8 @@ export interface KasBoardProps {
   readonly onRefund: (balance: NamedBalance) => void;
   /** The day's records; absent for someone who cannot read the store's money. */
   readonly onHistory?: (() => void) | undefined;
+  /** Non-cash payments to tick off against the statement (owners). */
+  readonly onChecks?: (() => void) | undefined;
   /** Said at the top once something was asked of an owner from here; pressing it clears it. */
   readonly notice?: string | null | undefined;
   readonly onClearNotice?: (() => void) | undefined;
@@ -59,6 +62,7 @@ export function KasBoard({
   onReceive,
   onRefund,
   onHistory,
+  onChecks,
   notice,
   onClearNotice,
   testID = 'money.kas',
@@ -82,6 +86,9 @@ export function KasBoard({
   const since = dayStart(now());
   const turnedDown = useVoidRequests().turnedDown.filter((row) => (row.decidedAt ?? 0) >= since);
   const about = useAskedAbout(turnedDown);
+  // Payments an owner still has to find on the statement: said only while some wait.
+  const checks = usePaymentChecks(1, 0);
+  const toCheck = checks.status === 'ready' ? checksCount(checks.data) : null;
   // Today's takings, what moved and what is owed sit beside the drawer. A blind count shows none
   // of the takings, and on a quiet day nothing else may be there: the drawer then keeps one
   // readable column instead of a wide half-empty page.
@@ -186,6 +193,24 @@ export function KasBoard({
                     testID={`${testID}.turnedDown.${row.id}`}
                   />
                 ))}
+              </Section>
+            )}
+
+            {toCheck === null || toCheck.open === 0 || onChecks === undefined ? null : (
+              <Section title={tm('money.checks.title')} testID={`${testID}.checks`}>
+                <AmountRow
+                  label={tm('money.checks.summary', {
+                    count: `${String(toCheck.open)}${toCheck.more ? '+' : ''}`,
+                  })}
+                  detail={
+                    toCheck.missing === 0
+                      ? undefined
+                      : tm('money.checks.missingCount', { count: String(toCheck.missing) })
+                  }
+                  value=""
+                  onPress={onChecks}
+                  testID={`${testID}.checks.open`}
+                />
               </Section>
             )}
 

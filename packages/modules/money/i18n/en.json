@@ -10,7 +10,8 @@
     "cashMoved": "Cash in/out",
     "cashCounted": "Cash counted",
     "cashAdjusted": "Cash difference settled",
-    "cashMoveVoided": "Cash record cancelled"
+    "cashMoveVoided": "Cash record cancelled",
+    "paymentChecked": "Payment checked"
   },
   "refusal": {
     "alreadyRecorded": "This record already exists.",
@@ -38,7 +39,10 @@
     "overLimit": "Over your limit. Ask a store owner.",
     "moveAboveDrawer": "Not enough cash in the drawer.",
     "cashMoveNotFound": "This cash record isn’t in this store.",
-    "laterCountSettled": "A later drawer count was already settled, so this record can’t be cancelled any more."
+    "laterCountSettled": "A later drawer count was already settled, so this record can’t be cancelled any more.",
+    "providerConfirmed": "Payments a provider confirmed are recorded only by the server.",
+    "notCheckable": "This payment needs no check against the statement.",
+    "alreadyChecked": "This payment is already marked that way."
   },
   "method": {
     "cash": "Cash"
@@ -319,5 +323,23 @@
     },
     "rejected": "{name} turned down taking {amount} off the bill.",
     "rejectedNote": "{name} turned down taking {amount} off the bill: {note}"
+  },
+  "checks": {
+    "title": "Check statement",
+    "summary": "{count} payments to check",
+    "missingCount": "{count} not on the statement",
+    "matched": "Found",
+    "notFound": "Not on statement",
+    "missing": "Not on the statement",
+    "missingBy": "Not on the statement, flagged by {name}",
+    "takenBy": "Taken by {name}",
+    "none": "Every non-cash payment is checked.",
+    "hint": "Compare with the bank statement or EDC report.",
+    "answerLabel": "{answer}: {method} {amount}, {time}",
+    "col": {
+      "payment": "Payment",
+      "status": "Status"
+    },
+    "open": "To check"
   }
 }

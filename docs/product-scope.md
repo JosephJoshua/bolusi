@@ -357,6 +357,11 @@ book for repairs and starts the store's money ledger.
   the franchise) opens its own Xendit account. Manual QRIS stays available.
   Connected QRIS is the default method; while its QR is unpaid nothing else is
   taken until the counter cancels it (agreed 2026-11-25).
+- **Cocokkan mutasi:** transfer, manual QRIS and EDC payments are a staff claim
+  until an owner (or whom they give it to) ticks each off against the bank
+  statement: "Cocok", or "Tidak ada di mutasi", which keeps it listed, flagged
+  with who took it, until found or cancelled. Xendit-confirmed payments skip
+  the list; only the server can mark a payment provider-confirmed.
 - **Refunds are owners':** the counter gives back only what a customer paid
   beyond their bill, through the method they paid with (a cancelled servisan's
   DP less its fee, an overpayment). Anything more, a lower bill or a cancelled
@@ -664,10 +669,8 @@ carbonless forms, a 60 s 720p ownership video at intake. Still open (2026-11-25)
 - **Rest of parts and purchasing:** supplier bills and payments, transfers
   between stores and supplier returns follow part costs. The October 14-17 notes
   in "Decision" are the starting point; confirm the boundary before building.
-- **Security leftovers:** remote wipe when a device is blocked, reconciling
-  non-cash accounts (a recorded QRIS or transfer is a staff claim), clearing
-  media uploads that never finished.
-- **QRIS:** a QR shown but abandoned, then paid in cash, warns but does not block.
+- **Security leftovers:** remote wipe when a device is blocked, clearing media
+  uploads that never finished.
 - **Going live:** server hosting and domain, Windows installer signing, phone
   release accounts (Play, Apple) and a pilot store on real phones.
 
