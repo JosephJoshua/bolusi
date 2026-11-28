@@ -222,7 +222,7 @@
     "saved": "Kategori disimpan.",
     "savedRenamed": "Kategori disimpan. Nama {count} barang ikut diperbarui.",
     "archivedNotice": "Kategori diarsipkan.",
-    "restoredNotice": "Kategori aktif lagi.",
+    "restoredNotice": "Kategori aktif kembali.",
     "archive": "Arsipkan kategori",
     "archiveTitle": "Arsipkan kategori ini?",
     "archiveMessage": "Barang tetap ada, tetapi kategori ini tidak dapat dipilih lagi.",

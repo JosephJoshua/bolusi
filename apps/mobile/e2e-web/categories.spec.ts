@@ -83,5 +83,5 @@ test('archiving and restoring a category say so', async ({ page }) => {
   await expect(page.getByText('Kategori diarsipkan.').first()).toBeVisible();
   await tap(page, 'inventory.categories.row.cat-bat');
   await tap(page, 'inventory.categoryForm.restore');
-  await expect(page.getByText('Kategori aktif lagi.').first()).toBeVisible();
+  await expect(page.getByText('Kategori aktif kembali.').first()).toBeVisible();
 });
