@@ -138,7 +138,7 @@ for (const [width, height] of [
     await check(`bill-paid-part-${size}`);
     await page.getByTestId('purchasing.desk.bill.pay').click();
     await expect(page.getByTestId('purchasing.desk.pay')).toBeVisible();
-    await page.getByTestId('purchasing.desk.pay.source.bank').click();
+    await page.getByTestId('purchasing.desk.pay').getByText('BCA Toko').click();
     await check(`pay-${size}`);
     await page.keyboard.press('Escape');
   });

@@ -5,7 +5,7 @@
  * VoidPaymentStep — cancel a payment recorded by mistake, with the reason. It stays in the history.
  */
 import { formatDate, formatMoney, keepCodeWhole } from '@bolusi/i18n';
-import { color, space, Text, TextInput, ToggleChip, type } from '@bolusi/ui';
+import { color, space, Text, TextInput, SegmentedControl, type } from '@bolusi/ui';
 import { StyleSheet, View } from 'react-native';
 
 import type { DiscardGuard } from '../../screen-kit/index.js';
@@ -112,17 +112,16 @@ export function PayStep({
         testID={`${testID}.sources`}
       >
         {(sources) => (
-          <View style={styles.sources} accessibilityRole="radiogroup" testID={`${testID}.sources`}>
-            {sources.map((source) => (
-              <ToggleChip
-                key={source.source}
-                label={sourceLabel(source)}
-                selected={draft.source === source.source}
-                onToggle={() => setDraft({ ...draft, source: source.source })}
-                testID={`${testID}.source.${source.kind}`}
-              />
-            ))}
-          </View>
+          <SegmentedControl
+            options={sources.map((source) => ({
+              value: source.source,
+              label: sourceLabel(source),
+            }))}
+            value={draft.source}
+            onChange={(source) => setDraft({ ...draft, source })}
+            wrap
+            testID={`${testID}.source`}
+          />
         )}
       </QueryView>
 
@@ -210,6 +209,4 @@ const styles = StyleSheet.create({
   warning: { ...type.bodySm, color: color.warning, marginTop: space.xs },
   hint: { marginTop: space.md },
   field: { marginTop: space.lg },
-  // Wrapped, not scrolled: each source reads whole, the owner's own money too.
-  sources: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
 });

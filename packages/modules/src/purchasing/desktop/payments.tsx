@@ -2,7 +2,7 @@
 // bill or cancel a payment made by mistake. The form's state and checks are the phone's
 // (`pay.tsx`).
 import { formatDate, formatMoney, keepCodeWhole } from '@bolusi/i18n';
-import { Button, Section, TextArea, TextField, ToggleChip } from '@bolusi/ui-web';
+import { Button, Section, Segmented, TextArea, TextField } from '@bolusi/ui-web';
 import { QueryPanel, TaskDialog } from '../../screen-kit/desktop/index.js';
 import { MAX_PAYMENT, MAX_PAYMENT_REFERENCE, MAX_PURCHASING_NOTE } from '../constants.js';
 import { tp } from '../i18n.js';
@@ -137,21 +137,20 @@ export function PayDialog({
           </p>
         ) : null}
       </div>
-      <div role="group" aria-label={tp('purchasing.pay.source')}>
+      <div>
         <p className="mb-2 text-small font-semibold text-text">{tp('purchasing.pay.source')}</p>
         <QueryPanel query={form.sources} onRetry={form.retrySources}>
           {(rows) => (
-            <div className="flex flex-wrap gap-2">
-              {rows.map((source) => (
-                <ToggleChip
-                  key={source.source}
-                  label={sourceLabel(source)}
-                  selected={draft.source === source.source}
-                  onToggle={() => setDraft({ ...draft, source: source.source })}
-                  testId={`${testId}.source.${source.kind}`}
-                />
-              ))}
-            </div>
+            <Segmented
+              label={tp('purchasing.pay.source')}
+              options={rows.map((source) => ({
+                value: source.source,
+                label: sourceLabel(source),
+              }))}
+              value={draft.source}
+              onChange={(source) => setDraft({ ...draft, source })}
+              testId={`${testId}.source`}
+            />
           )}
         </QueryPanel>
       </div>

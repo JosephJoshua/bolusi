@@ -178,7 +178,7 @@ describe('supplier bills on the PC', () => {
     fireEvent.change(amount, { target: { value: '540000' } });
     expect(screen.queryByTestId('purchasing.desk.pay.above')).toBeNull();
     // A transfer takes its reference; the drawer does not.
-    fireEvent.click(await screen.findByTestId('purchasing.desk.pay.source.bank'));
+    fireEvent.click(await within(byTestId('purchasing.desk.pay')).findByText('BCA Toko'));
     expect(byTestId('purchasing.desk.pay.reference')).toBeTruthy();
     fireEvent.click(byTestId('purchasing.desk.pay.source.cash'));
     expect(screen.queryByTestId('purchasing.desk.pay.reference')).toBeNull();

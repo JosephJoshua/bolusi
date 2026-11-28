@@ -119,7 +119,7 @@ test('paying what is left on an overdue bill, then cancelling that payment', asy
   await expect(amount).toHaveValue('540.000');
   await amount.fill('600000');
   await expect(page.getByTestId('purchasing.pay.above')).toBeVisible();
-  await tap(page, 'purchasing.pay.source.bank');
+  await page.getByTestId('purchasing.pay.source').getByText('BCA Toko').click();
   await expect(page.getByTestId('purchasing.pay.reference').first()).toBeVisible();
   await shoot(page, '11-pay-above-bank');
   await amount.fill('540000');
