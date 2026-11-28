@@ -490,10 +490,10 @@ describe('a manager’s refund limit, as the step says it', () => {
   test('is not said while only the overpayment goes back, which no limit holds', () => {
     expect(refundLimitText({ ...form, digits: '100000' })).toBeNull();
     expect(refundLimitText({ ...form, digits: '120000' })).toBe(
-      `Batas pengembalianmu ${formatMoney(30_000)}.`,
+      `Batas pengembalian Anda ${formatMoney(30_000)}.`,
     );
     expect(refundLimitText({ ...form, credit: 0, digits: '' })).toBe(
-      `Batas pengembalianmu ${formatMoney(30_000)}.`,
+      `Batas pengembalian Anda ${formatMoney(30_000)}.`,
     );
   });
 });

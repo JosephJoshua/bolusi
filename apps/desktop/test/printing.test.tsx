@@ -205,7 +205,7 @@ describe('printing on the counter PC', () => {
     renderApp();
     await screen.findByText('Yohanis Wenda');
     await openPrintFor('Ester Mandowen');
-    expect((await screen.findByRole('alert')).textContent).toBe('Pilih printernya dulu.');
+    expect((await screen.findByRole('alert')).textContent).toBe('Pilih printer terlebih dahulu.');
     expect(byTestId('repair.desk.print.submit').hasAttribute('disabled')).toBe(true);
     // Picked right in the dialog, and kept for this computer, as in Settings.
     fireEvent.click(
@@ -223,7 +223,7 @@ describe('printing on the counter PC', () => {
     await screen.findByText('Yohanis Wenda');
     await openPrintFor('Ester Mandowen');
     expect((await screen.findByRole('alert')).textContent).toBe(
-      'Belum ada printer di komputer ini. Pasang printernya di Windows dulu, lalu cari lagi.',
+      'Belum ada printer di komputer ini. Pasang printer di Windows, lalu cari kembali.',
     );
     expect(screen.queryByTestId('repair.desk.print.printers')).toBeNull();
     expect(byTestId('repair.desk.print.submit').hasAttribute('disabled')).toBe(true);
@@ -239,7 +239,7 @@ describe('printing on the counter PC', () => {
     await screen.findByText('Yohanis Wenda');
     await openPrintFor('Ester Mandowen');
     fireEvent.click(byTestId('repair.desk.print.submit'));
-    expect((await screen.findByRole('alert')).textContent).toContain('Printernya tidak ditemukan');
+    expect((await screen.findByRole('alert')).textContent).toContain('Printer tidak ditemukan');
     // Still open, and the next try is not a reprint.
     expect(byTestId('repair.desk.print.about').textContent).not.toContain('Sudah dicetak');
   });
@@ -248,8 +248,8 @@ describe('printing on the counter PC', () => {
     setBridge(fakePrinters({ chosen: 'EPSON LX-300', installed: ['EPSON LX-310'] }));
     renderApp();
     await openSettings();
-    expect((await screen.findByText(/tidak terpasang lagi/)).textContent).toBe(
-      'EPSON LX-300 tidak terpasang lagi di komputer ini. Pilih printer lain.',
+    expect((await screen.findByText(/tidak lagi terpasang/)).textContent).toBe(
+      'EPSON LX-300 tidak lagi terpasang di komputer ini. Pilih printer lain.',
     );
     expect(byTestId('repair.desk.printing.test').hasAttribute('disabled')).toBe(true);
   });
@@ -315,7 +315,7 @@ describe('updates', () => {
     // Installing restarts the app, so the notice opens a menu rather than installing on a click.
     fireEvent.pointerDown(notice, { button: 0, pointerType: 'mouse' });
     expect(updates.install).not.toHaveBeenCalled();
-    expect(screen.getByText('Terpasang sendiri saat aplikasi ditutup.')).toBeTruthy();
+    expect(screen.getByText('Akan dipasang otomatis saat aplikasi ditutup.')).toBeTruthy();
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Pasang sekarang' }));
     expect(updates.install).toHaveBeenCalledTimes(1);
     await openSettings();

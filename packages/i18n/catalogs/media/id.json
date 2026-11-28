@@ -1,31 +1,31 @@
 {
   "status": {
-    "pending": "Belum tersinkron",
+    "pending": "Belum disinkronkan",
     "uploading": "Mengirim foto…",
-    "uploaded": "Foto tersinkron",
-    "failed": "Gagal mengirim. Ketuk untuk coba lagi.",
+    "uploaded": "Foto disinkronkan",
+    "failed": "Gagal mengirim. Ketuk untuk mencoba lagi.",
     "waitingForConnection": "Menunggu koneksi"
   },
   "action": {
     "takePhoto": "Ambil foto",
     "retake": "Foto ulang",
-    "usePhoto": "Pakai foto ini",
+    "usePhoto": "Gunakan foto ini",
     "retryUpload": "Kirim ulang"
   },
   "permission": {
-    "camera": "Izinkan aplikasi memakai kamera untuk ambil foto.",
+    "camera": "Izinkan aplikasi menggunakan kamera untuk mengambil foto.",
     "cameraDeniedTitle": "Kamera belum diizinkan",
-    "cameraDeniedBody": "Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera.",
+    "cameraDeniedBody": "Buka Pengaturan HP, pilih aplikasi ini, lalu aktifkan izin Kamera.",
     "videoDeniedTitle": "Kamera atau mikrofon belum diizinkan",
-    "videoDeniedBody": "Buka Pengaturan HP, cari aplikasi ini, lalu nyalakan izin Kamera dan Mikrofon."
+    "videoDeniedBody": "Buka Pengaturan HP, pilih aplikasi ini, lalu aktifkan izin Kamera dan Mikrofon."
   },
   "storage": {
-    "lowWarning": "Penyimpanan mulai menipis. Foto lama yang sudah tersinkron akan dibersihkan.",
-    "lowCritical": "Penyimpanan hampir habis. Semua foto yang sudah tersinkron dibersihkan sekarang. Foto yang belum tersinkron tetap aman."
+    "lowWarning": "Penyimpanan hampir penuh. Foto lama yang sudah disinkronkan akan dihapus dari HP ini.",
+    "lowCritical": "Penyimpanan hampir habis. Foto yang sudah disinkronkan dihapus dari HP ini; foto lainnya tetap aman."
   },
   "capture": {
     "refusedTitle": "Penyimpanan penuh",
-    "refusedBody": "Tidak bisa ambil foto karena penyimpanan hampir habis. Kosongkan ruang dulu, lalu coba lagi."
+    "refusedBody": "Penyimpanan hampir habis. Kosongkan ruang terlebih dahulu, lalu coba lagi."
   },
   "upload": {
     "persistentFailure": "{count} foto belum sampai ke server."
@@ -38,11 +38,11 @@
     "start": "Mulai rekam",
     "stop": "Selesai rekam",
     "retake": "Rekam ulang",
-    "use": "Pakai video ini",
+    "use": "Gunakan video ini",
     "time": "{elapsed} / {max}",
-    "refusedBody": "Tidak bisa merekam karena penyimpanan hampir habis. Kosongkan ruang dulu, lalu coba lagi.",
+    "refusedBody": "Penyimpanan hampir habis. Kosongkan ruang terlebih dahulu, lalu coba lagi.",
     "unavailableTitle": "Video belum ada di HP ini",
-    "unavailableBody": "Videonya belum tersinkron dari HP yang merekam. Coba lagi nanti.",
-    "tooLarge": "Videonya terlalu besar. Rekam lebih singkat."
+    "unavailableBody": "Video belum disinkronkan dari HP yang merekamnya. Coba lagi nanti.",
+    "tooLarge": "Video terlalu besar. Rekam lebih singkat."
   }
 }
