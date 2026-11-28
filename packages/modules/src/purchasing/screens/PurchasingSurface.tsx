@@ -18,7 +18,7 @@ import {
 import type { PlaceHeader, ScreenChrome } from '../../screen-kit/screens/views.js';
 import { tp, type PurchasingKey } from '../i18n.js';
 import { EMPTY_ORDER, addLine, draftChanged, draftOf, type OrderDraft } from '../order-form.js';
-import type { OrderDetailRow, ReceiptCostRow, SupplierRow } from '../queries.js';
+import type { OrderDetailRow, OrderFilter, ReceiptCostRow, SupplierRow } from '../queries.js';
 import {
   EMPTY_BILL,
   addBillLine,
