@@ -25,6 +25,7 @@ import {
   type TimerPort,
 } from '@bolusi/core';
 import { closeClientDb } from '@bolusi/db-client';
+import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
 import {
   mulberry32,
   noblePort,
@@ -46,6 +47,19 @@ import { render, fire, waitUntil, type RenderResult } from '../../../packages/ui
 import { ensureNotesCatalog } from './notes-support.js';
 
 export { closeClientDb, buildPinVerifier, NOTES_PERMISSIONS };
+
+/**
+ * The repair work of the counter: everything but the owners' decisions (a discount, a cancel, a
+ * down payment fixed), whose holders open on Perlu dicek instead of Servisan.
+ */
+export const COUNTER_REPAIR_PERMISSIONS: readonly string[] = Object.values(
+  REPAIR_PERMISSION,
+).filter(
+  (id) =>
+    id !== REPAIR_PERMISSION.discount &&
+    id !== REPAIR_PERMISSION.cancel &&
+    id !== REPAIR_PERMISSION.correctDownPayment,
+);
 export type { Bootstrapped };
 
 /** The PIN the seeded verifier is built from. Six digits (api/02-auth §6.1). */
@@ -216,12 +230,12 @@ function verifierFor(
   );
 }
 
-/** An `active` directory user holding one store-scoped role, with a real verifier. */
+/** An `active` directory user holding one role, with a real verifier; a null store grants it business-wide. */
 function activeUser(
   id: string,
   name: string,
   roleId: string,
-  storeId: string,
+  storeId: string | null,
   pinVerifier: Awaited<ReturnType<typeof buildPinVerifier>>,
 ): DeviceBundle['users'][number] {
   return {
@@ -239,11 +253,12 @@ function storeRole(
   id: string,
   name: string,
   permissionIds: readonly string[],
+  scopeType: 'store' | 'tenant' = 'store',
 ): DeviceBundle['rolesSnapshot'][number] {
   return {
     id,
     name,
-    scopeType: 'store',
+    scopeType,
     isSystemDefault: false,
     permissionIds: [...permissionIds],
   };
@@ -298,6 +313,8 @@ export async function seedTwoUsers(
   fixture: Fixture,
   idleLockSeconds: number = IDLE_LOCK_DEFAULT_SECONDS,
   permissions: readonly string[] = NOTES_PERMISSIONS,
+  /** A business-wide role, for permissions held across every store (category setup). */
+  scope: 'store' | 'tenant' = 'store',
 ): Promise<void> {
   const [verifierA, verifierB] = await Promise.all([
     verifierFor(fixture, 1, 1),
@@ -307,10 +324,16 @@ export async function seedTwoUsers(
     fixture,
     {
       users: [
-        activeUser(fixture.userId, 'Andi Pratama', ROLE_ID, fixture.storeId, verifierA),
+        activeUser(
+          fixture.userId,
+          'Andi Pratama',
+          ROLE_ID,
+          scope === 'tenant' ? null : fixture.storeId,
+          verifierA,
+        ),
         activeUser(SECOND_USER_ID, 'Budi Santoso', ROLE_ID, fixture.storeId, verifierB),
       ],
-      roles: [storeRole(ROLE_ID, 'Notes', permissions)],
+      roles: [storeRole(ROLE_ID, 'Notes', permissions, scope)],
     },
     idleLockSeconds,
   );

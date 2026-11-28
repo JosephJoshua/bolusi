@@ -9,6 +9,7 @@
 import type { Page } from '@playwright/test';
 
 import { expect, shoot as check, test } from './qa';
+import { toServisan } from './shell.js';
 
 const shoot = (page: Page, name: string) => check(page, 'bills', name);
 
@@ -16,7 +17,7 @@ const tap = (page: Page, testID: string) => page.getByTestId(testID).first().cli
 
 async function openBills(page: Page): Promise<void> {
   await page.goto('/?screen=repair&state=owner');
-  await expect(page.getByTestId('repair.board')).toBeVisible();
+  await toServisan(page);
   await tap(page, 'shell-tabs.items');
   await tap(page, 'items.sections.orders');
   await tap(page, 'purchasing.orders.filter.bills');

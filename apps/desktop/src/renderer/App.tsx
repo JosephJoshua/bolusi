@@ -445,6 +445,7 @@ function LiveCounter({
           )
         }
         onOpenSyncStatus={() => setSyncOpen(true)}
+        refused={state.sync?.rejected.length ?? 0}
         settings={settings}
         restoredDraft={restoredDraft}
         onDraftChange={onDraftChange}
