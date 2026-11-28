@@ -11,7 +11,7 @@ import { Text } from '../text.js';
 import { Animated, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { useSheetEntrance } from '../motion.js';
-import { NAV_BAR_INSET } from '../platform-insets.js';
+import { useBottomInset } from '../platform-insets.js';
 import { useDismissKeyboard } from '../use-dismiss-keyboard.js';
 import { color, overlayOpacity, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';
@@ -51,7 +51,6 @@ const styles = StyleSheet.create({
     backgroundColor: color.surface,
     borderTopLeftRadius: radius.md,
     borderTopRightRadius: radius.md,
-    paddingBottom: NAV_BAR_INSET,
   },
   handle: {
     alignSelf: 'center',
@@ -85,6 +84,7 @@ export function Sheet({
   children,
   testID = 'ui.sheet',
 }: SheetProps): React.JSX.Element {
+  const bottomInset = useBottomInset();
   // Like ConfirmSheet, it never opens under the keyboard.
   useDismissKeyboard();
   const entrance = useSheetEntrance();
@@ -98,7 +98,10 @@ export function Sheet({
         onPress={onClose}
         style={styles.fill}
       />
-      <Animated.View testID={`${testID}.sheet`} style={[styles.sheet, entrance.sheet]}>
+      <Animated.View
+        testID={`${testID}.sheet`}
+        style={[styles.sheet, { paddingBottom: bottomInset }, entrance.sheet]}
+      >
         <View style={styles.handle} />
         <View style={styles.header}>
           {leading === undefined ? null : <View style={styles.leading}>{leading}</View>}

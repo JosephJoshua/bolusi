@@ -36,6 +36,7 @@ import {
 import type { NotificationPermissionPort } from './src/push/permission.js';
 import type { PushRegistrationPorts } from './src/push/registration.js';
 import { createFetchPushTransport } from './src/push/transport.js';
+import { MeasuredBottomInset } from './src/bottom-inset.js';
 import { createFetchPinVerifierUpload } from '@bolusi/device/bootstrap/pin-verifier-transport';
 import { createFetchQris } from '@bolusi/device/bootstrap/qris-transport';
 import { createFetchStaffAdmin } from '@bolusi/device/bootstrap/staff-transport';
@@ -711,12 +712,17 @@ function buildRootProps(): RootProps {
 
 function Bootstrapped(): React.JSX.Element | null {
   rootProps ??= buildRootProps();
-  // Live system insets for the shell, so the header follows the status bar when a tablet turns.
+  // Live system insets for the shell, so the header follows the status bar when a tablet turns and
+  // the bottom clears this phone's own navigation bar (three buttons or gesture).
   // The font scale redraws every text after a system font size change (packages/ui/src/text.tsx).
   return createElement(
     SafeAreaProvider,
     null,
-    createElement(FontScaleProvider, null, Root(rootProps)),
+    createElement(
+      MeasuredBottomInset,
+      null,
+      createElement(FontScaleProvider, null, Root(rootProps)),
+    ),
   );
 }
 

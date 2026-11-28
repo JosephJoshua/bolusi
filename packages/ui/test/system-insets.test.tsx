@@ -12,7 +12,7 @@ import { expect, test } from 'vitest';
 import { AppShell } from '../src/shell/AppShell.js';
 import { TextInput } from '../src/components/TextInput.js';
 import { ConfirmSheet } from '../src/components/ConfirmSheet.js';
-import { NAV_BAR_INSET } from '../src/platform-insets.js';
+import { BottomInsetProvider, NAV_BAR_FALLBACK, bottomInsetOf } from '../src/platform-insets.js';
 import { space } from '../src/tokens.js';
 import { contentLayout, scrollCalls, windowLayout } from './doubles/react-native.js';
 import { fire, render } from './render.js';
@@ -44,7 +44,7 @@ test('the confirm sheet reserves the nav-bar height below its last action', () =
   // SAFE action nearest the nav bar. The sheet is an absolute overlay mounted outside the shell, so
   // it inherits none of the shell's bottom padding and has to reserve that band itself.
   const style = sheet().styleOf('ui.confirmSheet.sheet');
-  expect(style['paddingBottom']).toBe(space.lg + NAV_BAR_INSET);
+  expect(style['paddingBottom']).toBe(space.lg + NAV_BAR_FALLBACK);
 });
 
 test('the confirm sheet pads its bottom strictly more than its top', () => {
@@ -61,7 +61,28 @@ test('the confirm sheet pads its bottom strictly more than its top', () => {
 test('the nav-bar inset is a positive height on Android', () => {
   // A denominator check (T-14): if this were 0, both assertions above would still "pass" while
   // reserving nothing at all.
-  expect(NAV_BAR_INSET).toBeGreaterThan(0);
+  expect(NAV_BAR_FALLBACK).toBeGreaterThan(0);
+});
+
+test('a gesture-nav phone gets its own, smaller bottom inset', () => {
+  const r = render(
+    <BottomInsetProvider measured={24}>
+      <ConfirmSheet
+        title="t"
+        confirmLabel="c"
+        onConfirm={() => {}}
+        cancelLabel="x"
+        onCancel={() => {}}
+      />
+    </BottomInsetProvider>,
+  );
+  expect(r.styleOf('ui.confirmSheet.sheet')['paddingBottom']).toBe(space.lg + 24);
+});
+
+test('before the measurement arrives the 3-button height is kept, never 0', () => {
+  expect(bottomInsetOf(null)).toBe(NAV_BAR_FALLBACK);
+  expect(bottomInsetOf(0)).toBe(NAV_BAR_FALLBACK);
+  expect(bottomInsetOf(34)).toBe(34);
 });
 
 // ── task 206: the shell content slot must be reachable when it overflows ─────────────────────────

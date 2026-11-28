@@ -53,7 +53,7 @@ export type { StepDirection, StepTransitionProps } from './step-transition.js';
 export { brandMarkWidth } from './components/BrandMark.js';
 
 // ---- Platform insets (system-window measurements, NOT design tokens — task 205) -----------------
-export { NAV_BAR_INSET } from './platform-insets.js';
+export { BottomInsetProvider, useBottomInset } from './platform-insets.js';
 
 // ---- Room on screen (phone, tablet) -------------------------------------------------------------
 export { ViewportProvider, breakpoint, useViewport, widthClassOf } from './viewport.js';

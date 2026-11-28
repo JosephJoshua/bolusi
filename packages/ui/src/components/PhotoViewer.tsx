@@ -31,7 +31,7 @@ import {
 
 import { NATIVE_DRIVER } from '../motion.js';
 
-import { NAV_BAR_INSET } from '../platform-insets.js';
+import { useBottomInset } from '../platform-insets.js';
 import { useDismissKeyboard } from '../use-dismiss-keyboard.js';
 import { color, radius, size, space, touch, type } from '../tokens.js';
 import { Icon } from './Icon.js';
@@ -101,7 +101,6 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   notice: {
     position: 'absolute',
-    bottom: space.xl + NAV_BAR_INSET,
     alignSelf: 'center',
     paddingHorizontal: space.lg,
     paddingVertical: space.sm,
@@ -120,6 +119,7 @@ export function PhotoViewer({
   labels,
   testID = 'ui.photoViewer',
 }: PhotoViewerProps): React.JSX.Element {
+  const bottomInset = useBottomInset();
   // A full-screen overlay too: its controls must not open under the keyboard.
   useDismissKeyboard();
   const [index, setIndex] = useState(initialIndex);
@@ -237,7 +237,11 @@ export function PhotoViewer({
       </View>
 
       {notice === null ? null : (
-        <View style={styles.notice} testID={`${testID}.notice`} accessibilityLiveRegion="polite">
+        <View
+          style={[styles.notice, { bottom: space.xl + bottomInset }]}
+          testID={`${testID}.notice`}
+          accessibilityLiveRegion="polite"
+        >
           <Text style={styles.noticeText}>{notice}</Text>
         </View>
       )}
