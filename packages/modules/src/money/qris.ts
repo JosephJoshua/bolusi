@@ -18,6 +18,8 @@ export type QrisFailure =
   /** Xendit refused the key: wrong, revoked, or without QRIS. */
   | 'keyRefused'
   | 'amountRefused'
+  /** The bill already has a QR that can still be paid: cancel it first. */
+  | 'chargeOpen'
   /** QRIS through Xendit is not set up on the server, or Xendit did not answer. */
   | 'unavailable'
   /** The payment itself would be refused (its document, the method switched off). */
@@ -38,6 +40,7 @@ export const QRIS_FAILURES: readonly QrisFailure[] = [
   'notConnected',
   'keyRefused',
   'amountRefused',
+  'chargeOpen',
   'unavailable',
   'refused',
   'unexpected',
@@ -55,6 +58,7 @@ export const QRIS_FAILURE_KEY: Record<QrisFailure, MoneyKey> = {
   notConnected: 'money.qris.failure.notConnected',
   keyRefused: 'money.qris.failure.keyRefused',
   amountRefused: 'money.qris.failure.amountRefused',
+  chargeOpen: 'money.qris.failure.chargeOpen',
   unavailable: 'money.qris.failure.unavailable',
   refused: 'money.qris.failure.refused',
   unexpected: 'money.qris.failure.unexpected',
@@ -70,6 +74,14 @@ export interface QrisPort {
   createCharge(body: QrisChargeBody): Promise<QrisCharge>;
   /** Paid yet? */
   charge(id: string): Promise<QrisCharge>;
+  /** The bill's QRs, shown from any device of the store, that can still be paid and were not cancelled. */
+  openCharges(documentId: string): Promise<readonly QrisCharge[]>;
+  /**
+   * Give up on a QR to take the bill another way. The server asks Xendit first, so a QR already
+   * paid comes back `paid`; otherwise `cancelled` (a customer can still pay it until it expires,
+   * and that payment is recorded as money to give back).
+   */
+  cancel(id: string): Promise<QrisCharge>;
   /** Test mode only, for someone who manages the method: Xendit pays the QR. */
   simulate(id: string): Promise<QrisCharge>;
 }

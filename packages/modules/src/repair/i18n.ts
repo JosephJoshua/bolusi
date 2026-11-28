@@ -176,6 +176,7 @@ export const REPAIR_KEYS = [
   'repair.hint.handoverPayment',
   'repair.hint.handoverFree',
   'repair.hint.handoverQris',
+  'repair.hint.handoverQrOpen',
   'repair.handover.photo',
   'repair.handover.sign',
   'repair.handover.signAgain',

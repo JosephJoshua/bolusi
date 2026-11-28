@@ -139,6 +139,8 @@ export function createCoreRepairRuntime(deps: {
         disconnect: (accountId) => call('money.qris.disconnect', accountId),
         createCharge: (body) => call('money.qris.createCharge', body),
         charge: (id) => call('money.qris.charge', id),
+        openCharges: (documentId) => call('money.qris.openCharges', documentId),
+        cancel: (id) => call('money.qris.cancel', id),
         simulate: (id) => call('money.qris.simulate', id),
       },
     },

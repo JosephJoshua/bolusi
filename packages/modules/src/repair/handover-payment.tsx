@@ -111,9 +111,10 @@ export function useHandoverPayment(
     ...qrisInput,
     lines: typedLines ?? (due > 0 ? [newPaymentLine('line0', due)] : []),
     setLines,
+    untouched: typedLines === null,
   });
   const { lines } = qris;
-  const entry = paymentEntry(due - qris.pending, lines, accounts, qris.qrAccounts);
+  const entry = paymentEntry(due - qris.pending, lines, accounts, qris.qrAccounts, qris.blocking);
   const unpaid = access.kind !== 'none' && payLater && due > 0;
   const allowed = access.kind === 'own' || access.kind === 'permitted';
   const waiting = qris.pending > 0;
@@ -129,8 +130,11 @@ export function useHandoverPayment(
     togglePayLater: () => setPayLater(!unpaid),
     unpaidReason,
     setUnpaidReason,
+    // One way at a time: a QR the customer can still pay settles first, even before Bayar nanti.
     settled:
-      !waiting && (due === 0 || (unpaid ? allowed && unpaidReason.trim() !== '' : entry.complete)),
+      !waiting &&
+      qris.blocking === 0 &&
+      (due === 0 || (unpaid ? allowed && unpaidReason.trim() !== '' : entry.complete)),
     touched: typedLines !== null || unpaidReason.trim() !== '',
     input: {
       payments: unpaid ? [] : [...entry.payments],
@@ -204,7 +208,11 @@ export function payLaterLines(
 }
 
 /** What the handover still waits on when the payment is not settled. */
-export function payLaterHintKey(payment: Pick<HandoverPayment, 'access' | 'unpaid'>): RepairKey {
+export function payLaterHintKey(
+  payment: Pick<HandoverPayment, 'access' | 'unpaid' | 'qris'>,
+): RepairKey {
+  // A QR the customer can still pay: it is paid, or cancelled, before anything else.
+  if (payment.qris.blocking > 0) return 'repair.hint.handoverQrOpen';
   if (!payment.unpaid) return 'repair.hint.handoverPayment';
   if (payment.access.kind === 'waiting') return 'repair.hint.payLaterWaiting';
   if (payment.access.kind === 'ask') return 'repair.hint.payLaterAsk';
