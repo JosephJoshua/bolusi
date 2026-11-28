@@ -34,3 +34,5 @@ export {
   type RepairCatalogTree,
   type RepairKey,
 } from '../i18n.js';
+export { AttentionList, type AttentionListProps } from './AttentionList.js';
+export type { AttentionCount } from '../attention.js';

@@ -22,6 +22,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { App } from '../src/renderer/App.js';
+import { onBoard } from './desk.js';
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -46,14 +47,14 @@ async function renderApp(as: string): Promise<void> {
       <App />
     </TooltipProvider>,
   );
-  await screen.findByTestId('repair.desk.board');
+  await onBoard();
   await switchTo(as);
 }
 
 async function switchTo(name: string): Promise<void> {
   fireEvent.pointerDown(byTestId('desktop.person'), { button: 0, pointerType: 'mouse' });
   fireEvent.click(await screen.findByRole('menuitem', { name }));
-  await screen.findByTestId('repair.desk.board');
+  await onBoard();
 }
 
 async function openTransfers(): Promise<void> {

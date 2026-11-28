@@ -23,7 +23,7 @@ import {
   type RepairRuntime,
   type StepBack,
 } from '@bolusi/modules/repair/screens';
-import type { PlaceStep } from '@bolusi/modules/screen-kit';
+import { usePlaceOpen, type PlaceOpen, type PlaceStep } from '@bolusi/modules/screen-kit';
 import { ListDetail, PlaceSections, space, useListDetailSplit } from '@bolusi/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -44,8 +44,17 @@ type RepairView =
       readonly ticketId: string;
       readonly print?: true;
       readonly justOpened?: boolean;
+      /** Opened on this request's answer (from Perlu dicek). */
+      readonly answer?: string;
+      /** Backing out of it goes back to the place that opened it, not to the board. */
+      readonly returns?: true;
     }
   | { readonly kind: 'handover'; readonly ticketId: string };
+
+/** What another place may open here: a servisan on one of its requests, or a board queue. */
+export type RepairOpenTarget =
+  | { readonly kind: 'request'; readonly ticketId: string; readonly requestId: string }
+  | { readonly kind: 'board'; readonly view: BoardView };
 
 export interface RepairHomeProps {
   readonly runtime: RepairRuntime;
@@ -65,6 +74,10 @@ export interface RepairHomeProps {
    */
   readonly intakeStartedBy?: string | null | undefined;
   readonly onDraftChange?: ((draft: RepairDraft | null) => void) | undefined;
+  /** Another place asks to show something here; a new nonce is a new ask. */
+  readonly open?: PlaceOpen<RepairOpenTarget> | null | undefined;
+  /** Backing out of a servisan another place opened: the shell goes back to that place. */
+  readonly onReturn?: (() => void) | undefined;
 }
 
 export function RepairHome({
@@ -77,6 +90,8 @@ export function RepairHome({
   restoredDraft,
   intakeStartedBy = null,
   onDraftChange,
+  open = null,
+  onReturn,
 }: RepairHomeProps): React.JSX.Element {
   // Read once at mount: the lock unmounts this surface and the unlock remounts it.
   const [view, setView] = useState<RepairView>(() =>
@@ -88,13 +103,6 @@ export function RepairHome({
           ? { kind: 'intake' }
           : { kind: 'board' },
   );
-  // The place's two sections: the servisan, and the price list everyone quotes from.
-  const [section, setSection] = useState<'board' | 'prices'>('board');
-  const [priceStep, setPriceStep] = useState<PlaceStep | null>(null);
-  const priceGuard = useRef<DiscardGuard | null>(null);
-  const registerPriceGuard = useCallback((guard: DiscardGuard | null): void => {
-    priceGuard.current = guard;
-  }, []);
   const split = useListDetailSplit() && view.kind !== 'intake';
   // Inside a flow the header keeps only the sync chip: the title needs the width, and switching
   // user or language belongs on the board, not halfway through a step. Beside the board, whose
@@ -121,6 +129,39 @@ export function RepairHome({
     const guard = discardGuardRef.current;
     if (guard !== null) guard(proceed);
     else proceed();
+  }, []);
+
+  // The place's two sections: the servisan, and the price list everyone quotes from.
+  const [section, setSection] = useState<'board' | 'prices'>('board');
+  const [priceStep, setPriceStep] = useState<PlaceStep | null>(null);
+  const priceGuard = useRef<DiscardGuard | null>(null);
+  const registerPriceGuard = useCallback((guard: DiscardGuard | null): void => {
+    priceGuard.current = guard;
+  }, []);
+
+  // An ask from another place. A half-done step here asks before it is replaced.
+  usePlaceOpen(open, (target) =>
+    runLeave(() => {
+      setSection('board');
+      if (target.kind === 'board') {
+        setBoardView(target.view);
+        setView({ kind: 'board' });
+      } else {
+        setView({
+          kind: 'ticket',
+          ticketId: target.ticketId,
+          answer: target.requestId,
+          returns: true,
+        });
+      }
+    }),
+  );
+  const returnRef = useRef(onReturn);
+  returnRef.current = onReturn;
+  /** Leaves the open servisan: to the place that opened it, or to the board. */
+  const closeTicket = useCallback((returns: boolean): void => {
+    setView({ kind: 'board' });
+    if (returns) returnRef.current?.();
   }, []);
 
   useEffect(() => {
@@ -150,7 +191,7 @@ export function RepairHome({
     const backTo: () => void =
       view.kind === 'handover'
         ? () => setView({ kind: 'ticket', ticketId: view.ticketId })
-        : () => setView({ kind: 'board' });
+        : () => closeTicket(view.kind === 'ticket' && view.returns === true);
     onRegisterSurfaceNav?.({
       handleBack: () => {
         if (stepBackRef.current?.() === true) return true;
@@ -162,7 +203,7 @@ export function RepairHome({
       listBeside: split,
     });
     return () => onRegisterSurfaceNav?.(null);
-  }, [view, split, section, priceStep, onRegisterSurfaceNav, runLeave]);
+  }, [view, split, section, priceStep, onRegisterSurfaceNav, runLeave, closeTicket]);
 
   const sections = (
     <View style={styles.sections}>
@@ -215,14 +256,15 @@ export function RepairHome({
     view.kind === 'ticket' ? (
       <TicketDetail
         // A new ticket is a new screen: its open step and scroll position stay with the last one.
-        key={view.ticketId}
+        key={`${view.ticketId}:${view.answer ?? ''}`}
         ticketId={view.ticketId}
         printFirst={view.print === true}
+        answerRequestId={view.answer}
         chrome={chrome}
         now={now}
         hideBack={split}
         justOpened={view.justOpened === true}
-        onBack={() => setView({ kind: 'board' })}
+        onBack={() => closeTicket(view.returns === true)}
         onHandover={(ticketId) => setView({ kind: 'handover', ticketId })}
         onStartClaim={(draft) => setView({ kind: 'intake', draft })}
         onOpenTicket={(ticketId) => setView({ kind: 'ticket', ticketId })}

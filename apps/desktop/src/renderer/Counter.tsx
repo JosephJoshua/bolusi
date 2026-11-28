@@ -24,12 +24,17 @@ import {
   type BelanjaTab,
 } from '@bolusi/modules/purchasing/desktop';
 import {
+  AttentionPage,
   IntakePage,
   PricesPage,
   RepairBoardPage,
+  boardFilters,
   moneyRuntimeOf,
+  opensAttention,
+  repairAbilities,
   tn,
   useRepairRuntime,
+  type AttentionCount,
   type BoardFilters,
   type IntakeDraft,
 } from '@bolusi/modules/repair/desktop';
@@ -47,6 +52,7 @@ import {
   ArrowLeftRight,
   Banknote,
   ChevronDown,
+  ClipboardList,
   Package,
   Settings,
   ShoppingCart,
@@ -63,6 +69,7 @@ import { BAR_CONTROL, TitleBar } from './TitleBar.js';
 import { UpdateNotice } from './updates.js';
 
 type Page =
+  | { readonly kind: 'attention' }
   | { readonly kind: 'board' }
   // A warranty claim's intake starts from a draft made from the servisan it claims on.
   | { readonly kind: 'intake'; readonly claim?: IntakeDraft }
@@ -127,6 +134,7 @@ export function Counter({
   menuItems,
   sync,
   onOpenSyncStatus,
+  refused = 0,
   settings = {},
   restoredDraft,
   onDraftChange,
@@ -144,6 +152,8 @@ export function Counter({
   readonly sync?: ReactNode;
   /** Opens the sync panel, from a servisan the server refused a change on. */
   readonly onOpenSyncStatus?: (() => void) | undefined;
+  /** This person's own changes the server refused, still to be looked at (Perlu dicek counts them). */
+  readonly refused?: number | undefined;
   /** What Settings may do for this person besides the repair settings; the demo has only staff. */
   readonly settings?: SettingsAccess | undefined;
   /** This PC's unfinished intake, kept across a lock, a restart or a switch to someone else. */
@@ -158,8 +168,12 @@ export function Counter({
   // waits on the board instead, for whoever picks it up.
   const startedBy = startedByOther(restoredDraft, person.userId);
   const ownDraft = restoredDraft !== null && startedBy === null;
+  // Whoever answers requests starts on Perlu dicek, as on the phone.
+  const repair = useRepairRuntime();
+  const showsAttention = opensAttention(repair);
+  const home: Page = showsAttention ? { kind: 'attention' } : { kind: 'board' };
   const [page, setPage] = useState<Page>(() =>
-    setupPending ? { kind: 'setup' } : ownDraft ? { kind: 'intake' } : { kind: 'board' },
+    setupPending ? { kind: 'setup' } : ownDraft ? { kind: 'intake' } : home,
   );
   // The intake belongs to the PC; it names who started it the first time it is kept.
   const { userId: personId, name: personName } = person;
@@ -195,7 +209,6 @@ export function Counter({
   const [filters, setFilters] = useState<BoardFilters | null>(null);
   const [collapsed, toggleSidebar] = useSidebarCollapsed();
   // The ledger as Kas and the payment settings read it: repair's money port, live on its feed.
-  const repair = useRepairRuntime();
   const money = useMemo(() => moneyRuntimeOf(repair, nameOf), [repair, nameOf]);
   // Parts, for whoever may read the list; their filter is still there when they come back.
   const inventory = repair.inventory;
@@ -242,7 +255,27 @@ export function Counter({
   }, [setupPending]);
   const finishSetup = (): void => {
     onSetupDone?.();
-    setPage(ownDraft ? { kind: 'intake' } : { kind: 'board' });
+    setPage(ownDraft ? { kind: 'intake' } : home);
+  };
+  // A count on Perlu dicek opens the page where it is worked off, narrowed to it.
+  const openFromAttention = (list: AttentionCount): void => {
+    switch (list) {
+      case 'uncollected':
+        setFilters(boardFilters(repairAbilities(repair.hasPermission), 'uncollected'));
+        go({ kind: 'board' });
+        return;
+      case 'belowZero':
+        setPartsFilter({ ...NO_FILTER, stock: 'belowZero' });
+        go({ kind: 'parts' });
+        return;
+      case 'partlyReceived':
+        setOrdersFilter('open');
+        go({ kind: 'purchasing' });
+        return;
+      case 'refused':
+        onOpenSyncStatus?.();
+        return;
+    }
   };
   // Settings opens from the person menu too, as on the phone. Switching person leaves Settings
   // as well; locking keeps everything as it is.
@@ -297,6 +330,17 @@ export function Counter({
           collapsed={collapsed}
           onToggle={toggleSidebar}
           nav={[
+            ...(showsAttention
+              ? [
+                  {
+                    key: 'attention',
+                    label: tn('repair.attention.title'),
+                    icon: ClipboardList,
+                    active: page.kind === 'attention',
+                    onSelect: () => go({ kind: 'attention' }),
+                  },
+                ]
+              : []),
             {
               key: 'repairPlace',
               label: tn('repair.board.title'),
@@ -308,6 +352,7 @@ export function Counter({
                   active:
                     page.kind === 'board' ||
                     page.kind === 'intake' ||
+                    (page.kind === 'attention' && !showsAttention) ||
                     (page.kind === 'kas' && !showsKas) ||
                     (page.kind === 'parts' && !showsParts) ||
                     (page.kind === 'purchasing' && !showsPurchasing) ||
@@ -446,6 +491,14 @@ export function Counter({
             place={{ title: ti('inventory.transfer.section'), trail: itemsTrail }}
           />
         </InventoryRuntimeProvider>
+      ) : page.kind === 'attention' && showsAttention ? (
+        <AttentionPage
+          now={Date.now}
+          refused={refused}
+          onOpenList={openFromAttention}
+          onOpenSyncStatus={onOpenSyncStatus}
+          onStartClaim={startClaim}
+        />
       ) : page.kind === 'prices' ? (
         <PricesPage trail={repairTrail} onRegisterLeaveGuard={registerLeaveGuard} />
       ) : page.kind === 'kas' && showsKas ? (

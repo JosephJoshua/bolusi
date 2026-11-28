@@ -100,7 +100,9 @@ for (const [width, height] of [
     // The owner's pages under Barang: Belanja and Kiriman, each with its first row open.
     await page.getByTestId('desktop.person').click();
     await page.getByRole('menuitem', { name: 'Andi Pratama' }).click();
-    await page.getByTestId('repair.desk.board').waitFor();
+    // An owner opens on Perlu dicek, and it keeps the rules too.
+    await page.getByTestId('repair.desk.attention').waitFor();
+    await check(`perlu-dicek-${size}`);
     // The owner's price list is a sheet to type or paste into.
     await page
       .getByRole('navigation')

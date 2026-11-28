@@ -25,7 +25,6 @@ import {
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { useActionRunner } from '../../screen-kit/index.js';
 import {
   ActionErrorBanner,
   QueryView,
@@ -33,10 +32,11 @@ import {
   type ScreenChrome,
 } from '../../screen-kit/screens/views.js';
 import { INVENTORY_PERMISSION } from '../constants.js';
+import { useArchiveItem } from '../item-actions.js';
 import { ti, type InventoryKey } from '../i18n.js';
 import { itemFacts } from '../item-facts.js';
 import { movementTitle, signedQty, stockText } from '../labels.js';
-import { itemDetails, type ItemDetailRow, type ItemRow } from '../queries.js';
+import { type ItemDetailRow, type ItemRow } from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
 import { PartCost } from './PartCost.js';
 
@@ -69,10 +69,13 @@ export function PartDetail({
   const canManage = runtime.hasPermission(INVENTORY_PERMISSION.manageItems);
   const canCount = runtime.hasPermission(INVENTORY_PERMISSION.count);
   const seesCosts = runtime.hasPermission(INVENTORY_PERMISSION.readCost);
-  const runner = useActionRunner();
   const [reloadNonce, setReloadNonce] = useState(0);
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [done, setDone] = useState<InventoryKey | null>(null);
+  const archive = useArchiveItem((archived) =>
+    setDone(archived ? 'inventory.done.archived' : 'inventory.done.restored'),
+  );
+  const { runner } = archive;
 
   const query = useInventoryQuery(
     async (rt) => (await rt.query('getItem', { itemId })).rows[0],
@@ -85,12 +88,7 @@ export function PartDetail({
     setConfirmArchive(false);
     onClearNotice();
     setDone(null);
-    void runner
-      .run(() => runtime.run('editItem', { itemId: row.id, archived, ...itemDetails(row) }))
-      .then((result) => {
-        if (result !== undefined)
-          setDone(archived ? 'inventory.done.archived' : 'inventory.done.restored');
-      });
+    archive.setArchived(row, archived);
   };
 
   return (

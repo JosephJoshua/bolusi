@@ -11,12 +11,13 @@ import path from 'node:path';
 import type { Page } from '@playwright/test';
 
 import { expect, shoot as check, test } from './qa';
+import { toServisan } from './shell.js';
 
 type Role = 'owner' | 'counter' | 'technician' | 'storeOwner';
 
 async function open(page: Page, role: Role): Promise<void> {
   await page.goto(`/?screen=repair&state=${role}`);
-  await expect(page.getByTestId('repair.board')).toBeVisible();
+  await toServisan(page);
 }
 
 const tap = (page: Page, testID: string) => page.getByTestId(testID).first().click();

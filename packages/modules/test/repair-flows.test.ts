@@ -27,6 +27,7 @@ import {
   intakeTotal,
   nextMissingPhoto,
   keptIntakeDraft,
+  opensAttention,
   parseIntakeDraft,
   startedByOther,
   acceptsRupiahText,
@@ -46,7 +47,12 @@ import {
 import { NO_METHOD } from '../src/money/payment-entry.js';
 import type { PaymentAccountRow } from '../src/money/queries.js';
 import { downPaymentChangeLine } from '../src/repair/labels.js';
-import { HANDOVER_UNDO_WINDOW_MS, INTAKE_PHOTO_SLOTS } from '../src/repair/constants.js';
+import {
+  HANDOVER_UNDO_WINDOW_MS,
+  INTAKE_PHOTO_SLOTS,
+  REPAIR_PERMISSION,
+} from '../src/repair/constants.js';
+import { MONEY_PERMISSION } from '../src/money/constants.js';
 import { DEFAULT_INTAKE_OPTIONS } from '../src/repair/intake-options.js';
 import { decodeScreenLock } from '../src/repair/screen-lock.js';
 
@@ -1136,11 +1142,22 @@ describe('asking an owner instead', () => {
     expect(payLaterAccess({ ...base, canAsk: false })).toEqual({ kind: 'none' });
   });
 
-  test('offers the approvals queue only while something waits on this user', () => {
+  test('leaves requests waiting on an answer to Perlu dicek, not a queue of the board', () => {
     const can = { intake: true, cancel: false } as Parameters<typeof boardViews>[0];
     expect(boardViews(can)).not.toContain('approvals');
-    expect(boardViews(can, 2)[0]).toBe('approvals');
-    expect(boardFilter('approvals', 'u1', 0, ['t-1', 't-2'])).toEqual({ ids: ['t-1', 't-2'] });
+  });
+
+  test('gives Perlu dicek to whoever may answer a request, and only them', () => {
+    const holding = (...ids: string[]) => ({ hasPermission: (id: string) => ids.includes(id) });
+    expect(opensAttention(holding(REPAIR_PERMISSION.intake, REPAIR_PERMISSION.handover))).toBe(
+      false,
+    );
+    const reads = REPAIR_PERMISSION.read;
+    expect(opensAttention(holding(reads, REPAIR_PERMISSION.discount))).toBe(true);
+    expect(opensAttention(holding(reads, MONEY_PERMISSION.refund))).toBe(true);
+    expect(opensAttention(holding(reads, REPAIR_PERMISSION.correctDownPayment))).toBe(true);
+    // A money-only role that may void but not read servisan has nowhere to answer from.
+    expect(opensAttention(holding(MONEY_PERMISSION.voidPayment))).toBe(false);
   });
 });
 

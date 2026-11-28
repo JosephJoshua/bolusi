@@ -76,7 +76,6 @@
     "searchHint": "Name, phone, ticket, IMEI, model",
     "title": "Repairs",
     "view": {
-      "approvals": "Approvals ({count})",
       "active": "In progress",
       "mine": "Mine",
       "pickup": "Ready for pickup",
@@ -94,7 +93,6 @@
     "waited": "Not collected for {days} days",
     "pickupWaiting": "{count} ready for pickup",
     "empty": {
-      "approvals": "Nothing is waiting for approval.",
       "active": "No active repairs yet.",
       "mine": "Your queue is empty.",
       "unassigned": "Every repair has a technician.",
@@ -988,6 +986,22 @@
     "save": "Save bill",
     "same": "Change the bill first.",
     "short": "Change bill"
+  },
+  "attention": {
+    "title": "To check",
+    "requests": "Approvals ({count})",
+    "elsewhere": "Elsewhere",
+    "uncollected": "Phones not collected",
+    "belowZero": "Stock below zero",
+    "partlyReceived": "Orders partly received",
+    "refused": "Your changes refused",
+    "empty": "Nothing to check.",
+    "emptyHint": "Requests for approval and anything else you need to handle show up here.",
+    "col": {
+      "request": "Request",
+      "ticket": "Repair",
+      "asked": "Asked"
+    }
   },
   "prices": {
     "section": "Prices",
