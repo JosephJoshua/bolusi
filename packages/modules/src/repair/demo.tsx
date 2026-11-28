@@ -897,6 +897,8 @@ export function demoRepairRuntime(
         .reverse(),
     };
   };
+  // What each servisan was before its latest change, so the demo can take that change back.
+  const beforeChange = new Map<string, TicketDetailRow>();
   const update = (
     ticketId: string,
     kind: string,
@@ -908,6 +910,7 @@ export function demoRepairRuntime(
     // Taking a handover back, correcting a cancelled servisan's details and changing its fee check
     // their own.
     const current = find(ticketId);
+    beforeChange.set(ticketId, current);
     // Changing a cancelled servisan's fee is about the cancel itself, before or after pickup.
     const lifecycle = kind === 'repair.device_returned' || kind === 'repair.handover_reversed';
     if (!lifecycle && kind !== 'repair.cancel_fee_changed') {
@@ -1229,6 +1232,22 @@ export function demoRepairRuntime(
         outcome: 'waiting_for_parts',
         outcomeNote: String(input['note'] ?? ''),
       }),
+    undoChange: (input) => {
+      const t = find(String(input['ticketId']));
+      const before = beforeChange.get(t.id);
+      if (before === undefined || t.events.at(-1)?.kind !== input['change']) {
+        throw REPAIR_REFUSALS.refuse('undoChangedSince');
+      }
+      const { outcome, outcomeNote, readyAt, technicianId, technicianName, workStarted } = before;
+      return update(t.id, 'repair.change_reverted', {
+        outcome,
+        outcomeNote,
+        readyAt,
+        technicianId,
+        technicianName,
+        workStarted,
+      });
+    },
     markRepaired: (input) => {
       const t = find(String(input['ticketId']));
       return update(t.id, 'repair.marked_repaired', {

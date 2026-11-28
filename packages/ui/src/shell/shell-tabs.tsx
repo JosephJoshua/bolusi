@@ -24,3 +24,23 @@ export function ShellTabsProvider({
 export function useShellTabs(): ReactNode {
   return useContext(ShellTabsContext);
 }
+
+const ShellToastContext = createContext<ReactNode>(null);
+
+/**
+ * Puts `toast` (a short-lived note with one action, such as Batalkan) in the bottom dock of the
+ * screen inside, above its action, where it covers nothing. Like the tabs, one shell draws it.
+ */
+export function ShellToastProvider({
+  toast,
+  children,
+}: {
+  readonly toast: ReactNode;
+  readonly children: ReactNode;
+}): React.JSX.Element {
+  return <ShellToastContext.Provider value={toast}>{children}</ShellToastContext.Provider>;
+}
+
+export function useShellToast(): ReactNode {
+  return useContext(ShellToastContext);
+}

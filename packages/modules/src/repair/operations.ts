@@ -18,6 +18,7 @@ import {
   deviceReturnedApplier,
   cancelFeeChangedApplier,
   handoverReversedApplier,
+  changeRevertedApplier,
   ticketDetailsCorrectedApplier,
   downPaymentChangedApplier,
   markedRepairedApplier,
@@ -70,6 +71,7 @@ import {
   deviceReturnedRule,
   cancelFeeChangedRule,
   handoverReversedRule,
+  changeRevertedRule,
   ticketDetailsCorrectedRule,
   downPaymentCorrectedRule,
   downPaymentReceivedRule,
@@ -428,6 +430,9 @@ export const downPaymentCorrectedPayload = z
   .object({ amount: zFee, reason: z.string().trim().min(1).max(MAX_TEXT) })
   .strict();
 
+/** The ops of one command, taken back together: a start takes the servisan and starts it. */
+export const changeRevertedPayload = z.object({ undoes: z.array(zUuidV7).min(1).max(4) }).strict();
+
 export const slipPrintedPayload = z.object({ slip: z.enum(SLIP_KINDS) }).strict();
 
 /**
@@ -646,6 +651,19 @@ export const repairOperations: Readonly<Record<string, OperationDeclaration<Repa
     read: REPAIR_PERMISSION.read,
     entityType: REPAIR_TICKET_ENTITY,
     conflict: { key: REPAIR_CONFLICT_KEY.location, severity: 'significant' },
+  },
+  [REPAIR_OP.changeReverted]: {
+    schemaVersion: 1,
+    payload: changeRevertedPayload,
+    reversal: 'Not reversed: the change it took back is made again instead.',
+    apply: changeRevertedApplier,
+    rule: changeRevertedRule,
+    // Anyone who may read a servisan may take back their own slip; the rule holds them to the
+    // permission of each change they take back.
+    permission: REPAIR_PERMISSION.read,
+    read: REPAIR_PERMISSION.read,
+    entityType: REPAIR_TICKET_ENTITY,
+    conflict: { key: REPAIR_CONFLICT_KEY.outcome, severity: 'significant' },
   },
   [REPAIR_OP.handoverReversed]: {
     schemaVersion: 1,

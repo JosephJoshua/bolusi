@@ -26,7 +26,8 @@
     "ticketRepairTypesChanged": "Repair type changed",
     "handoverReversed": "Handover undone",
     "ticketDetailsCorrected": "Details corrected",
-    "cancelFeeChanged": "Cancellation bill changed"
+    "cancelFeeChanged": "Cancellation bill changed",
+    "changeReverted": "Change undone"
   },
   "action": {
     "applyPrice": "Apply price change",
@@ -346,7 +347,9 @@
     "refund": "Money given back.",
     "reduce": "Bill lowered.",
     "repairedPriceWaiting": "Repair done. The customer still needs to confirm the new price.",
-    "cancelFeeChanged": "Cancellation bill changed."
+    "cancelFeeChanged": "Cancellation bill changed.",
+    "waitForParts": "Marked as waiting for parts.",
+    "assigned": "Technician assigned."
   },
   "passcode": {
     "show": "Show",
@@ -745,7 +748,10 @@
     "repairTypeTerms": "The owner changed this repair type. Pick the repair types again.",
     "intakePhotoMissing": "Take photos of the phone from every angle the store asks for first.",
     "feeBelowCharged": "The bill was already recorded on another device. Change the bill again.",
-    "notCancelled": "This repair isn’t cancelled."
+    "notCancelled": "This repair isn’t cancelled.",
+    "undoChangedSince": "This servisan has changed since, so it can’t be undone.",
+    "undoNotYours": "Only the person who made this change can undo it.",
+    "undoExpired": "This change was too long ago to undo."
   },
   "paper": {
     "title": "Slip paper",

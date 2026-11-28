@@ -555,6 +555,46 @@ export async function markRepairedHandler(
   };
 }
 
+/** The status and technician changes a person may take back from the toast right after. */
+const UNDOABLE_COMMAND_ENDS = [
+  REPAIR_OP.ticketClaimed,
+  REPAIR_OP.technicianAssigned,
+  REPAIR_OP.workStarted,
+  REPAIR_OP.workPaused,
+  REPAIR_OP.markedRepaired,
+] as const;
+
+export const undoChangeInput = z
+  .object({ ticketId: z.string().min(1), change: z.enum(UNDOABLE_COMMAND_ENDS) })
+  .strict();
+export type UndoChangeInput = z.input<typeof undoChangeInput>;
+
+/**
+ * Take back the person's latest change to the servisan, `change` being the op it ended with: every
+ * op of that one command (they share its stamp). Whether it may be taken back is the op's rule.
+ */
+export async function undoChangeHandler(
+  input: z.output<typeof undoChangeInput>,
+  ctx: CommandContext,
+): Promise<CommandHandlerResult<{ ticketId: string }>> {
+  const ticket = await loadTicket(ctx, input.ticketId);
+  const latest = ticket.events.at(-1);
+  if (latest === undefined || latest.kind !== input.change) {
+    throw REPAIR_REFUSALS.refuseOnDevice('undoChangedSince');
+  }
+  const command = ticket.events.filter(
+    (event) => event.at === latest.at && event.actorId === latest.actorId,
+  );
+  return {
+    ops: [
+      ticketOp(ctx, ticket.id, REPAIR_OP.changeReverted, {
+        undoes: command.map((event) => event.id),
+      }),
+    ],
+    result: { ticketId: ticket.id },
+  };
+}
+
 // ── owner ────────────────────────────────────────────────────────────────────────────────────
 
 const zFeeInput = z.number().int().min(0).max(MAX_LINE_AMOUNT);

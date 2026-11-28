@@ -162,6 +162,13 @@ sees only the places they work in. Settings stay in the account menu.
   place has a trail in its `PageHeader` (`trail`: "Servisan › Terima HP") and a
   back arrow (`onBack`), which the mouse's back button and Alt+Left also press.
 - A record open beside its list is not a new level; a full-page task is.
+- **Batalkan** takes back a small slip right after it: a status change or a
+  technician change says what it did in a toast with "Batalkan" for 8 seconds
+  (`useOfferUndo`), over the dock on the phone and at the bottom of the window on
+  the PC. Pressing it records the reverse change, which the server checks (only
+  the person who made it, within 2 minutes, nothing changed since). Money, stock
+  leaving, a cancel and anything the customer signed keep a confirm and a formal
+  reversal instead.
 
 ## 5. No redundancy
 
