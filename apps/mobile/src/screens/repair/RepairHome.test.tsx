@@ -6,6 +6,7 @@ import { DEFAULT_LOCALE, setLocale } from '@bolusi/i18n';
 import idMoneyCatalog from '@bolusi/modules/money/i18n/id.json';
 import enMoneyCatalog from '@bolusi/modules/money/i18n/en.json';
 import { registerMoneyCatalog } from '@bolusi/modules/money/screens';
+import { UndoProvider } from '@bolusi/modules/screen-kit';
 import {
   emptyIntakeDraft,
   INTAKE_PHOTO_SLOTS,
@@ -39,6 +40,8 @@ import {
 } from '../../../test/repair-support.js';
 
 import type { SurfaceNav } from '../../navigation/surface.js';
+
+import { UndoHost } from '../../shell/UndoHost.js';
 
 import { RepairHome } from './RepairHome.js';
 
@@ -340,6 +343,27 @@ describe('an intake restored after the app died mid-submit', () => {
 });
 
 describe('technician work', () => {
+  test('a start that is refused is said on the step, which stays open', async () => {
+    h = await openRepairScreenHarness(5202);
+    const ticketId = await openTicket(h);
+    const real = repairRuntimeFor(h, h.technicianId);
+    const runtime = {
+      ...real,
+      run: ((name: string, input: unknown) =>
+        name === 'startWork'
+          ? Promise.reject(new Error('refused'))
+          : real.run(name as never, input as never)) as typeof real.run,
+    };
+    const screen = await mount(h, h.technicianId, { runtime });
+    await press(screen, 'repair.board.views.unassigned');
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.start');
+    await press(screen, 'repair.work.before.take.press');
+    await press(screen, 'repair.work.before.primary');
+    expect(screen.query('repair.work.before.error')).not.toBeNull();
+    expect(screen.query('repair.work.before')).not.toBeNull();
+  });
+
   test('starting needs a before photo and marking repaired needs an after photo', async () => {
     h = await openRepairScreenHarness(5201);
     const ticketId = await openTicket(h);
@@ -370,6 +394,42 @@ describe('technician work', () => {
     expect(ticket.photos.filter((p: { slot: string }) => p.slot.startsWith('after:'))).toHaveLength(
       1,
     );
+  });
+
+  test('a start pressed by mistake is taken back from the Batalkan toast', async () => {
+    h = await openRepairScreenHarness(5203);
+    const ticketId = await openTicket(h);
+    ensureRepairCatalog();
+    registerMoneyCatalog({ id: idMoneyCatalog, en: enMoneyCatalog });
+    const screen = render(
+      <UndoProvider>
+        <UndoHost>
+          <RepairHome
+            runtime={repairRuntimeFor(h, h.technicianId)}
+            now={() => NOW}
+            syncChip={null}
+            avatar={null}
+            onOpenSyncStatus={vi.fn()}
+          />
+        </UndoHost>
+      </UndoProvider>,
+    );
+    await settle();
+    await press(screen, 'repair.board.views.unassigned');
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.start');
+    await press(screen, 'repair.work.before.take.press');
+    await press(screen, 'repair.work.before.primary');
+    // The toast says what happened, in place of the banner, with Batalkan beside it.
+    expect(screen.query('repair.ticket.done')).toBeNull();
+    expect(text(screen, 'undo.toast.message')).toBe(tn('repair.done.start'));
+    expect((await ticketRow(h, ticketId)).outcome).toBe('in_repair');
+
+    await press(screen, 'undo.toast.action');
+    const ticket = await ticketRow(h, ticketId);
+    expect(ticket.outcome).toBe('received');
+    expect(ticket.technicianId).toBeNull();
+    expect(screen.query('undo.toast')).toBeNull();
   });
 
   test('the cashier assigns from the technicians who can work repairs', async () => {

@@ -96,7 +96,7 @@ export async function readCustomerStatus(
   const [events, proposals, settings] = await Promise.all([
     db
       .selectFrom('repairTicketEvents')
-      .select(['kind', 'at'])
+      .select(['id', 'kind', 'at', 'detailJson'])
       .where('ticketId', '=', lookup.ticketId)
       .where('storeId', '=', lookup.storeId)
       .orderBy('at')
@@ -118,8 +118,15 @@ export async function readCustomerStatus(
       .executeTakeFirst(),
   ]);
 
+  // A slip taken back never happened, as far as the customer is concerned.
+  const undone = new Set(
+    events
+      .filter((event) => event.kind === REPAIR_OP.changeReverted)
+      .flatMap((event) => (JSON.parse(event.detailJson) as { undoes: string[] }).undoes),
+  );
   const steps: { step: RepairStatusStep; at: number }[] = [];
   for (const event of events) {
+    if (undone.has(event.id)) continue;
     const step = STEP_OF_EVENT[event.kind];
     if (step === undefined || steps[steps.length - 1]?.step === step) continue;
     steps.push({ step, at: num(event.at) });

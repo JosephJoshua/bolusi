@@ -4,10 +4,11 @@
 import { useMemo, useState } from 'react';
 
 import type { ApprovalRow } from '../approvals/queries.js';
-import { useActionRunner, type EntitySyncStatuses } from '../screen-kit/index.js';
+import { useActionRunner, useOfferUndo, type EntitySyncStatuses } from '../screen-kit/index.js';
 
 import { useClearAskedNotice } from './asked-notice.js';
 import { repairAbilities, type TicketAction } from './flows.js';
+import type { UndoChangeInput } from './commands.js';
 import { tn } from './i18n.js';
 import type { TicketDetailRow } from './queries.js';
 import { moneyRuntimeOf, readApprovals, useRepairQuery, useRepairRuntime } from './runtime.js';
@@ -47,6 +48,25 @@ export function useTicketPage(ticketId: string, cacheKey: string) {
   );
   const ticket = query.status === 'ready' ? query.data.ticket : undefined;
 
+  const offerUndo = useOfferUndo();
+  /**
+   * Says what a status or technician change did, with Batalkan to take it back for a few seconds
+   * (the server allows it only while nothing else changed on the servisan since).
+   */
+  const changed = (message: string, change: UndoChangeInput['change']): void => {
+    if (offerUndo === null) {
+      setDone(message);
+      return;
+    }
+    setDone(null);
+    offerUndo({
+      message,
+      undo: async () => {
+        await runtime.run('undoChange', { ticketId, change });
+      },
+    });
+  };
+
   /** Runs an action that needs no step (starting again, claiming) and says what it did. */
   const runInPlace = (action: TicketAction, command: 'startWork' | 'claimTicket'): void => {
     setDone(null);
@@ -54,7 +74,11 @@ export function useTicketPage(ticketId: string, cacheKey: string) {
       .run(() => runtime.run(command, { ticketId }))
       .then((result) => {
         const key = TICKET_DONE_KEY[action];
-        if (result !== undefined) setDone(key === undefined ? null : tn(key));
+        if (result === undefined || key === undefined) return;
+        changed(
+          tn(key),
+          command === 'claimTicket' ? 'repair.ticket_claimed' : 'repair.work_started',
+        );
       });
   };
 
@@ -68,6 +92,7 @@ export function useTicketPage(ticketId: string, cacheKey: string) {
     reload: () => setReloadNonce((n) => n + 1),
     done,
     setDone,
+    changed,
     runInPlace,
   };
 }

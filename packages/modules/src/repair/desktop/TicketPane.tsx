@@ -170,7 +170,7 @@ export function TicketPane({
   onOpenTicket,
   answerRequestId,
 }: TicketPaneProps): React.JSX.Element {
-  const { runtime, can, money, runner, query, ticket, reload, done, setDone, runInPlace } =
+  const { runtime, can, money, runner, query, ticket, reload, done, setDone, changed, runInPlace } =
     useTicketPage(ticketId, 'desk.ticket');
   const printing = runtime.printing;
   const [step, setStep] = useState<Step>(() =>
@@ -943,13 +943,24 @@ export function TicketPane({
           <WorkPhotosDialog
             {...common}
             stage={step.kind}
-            onDone={() =>
-              finishStep(step.kind === 'after' ? repairedDoneKey(row) : TICKET_DONE_KEY[step.kind])
-            }
+            onDone={() => {
+              closeStep();
+              if (step.kind === 'after')
+                changed(tn(repairedDoneKey(row)), 'repair.marked_repaired');
+              else changed(tn('repair.done.start'), 'repair.work_started');
+            }}
           />
         );
       case 'waitForParts':
-        return <WaitForPartsDialog {...common} onDone={() => finishStep(undefined)} />;
+        return (
+          <WaitForPartsDialog
+            {...common}
+            onDone={() => {
+              closeStep();
+              changed(tn('repair.done.waitForParts'), 'repair.work_paused');
+            }}
+          />
+        );
       case 'cancel':
         return (
           <CancelDialog
@@ -992,7 +1003,10 @@ export function TicketPane({
           <AssignDialog
             {...common}
             currentTechnicianId={row.technicianId}
-            onDone={() => finishStep(undefined)}
+            onDone={() => {
+              closeStep();
+              changed(tn('repair.done.assigned'), 'repair.technician_assigned');
+            }}
           />
         );
       case 'changePrice':

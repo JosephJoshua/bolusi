@@ -365,7 +365,7 @@ type TicketChange = Partial<{
   outcome: RepairOutcome | RawBuilder<string>;
   outcomeNote: string | null;
   location: DeviceLocation;
-  technicianId: string;
+  technicianId: string | null;
   returnedAt: number | RawBuilder<number>;
   cancelFee: number | null;
   cancelStandardFee: number | null;
@@ -453,6 +453,13 @@ const TICKET_CHANGES: Readonly<Record<string, (event: TicketEvent) => TicketChan
   }),
   [REPAIR_OP.downPaymentReceived]: downPaymentChange,
   [REPAIR_OP.downPaymentCorrected]: downPaymentChange,
+  // An undo writes back what the servisan was before the slip, as its applier worked it out.
+  [REPAIR_OP.changeReverted]: ({ detail }) => ({
+    outcome: detail['outcome'] as RepairOutcome,
+    outcomeNote: detail['outcomeNote'] as string | null,
+    readyAt: detail['readyAt'] as number | null,
+    technicianId: detail['technicianId'] as string | null,
+  }),
 };
 
 /**
@@ -842,6 +849,70 @@ export const ticketRepairTypesChangedApplier: ProjectionApplier<RepairDatabase> 
 export const technicianAssignedApplier: ProjectionApplier<RepairDatabase> = (db, op) => {
   const { technicianId } = payloadOf<{ technicianId: string }>(op);
   return changeTicket(db, op, { technicianId });
+};
+
+/** What a servisan's status and technician were after `events`, folded from its intake. */
+function workStateAfter(
+  events: readonly {
+    readonly kind: string;
+    readonly actorId: string;
+    readonly at: number;
+    readonly detailJson: string;
+  }[],
+): {
+  outcome: RepairOutcome;
+  outcomeNote: string | null;
+  readyAt: number | null;
+  technicianId: string | null;
+} {
+  const state = {
+    outcome: 'received' as RepairOutcome,
+    outcomeNote: null as string | null,
+    readyAt: null as number | null,
+    technicianId: null as string | null,
+  };
+  for (const event of events) {
+    const change = TICKET_CHANGES[event.kind]?.({
+      actorId: event.actorId,
+      at: Number(event.at),
+      detail: JSON.parse(event.detailJson) as Record<string, unknown>,
+    });
+    if (change === undefined) continue;
+    if (
+      change.technicianId !== undefined &&
+      !(change.unclaimedOnly === true && state.technicianId !== null)
+    ) {
+      state.technicianId = change.technicianId;
+    }
+    if (change.outcome !== undefined && state.outcome !== 'cancelled') {
+      // A handover leaves a phone repaired (cancels are excluded above).
+      state.outcome = typeof change.outcome === 'string' ? change.outcome : 'repaired';
+    }
+    if (change.outcomeNote !== undefined) state.outcomeNote = change.outcomeNote;
+    if (change.readyAt !== undefined) state.readyAt = change.readyAt;
+  }
+  return state;
+}
+
+/**
+ * Take back the person's own slip: the servisan's status and technician go back to what they were
+ * before its first op (the server allowed it only while nothing else changed since). The values are
+ * kept in the history entry, so a ticket opened later replays them like any other change.
+ */
+export const changeRevertedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
+  const { undoes } = payloadOf<{ undoes: string[] }>(op);
+  const events = await db
+    .selectFrom('repairTicketEvents')
+    .select(['id', 'kind', 'actorId', 'at', 'detailJson'])
+    .where('ticketId', '=', op.entityId)
+    .where('storeId', '=', storeIdOf(op))
+    .orderBy('at')
+    .orderBy('id')
+    .execute();
+  const taken = new Set(undoes);
+  const first = events.findIndex((event) => taken.has(event.id));
+  const before = first === -1 ? events : events.slice(0, first);
+  await changeTicket(db, op, { undoes, ...workStateAfter(before) });
 };
 
 export const workPhotosAddedApplier: ProjectionApplier<RepairDatabase> = async (db, op) => {
