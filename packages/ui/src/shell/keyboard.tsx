@@ -90,6 +90,26 @@ export function useKeyboardLift(): { readonly ref: RefObject<View | null>; reado
   return { ref, lift };
 }
 
+/**
+ * Where to scroll so a box at `y` (`height` tall) sits `MARGIN` clear of the visible area's edges,
+ * or null when it already does. A box taller than the visible area shows its top, where its label
+ * and any problem are.
+ */
+export function revealOffset(box: {
+  readonly y: number;
+  readonly height: number;
+  readonly mode: RevealMode;
+  /** The visible area: its height, and how far the content is scrolled. */
+  readonly visible: number;
+  readonly offset: number;
+}): number | null {
+  const { y, height, mode, visible, offset } = box;
+  const tall = height + 2 * MARGIN > visible;
+  if (mode === 'to-top' || tall || y - MARGIN < offset) return Math.max(0, y - MARGIN);
+  if (y + height + MARGIN > offset + visible) return Math.max(0, y + height + MARGIN - visible);
+  return null;
+}
+
 /** The scrolling half, owned by `AppShell`'s ScrollView. */
 export function useRevealingScroll(): {
   readonly port: RevealPort;
@@ -110,10 +130,8 @@ export function useRevealingScroll(): {
       content,
       (_x, y, _width, height) => {
         const { height: visible, offset } = viewport.current;
-        let target: number | null = null;
-        if (mode === 'to-top' || y - MARGIN < offset) target = y - MARGIN;
-        else if (y + height + MARGIN > offset + visible) target = y + height + MARGIN - visible;
-        if (target !== null) scroll.current?.scrollTo({ y: Math.max(0, target), animated: true });
+        const target = revealOffset({ y, height, mode, visible, offset });
+        if (target !== null) scroll.current?.scrollTo({ y: target, animated: true });
       },
       () => undefined,
     );
