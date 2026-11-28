@@ -28,15 +28,13 @@ import type { MediaRef } from '@bolusi/schemas';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
+import { type DiscardGuard } from '../../screen-kit/index.js';
 
-import { useChangeCheck } from '../../money/change-check.js';
 import { ChangeCheckSheet, PaymentLines } from '../../money/screens/PaymentLines.js';
 import { QrisStep, useQrStepBack } from '../../money/screens/QrisStep.js';
 import { canSimulateQris } from '../../money/qris.js';
 import { tn } from '../i18n.js';
 import {
-  ticketBalance,
   capturedThumbnailRef,
   amountOwed,
   repairAbilities,
@@ -55,11 +53,11 @@ import {
   type RepairChrome,
 } from './parts.js';
 import { useDiscardConfirm } from './discard.js';
-import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
-import { freeHandoverNeedsOwner } from '../rules.js';
-import { payLaterHintKey, payLaterLines, useHandoverPayment } from '../handover-payment.js';
+import { handoverLineLabel } from '../handover-checks.js';
+import { useHandoverForm } from '../handover-form.js';
+import { payLaterHintKey, payLaterLines } from '../handover-payment.js';
 import { ta } from '../../approvals/i18n.js';
-import { usePaymentAccounts, useRepairQuery, useRepairRuntime, useTicketQris } from '../runtime.js';
+import { useRepairQuery, useRepairRuntime } from '../runtime.js';
 
 export interface HandoverProps {
   readonly ticketId: string;
@@ -86,7 +84,6 @@ export function Handover({
   testID = 'repair.handover',
 }: HandoverProps): React.JSX.Element {
   const runtime = useRepairRuntime();
-  const runner = useActionRunner();
   // Read once: a draft is this ticket's only when the shell kept it for this ticket.
   const [restored] = useState(() => (restoredDraft?.ticketId === ticketId ? restoredDraft : null));
   const [photo, setPhoto] = useState<MediaRef | null>(restored?.photo ?? null);
@@ -97,42 +94,29 @@ export function Handover({
     async (rt) => (await rt.query('getTicket', { ticketId })).rows[0],
     `handover:${ticketId}:${String(reloadNonce)}`,
   );
-  // Until the store's methods load, a method picked earlier would read as cash.
-  const loadedAccounts = usePaymentAccounts();
-  const accounts = loadedAccounts ?? [];
-
   // Handed back, reopened or held by a new proposal on another device meanwhile: say so rather
   // than take a signature for a handover that would be refused.
   const can = useMemo(() => repairAbilities(runtime.hasPermission), [runtime]);
   const ticket = query.status === 'ready' ? query.data : undefined;
-  const balance =
-    ticket === undefined ? { kind: 'due' as const, amount: 0 } : ticketBalance(ticket);
-  const due = balance.kind === 'due' ? balance.amount : 0;
-  const qris = useTicketQris(ticketId, ticket?.ticketNumber ?? null);
-  const payment = useHandoverPayment(ticketId, due, accounts, qris, restored?.payment);
+  const handover = useHandoverForm(
+    ticketId,
+    ticket,
+    { photo, signature, note },
+    () => {
+      onDraftChange?.(null);
+      onDone();
+    },
+    restored,
+  );
+  const { runner, accounts, due, qris, payment, checks, ownerNeeded, ready, changeCheck } =
+    handover;
   const { settled } = payment;
-  const checks = useHandoverChecks(ticket, restored?.ticked);
-  const ownerNeeded =
-    ticket !== undefined && freeHandoverNeedsOwner(ticket) && !can.warrantyException;
-  const ready =
-    !ownerNeeded &&
-    photo !== null &&
-    signature !== null &&
-    settled &&
-    loadedAccounts !== null &&
-    checks.ready(note);
   const stale =
     ticket === undefined ? null : staleStep({ kind: 'handover' }, ticket, can, runtime.userId);
   // The payment section shows: something is left to pay and the handover can still finish.
   const paying = due > 0 && stale === null;
 
-  const dirty =
-    stale === null &&
-    (photo !== null ||
-      signature !== null ||
-      note.trim() !== '' ||
-      payment.touched ||
-      checks.touched);
+  const dirty = stale === null && handover.touched;
   const discard = useDiscardConfirm({
     dirty,
     onRegisterDiscardGuard: useQrStepBack(
@@ -196,28 +180,7 @@ export function Handover({
     });
   };
 
-  const changeCheck = useChangeCheck();
-  const submit = (): void => {
-    if (!ready || photo === null || signature === null) return;
-    changeCheck.guard(payment.input.payments, () => {
-      void runner
-        .run(() =>
-          runtime.run('returnDevice', {
-            ticketId,
-            handoverPhoto: photo,
-            signature,
-            note,
-            checklist: [...checks.lines],
-            ...payment.input,
-          }),
-        )
-        .then((result) => {
-          if (result === undefined) return;
-          onDraftChange?.(null);
-          onDone();
-        });
-    });
-  };
+  const submit = handover.submit;
 
   if (payment.qris.open !== null && qris.port !== undefined) {
     return (
@@ -229,6 +192,7 @@ export function Handover({
         onPaid={payment.qris.paid}
         onRenew={payment.qris.renew}
         onTakeByHand={payment.qris.takeByHand}
+        onCancel={payment.qris.cancelOpen}
         onClose={payment.qris.close}
         testID={`${testID}.qris`}
       />

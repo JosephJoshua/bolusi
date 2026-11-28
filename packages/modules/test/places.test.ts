@@ -21,10 +21,11 @@ describe('places', () => {
     expect(opensParts(holding(INVENTORY_PERMISSION.read))).toBe(true);
   });
 
-  test('Kiriman needs the parts list and sending or receiving', () => {
+  test('Kiriman needs the parts list and sending, receiving or settling', () => {
     const I = INVENTORY_PERMISSION;
     expect(opensTransfers(holding(I.read, I.transfer))).toBe(true);
     expect(opensTransfers(holding(I.read, I.receive))).toBe(true);
+    expect(opensTransfers(holding(I.read, I.settleTransfer))).toBe(true);
     expect(opensTransfers(holding(I.read))).toBe(false);
     expect(opensTransfers(holding(I.transfer, I.receive))).toBe(false);
   });

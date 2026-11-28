@@ -233,7 +233,7 @@ describe('counter app over demo data', () => {
     });
     // A down payment above the total is refused beside the field; a fair one shows what is left.
     fireEvent.change(byTestId('repair.desk.intake.downPayment'), { target: { value: '2000000' } });
-    expect(await screen.findByText('DP-nya lebih besar dari total biaya.')).toBeTruthy();
+    expect(await screen.findByText('DP lebih besar dari total biaya.')).toBeTruthy();
     fireEvent.change(byTestId('repair.desk.intake.downPayment'), { target: { value: '500000' } });
     await waitFor(() =>
       expect(byTestId('repair.desk.intake.balance').textContent).toContain('750.000'),
@@ -342,7 +342,7 @@ describe('counter app over demo data', () => {
     await openTicket('Yakob Tabuni');
     fireEvent.click(byTestId('repair.desk.ticket.action.warrantyClaim'));
     const ask = await screen.findByTestId('desktop.claimReplacesIntake');
-    expect(ask.textContent).toContain('Isian yang belum disimpan akan dibuang.');
+    expect(ask.textContent).toContain('Data yang belum disimpan akan dihapus.');
     fireEvent.click(within(ask).getByRole('button', { name: 'Batal' }));
     await waitFor(() => expect(screen.queryByTestId('desktop.claimReplacesIntake')).toBeNull());
     expect(screen.queryByTestId('repair.desk.intake')).toBeNull();
@@ -442,7 +442,8 @@ describe('counter app over demo data', () => {
     await openTicket('Benny Kambu');
     fireEvent.click(byTestId('repair.desk.ticket.action.cancel'));
     const dialog = await screen.findByTestId('repair.desk.cancel');
-    expect(within(dialog).getByRole('heading').textContent).toBe('Pembatalan servisan');
+    // Named as the phone names it: the counter asks for the cancel, it does not cancel.
+    expect(within(dialog).getByRole('heading').textContent).toBe('Minta pembatalan');
     expect(byTestId('repair.desk.cancel.asks').textContent).toBe('Perlu persetujuan pemilik toko.');
     fireEvent.change(byTestId('repair.desk.cancel.reason'), {
       target: { value: 'Pelanggan tidak jadi' },
@@ -472,7 +473,7 @@ describe('counter app over demo data', () => {
       '−Rp\u00A025.000',
     );
     fireEvent.click(within(dialog).getByTestId('repair.desk.approval.approve'));
-    await screen.findByText('Disetujui dan sudah dicatat.');
+    await screen.findByText('Disetujui dan dicatat.');
     // Approved, it waits on the customer like any price change; nothing waits on the owner now.
     expect(byTestId('repair.desk.ticket.price').textContent).toContain('Diskon pelanggan tetap');
     await waitFor(() =>
@@ -534,7 +535,7 @@ describe('counter app over demo data', () => {
     const dialog = await screen.findByTestId('repair.desk.price.change');
     fireEvent.click(within(dialog).getByTestId('repair.desk.price.change.kind.discount'));
     expect(byTestId('repair.desk.price.change.discountLimit').textContent).toBe(
-      'Batas diskonmu Rp\u00A050.000 per servisan.',
+      'Batas diskon Anda Rp\u00A050.000 per servisan.',
     );
     fireEvent.change(byTestId('repair.desk.price.change.description'), {
       target: { value: 'Diskon langganan' },
@@ -545,7 +546,7 @@ describe('counter app over demo data', () => {
     });
     // Beyond the limit the customer's answer waits: an owner decides first.
     expect(byTestId('repair.desk.price.change.asks').textContent).toBe(
-      'Melebihi batasmu, jadi perlu persetujuan.',
+      'Melebihi batas Anda, jadi perlu persetujuan.',
     );
     expect(screen.queryByTestId('repair.desk.price.change.agreed')).toBeNull();
     fireEvent.click(byTestId('repair.desk.price.change.submit'));
@@ -562,7 +563,7 @@ describe('counter app over demo data', () => {
     expect(screen.queryByTestId('repair.desk.cancel.limit')).toBeNull();
     fireEvent.click(await screen.findByTestId('repair.desk.cancel.changeFee'));
     expect(byTestId('repair.desk.cancel.limit').textContent).toBe(
-      'Kamu bisa memotong biaya sampai Rp\u00A050.000.',
+      'Anda dapat memotong biaya sampai Rp\u00A050.000.',
     );
   });
 
@@ -637,7 +638,7 @@ describe('counter app over demo data', () => {
     fireEvent.change(byTestId('repair.desk.downPayment.record.amount'), {
       target: { value: '60000' },
     });
-    expect(screen.getByText('DP-nya lebih besar dari total biaya.')).toBeTruthy();
+    expect(screen.getByText('DP lebih besar dari total biaya.')).toBeTruthy();
     expect(byTestId('repair.desk.downPayment.record.submit')).toHaveProperty('disabled', true);
     fireEvent.change(byTestId('repair.desk.downPayment.record.amount'), {
       target: { value: '20000' },
@@ -717,7 +718,7 @@ describe('counter app over demo data', () => {
     // The DP came in partly by QRIS, so part of the 50.000 goes back through it.
     const handover = byTestId('repair.desk.handover').textContent;
     expect(handover).toContain('Kembalikan tunai');
-    expect(handover).toMatch(/Kembalikan lewat QRIS BCA\s*Rp\u00A030\.000/);
+    expect(handover).toMatch(/Kembalikan melalui QRIS BCA\s*Rp\u00A030\.000/);
   });
 
   it('hands a phone back only once the rest is paid, with the change shown', async () => {
@@ -740,7 +741,7 @@ describe('counter app over demo data', () => {
     fireEvent.change(byTestId('repair.desk.handover.pay.line0.tendered'), {
       target: { value: '10000' },
     });
-    expect(await screen.findByText('Uang diterima kurang dari jumlahnya.')).toBeTruthy();
+    expect(await screen.findByText('Uang diterima kurang dari jumlah yang dibayar.')).toBeTruthy();
     expect(byTestId('repair.desk.handover.submit')).toHaveProperty('disabled', true);
     fireEvent.change(byTestId('repair.desk.handover.pay.line0.tendered'), {
       target: { value: '20000' },
@@ -753,7 +754,7 @@ describe('counter app over demo data', () => {
     });
     expect(byTestId('repair.desk.handover.pay.line0.change').className).toContain('text-warning');
     expect(byTestId('repair.desk.handover.pay.line0.changeBig').textContent).toBe(
-      'Kembalian besar. Cek lagi uang diterima.',
+      'Kembalian besar. Periksa kembali uang diterima.',
     );
     await waitFor(() =>
       expect(byTestId('repair.desk.handover.submit')).toHaveProperty('disabled', false),
@@ -761,7 +762,9 @@ describe('counter app over demo data', () => {
     fireEvent.click(byTestId('repair.desk.handover.submit'));
     const check = await screen.findByTestId('repair.desk.handover.changeCheck');
     expect(check.textContent).toMatch(/Kembalian Rp\s?135\.000, sudah benar\?/);
-    expect(check.textContent).toMatch(/Uang diterima Rp\s?150\.000 untuk bayar Rp\s?15\.000\./);
+    expect(check.textContent).toMatch(
+      /Uang diterima Rp\s?150\.000 untuk pembayaran Rp\s?15\.000\./,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Cek lagi' }));
     await waitFor(() =>
       expect(screen.queryByTestId('repair.desk.handover.changeCheck')).toBeNull(),
@@ -847,7 +850,7 @@ describe('counter app over demo data', () => {
     for (const name of ['Sudah dicoba pelanggan', 'Charger dikembalikan']) {
       fireEvent.click(checks.getByRole('button', { name }));
     }
-    expect(await screen.findByText('Centang semua, atau tulis kenapa belum.')).toBeTruthy();
+    expect(await screen.findByText('Centang semua, atau tulis alasan yang belum.')).toBeTruthy();
     expect(byTestId('repair.desk.handover.submit')).toHaveProperty('disabled', true);
     fireEvent.change(byTestId('repair.desk.handover.note'), {
       target: { value: 'Casing diambil besok' },
@@ -1111,7 +1114,7 @@ describe('money after pickup on the servisan', () => {
     await openMore('Kembalikan uang');
     await screen.findByTestId('money.desk.refund');
     fireEvent.change(byTestId('money.desk.refund.amount'), { target: { value: '40000' } });
-    expect(text('money.desk.refund.limit')).toBe('Melebihibatasmu,jadiperlupersetujuan.');
+    expect(text('money.desk.refund.limit')).toBe('MelebihibatasAnda,jadiperlupersetujuan.');
     expect(byTestId('money.desk.refund.lowersBill').textContent).toContain('40.000');
     fireEvent.change(byTestId('money.desk.refund.reason'), { target: { value: 'Garansi kaca' } });
     expect(byTestId('money.desk.refund.submit').textContent).toBe('Minta persetujuan');

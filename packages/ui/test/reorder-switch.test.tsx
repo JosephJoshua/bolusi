@@ -53,7 +53,7 @@ describe('SwitchRow', () => {
   test('the whole row is the switch and announces its state', () => {
     const onValueChange = vi.fn();
     const r = render(
-      <SwitchRow testID="sw" label="Tampil di toko ini" value onValueChange={onValueChange} />,
+      <SwitchRow testID="sw" label="Tampilkan di toko ini" value onValueChange={onValueChange} />,
     );
     expect(r.get('sw').props['accessibilityRole']).toBe('switch');
     expect(r.get('sw').props['accessibilityState']).toEqual({ checked: true });

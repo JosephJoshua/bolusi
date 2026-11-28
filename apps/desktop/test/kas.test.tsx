@@ -119,7 +119,9 @@ describe('Kas on the PC', () => {
     // QA round F: a count that is off is saved with a reason, for the owner who settles it.
     expect(byTestId('money.desk.count.submit')).toHaveProperty('disabled', true);
     expect(screen.getByLabelText('Alasan selisih')).toBeTruthy();
-    expect(byTestId('money.desk.count').textContent).toContain('Tulis alasan selisihnya dulu.');
+    expect(byTestId('money.desk.count').textContent).toContain(
+      'Tulis alasan selisih terlebih dahulu.',
+    );
     fireEvent.change(byTestId('money.desk.count.note'), { target: { value: 'Uang kembalian' } });
     fireEvent.click(byTestId('money.desk.count.submit'));
     await waitFor(() => expect(screen.queryByTestId('money.desk.count')).toBeNull());
@@ -170,7 +172,7 @@ describe('Kas on the PC', () => {
     await screen.findByTestId('money.desk.move');
     fireEvent.click(byTestId('money.desk.move.kind.expense'));
     fireEvent.change(byTestId('money.desk.move.amount'), { target: { value: '25000' } });
-    expect(byTestId('money.desk.move.hint').textContent).toBe('Isi keterangannya.');
+    expect(byTestId('money.desk.move.hint').textContent).toBe('Isi keterangan.');
     expect(byTestId('money.desk.move.submit')).toHaveProperty('disabled', true);
     fireEvent.change(byTestId('money.desk.move.reason'), { target: { value: 'Beli lakban' } });
     fireEvent.click(byTestId('money.desk.move.submit'));
@@ -198,13 +200,12 @@ describe('Kas on the PC', () => {
     fireEvent.change(byTestId('money.desk.receive.pay.line0.amount'), {
       target: { value: '200000' },
     });
-    // The store takes more than cash, so nothing is picked for the counter (round 2 QA, A11).
-    expect(byTestId('money.desk.receive.pay.line0.pick').textContent).toBe(
-      'Pilih cara bayarnya dulu.',
-    );
+    // The store's QRIS through Xendit is the default, and only its QR can pay that line: nothing is
+    // booked to the drawer for want of a tap (round 2 QA, A11; Joseph 2026-11-25).
+    expect(byTestId('money.desk.receive.pay.line0.showQr')).toBeTruthy();
     expect(byTestId('money.desk.receive.submit')).toHaveProperty('disabled', true);
     pick('money.desk.receive.pay.line0');
-    expect(screen.queryByTestId('money.desk.receive.pay.line0.pick')).toBeNull();
+    expect(screen.queryByTestId('money.desk.receive.pay.line0.showQr')).toBeNull();
     // QA round F: 2.000.000 handed over for 200.000 is asked about; the counter says it is right.
     fireEvent.change(byTestId('money.desk.receive.pay.line0.tendered'), {
       target: { value: '2000000' },
@@ -277,7 +278,7 @@ describe('Kas on the PC', () => {
     expect(byTestId('money.desk.reduce.amount')).toHaveProperty('value', '250.000');
     expect(text('money.desk.reduce.after')).toBe('Rp0');
     fireEvent.change(byTestId('money.desk.reduce.amount'), { target: { value: '500000' } });
-    expect(text('money.desk.reduce')).toContain('PalingbanyakRp450.000');
+    expect(text('money.desk.reduce')).toContain('MaksimalRp450.000');
     expect(screen.queryByTestId('money.desk.reduce.hint')).toBeNull();
     expect(byTestId('money.desk.reduce.submit')).toHaveProperty('disabled', true);
     fireEvent.change(byTestId('money.desk.reduce.amount'), { target: { value: '300000' } });
@@ -392,11 +393,11 @@ describe('Kas on the PC', () => {
     await openKas('Maria Kogoya');
     await openVoid();
     expect(byTestId('money.desk.void.limit').textContent).toBe(
-      'Batas pembatalanmu Rp\u00A030.000 per servisan.',
+      'Batas pembatalan Anda Rp\u00A030.000 per servisan.',
     );
     // Every payment today is beyond it: said up front, and the cancel goes to an owner.
     expect((await screen.findByTestId('money.desk.void.asks')).textContent).toBe(
-      'Melebihi batasmu, jadi perlu persetujuan.',
+      'Melebihi batas Anda, jadi perlu persetujuan.',
     );
     expect(byTestId('money.desk.void.submit').textContent).toBe('Minta persetujuan');
     fireEvent.change(byTestId('money.desk.void.reason'), { target: { value: 'Salah metode' } });
@@ -472,7 +473,7 @@ describe('payment methods in PC Settings', () => {
     fireEvent.click(some);
     fireEvent.click(byTestId('money.desk.methodForm.submit'));
     expect((await screen.findByTestId('money.desk.methodForm.storeError')).textContent).toBe(
-      'Pilih paling sedikit satu toko.',
+      'Pilih minimal satu toko.',
     );
     fireEvent.click(byTestId('money.desk.methodForm.store.01920000-0000-7000-8000-0000000005a2'));
     fireEvent.click(byTestId('money.desk.methodForm.store.01920000-0000-7000-8000-0000000005a3'));

@@ -71,7 +71,8 @@ import {
   repairStyles,
 } from './parts.js';
 import { useRepairQuery } from '../runtime.js';
-import { usePriceKinds, type PriceKind } from './TicketSteps.js';
+import { type PriceKind } from '../flows.js';
+import { usePriceKinds } from '../price-change.js';
 import { OwnershipVideoTile } from './video.js';
 
 export interface StepProps {

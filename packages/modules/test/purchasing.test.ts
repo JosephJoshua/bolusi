@@ -396,7 +396,7 @@ describe('the order on WhatsApp', () => {
   test('a long order lists every part with its quantity, the note and the store, no prices', () => {
     const text = orderMessage(long, 'Bolusi Sorong');
     const rows = text.split('\n');
-    expect(rows[0]).toBe('Halo Sumber Jaya, kami mau pesan:');
+    expect(rows[0]).toBe('Halo Sumber Jaya, kami ingin memesan:');
     expect(rows[1]).toBe('1. LCD Samsung Galaxy A10 + frame: 1 pcs');
     expect(rows[40]).toBe('40. LCD Samsung Galaxy A49 + frame: 1 pcs');
     expect(text).toContain('Catatan: Kirim sebelum Sabtu');

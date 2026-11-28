@@ -374,6 +374,8 @@ book for repairs and starts the store's money ledger.
 - **Integrated QRIS:** Xendit (Bolusi shows a QR for the exact amount and Xendit
   confirms it). Built after manual payments; each settlement owner (a store or
   the franchise) opens its own Xendit account. Manual QRIS stays available.
+  Connected QRIS is the default method; while its QR is unpaid nothing else is
+  taken until the counter cancels it (agreed 2026-11-25).
 - **Refunds are owners':** the counter gives back only what a customer paid
   beyond their bill, through the method they paid with (a cancelled servisan's
   DP less its fee, an overpayment). Anything more, a lower bill or a cancelled

@@ -918,9 +918,32 @@ export const PROBE_REGISTRY: ProbeRegistry = {
     unauthenticated: UNAUTH_DENIED,
     unauthenticatedRequest: unauthLeg('POST', () => '/v1/money/qris/charges'),
   },
+  'GET /v1/money/qris/charges': {
+    crossTenant: { kind: 'denied', verdict: ACTING_USER_INVALID, rule: RULE_CROSS_TENANT },
+    crossTenantRequest: (ctx) => ({
+      path: `/v1/money/qris/charges?documentId=${ctx.tenantBQrisChargeId}`,
+      init: { method: 'GET', headers: actingHeaders(ctx, ctx.tenantBUserId) },
+      foreignId: ctx.tenantBUserId,
+    }),
+    unassignedStore: {
+      kind: 'absent',
+      reason:
+        'the list is the bill’s QRs in the bearer device’s store only; another store’s never come back (apps/server qris.test.ts)',
+    },
+    unauthenticated: UNAUTH_DENIED,
+    unauthenticatedRequest: unauthLeg(
+      'GET',
+      (ctx) => `/v1/money/qris/charges?documentId=${ctx.tenantBQrisChargeId}`,
+    ),
+  },
   'GET /v1/money/qris/charges/:id': qrisProbes(
     'GET',
     (id) => `/v1/money/qris/charges/${id}`,
+    QRIS_CHARGE,
+  ),
+  'POST /v1/money/qris/charges/:id/cancel': qrisProbes(
+    'POST',
+    (id) => `/v1/money/qris/charges/${id}/cancel`,
     QRIS_CHARGE,
   ),
   'POST /v1/money/qris/charges/:id/simulate': qrisProbes(

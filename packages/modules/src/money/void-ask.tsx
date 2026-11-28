@@ -4,9 +4,10 @@
 // (`voidCounted`, with what was already taken off the servisan), so the screen asks exactly when
 // saving would be refused.
 import { formatMoney } from '@bolusi/i18n';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { APPROVAL_PERMISSION } from '../approvals/constants.js';
+import { useActionRunner } from '../screen-kit/index.js';
 import type { ApprovalRow } from '../approvals/queries.js';
 import { MONEY_APPROVAL_KIND, MONEY_PERMISSION } from './constants.js';
 import { tm, type MoneyKey } from './i18n.js';
@@ -240,4 +241,35 @@ export function useOnVoidDecided(entryId: string | null, onDecided: () => void):
     }
     if (seenWaiting.current || asks.rejected.has(entryId)) decided.current();
   }, [asks, entryId]);
+}
+
+/**
+ * Cancelling a payment recorded by mistake, with a reason, the same on the phone and the PC. A
+ * limited role (a manager) sees its limit up front; beyond it, or without the decision, an owner is
+ * asked instead (`onAsked`).
+ */
+export function useVoidPayment(
+  entry: MoneyEntryRow,
+  done: { readonly onDone: () => void; readonly onAsked: () => void },
+) {
+  const runtime = useMoneyRuntime();
+  const runner = useActionRunner();
+  const [reason, setReason] = useState('');
+  const kind = voidKind(entry);
+  const ask = useVoidAsk(entry);
+  const customer = useEntryCustomer(entry);
+  const blocked = ask.asking && !ask.mayAsk;
+  const submit = (): void => {
+    if (reason.trim() === '' || blocked || ask.pending) return;
+    void runner
+      .run<unknown>(() =>
+        ask.asking
+          ? runtime.approvals.run('requestApproval', voidRequest(entry, reason))
+          : runtime.run(kind.command, { entryId: entry.id, reason }),
+      )
+      .then((result) => {
+        if (result !== undefined) (ask.asking ? done.onAsked : done.onDone)();
+      });
+  };
+  return { runner, reason, setReason, kind, ask, customer, blocked, submit };
 }

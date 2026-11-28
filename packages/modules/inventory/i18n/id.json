@@ -19,24 +19,24 @@
     "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
     "itemNotFound": "Barang ini tidak ada di daftar.",
     "itemArchived": "Barang ini sudah diarsipkan.",
-    "moreThanTaken": "Jumlahnya lebih dari yang diambil untuk servisan ini.",
-    "wrongUse": "Data servisannya tidak cocok. Coba lagi.",
+    "moreThanTaken": "Jumlah melebihi yang diambil untuk servisan ini.",
+    "wrongUse": "Data servisan tidak cocok. Coba lagi.",
     "categoryNotFound": "Kategori ini tidak ada.",
-    "categoryInvalid": "Isian atau format nama kategori ini belum benar.",
-    "wrongSource": "Data pesanannya tidak sesuai.",
+    "categoryInvalid": "Kolom atau format nama kategori ini belum benar.",
+    "wrongSource": "Data pesanan tidak sesuai.",
     "transferNotFound": "Transfer ini tidak ditemukan di toko ini.",
-    "transferMismatch": "Data transfernya tidak sesuai.",
+    "transferMismatch": "Data transfer tidak sesuai.",
     "transferCancelled": "Transfer ini sudah dibatalkan toko pengirim.",
     "sameStore": "Pilih toko lain sebagai tujuan.",
     "notOnTransfer": "Sparepart ini tidak ada di transfer.",
-    "moreThanSent": "Jumlahnya melebihi yang dikirim.",
-    "nothingToCancel": "Transfer ini tidak bisa dibatalkan lagi karena sebagian sudah diterima.",
-    "nothingToSettle": "Jumlahnya melebihi yang belum sampai.",
-    "reasonRequired": "Tulis alasannya terlebih dahulu.",
+    "moreThanSent": "Jumlah melebihi yang dikirim.",
+    "nothingToCancel": "Transfer ini tidak dapat dibatalkan karena sebagian sudah diterima.",
+    "nothingToSettle": "Jumlah melebihi yang belum sampai.",
+    "reasonRequired": "Tulis alasan terlebih dahulu.",
     "numberNotThisDevice": "Nomor transfer ini bukan dari perangkat ini.",
     "numberUsed": "Nomor transfer ini sudah dipakai.",
     "notReceived": "Harga beli hanya untuk barang yang sudah diterima.",
-    "costNotYours": "Kamu tidak bisa mengubah harga beli ini."
+    "costNotYours": "Anda tidak dapat mengubah harga beli ini."
   },
   "list": {
     "title": "Barang",
@@ -74,7 +74,7 @@
     "edit": "Ubah",
     "count": "Koreksi stok",
     "archive": "Arsipkan",
-    "restore": "Aktifkan lagi",
+    "restore": "Aktifkan kembali",
     "save": "Simpan"
   },
   "form": {
@@ -86,7 +86,7 @@
     "fits": "Cocok untuk HP (opsional)",
     "fitsPlaceholder": "Contoh: Redmi Note 10, Note 10S",
     "stock": "Stok sekarang",
-    "nameRequired": "Tulis nama barangnya dulu.",
+    "nameRequired": "Tulis nama barang terlebih dahulu.",
     "fitsSearch": "Cari tipe HP",
     "removeFit": "Hapus",
     "addTyped": "Tambah “{model}”",
@@ -96,9 +96,9 @@
     "category": "Kategori",
     "noCategory": "Tanpa kategori",
     "autoName": "Nama",
-    "autoNameEmpty": "Isi kolom di atas, namanya tersusun sendiri.",
+    "autoNameEmpty": "Isi kolom di atas; nama akan tersusun otomatis.",
     "editName": "Ubah nama",
-    "useAutoName": "Pakai nama otomatis",
+    "useAutoName": "Gunakan nama otomatis",
     "barcode": "Barcode (opsional)",
     "scan": "Pindai",
     "tags": "Label (opsional)",
@@ -129,14 +129,14 @@
     "tags": "Label"
   },
   "movement": {
-    "counted": "Dikoreksi jadi {count}",
+    "counted": "Dikoreksi menjadi {count}",
     "taken": "Diambil untuk {use}",
     "putBack": "Dikembalikan dari {use}",
     "received": "Diterima dari {source}",
-    "transferOut": "Dikirim lewat {transfer}",
+    "transferOut": "Dikirim melalui {transfer}",
     "transferIn": "Diterima dari {transfer}",
     "transferBack": "Kembali dari {transfer}",
-    "transferArrivedLate": "Ternyata sampai, {transfer}"
+    "transferArrivedLate": "Akhirnya sampai, {transfer}"
   },
   "stepper": {
     "decrease": "Kurangi",
@@ -144,7 +144,7 @@
   },
   "archive": {
     "title": "Arsipkan barang ini?",
-    "message": "Tidak bisa diambil lagi untuk servisan. Riwayatnya tetap ada."
+    "message": "Barang tidak dapat diambil lagi untuk servisan. Riwayatnya tetap ada."
   },
   "use": {
     "title": "Sparepart",
@@ -157,7 +157,7 @@
     "putBackTitle": "Kembalikan ke stok?",
     "putBackMessage": "{name} kembali ke stok toko.",
     "notReturned": "Sparepart ini belum kembali ke stok.",
-    "pickFirst": "Pilih sparepartnya dulu.",
+    "pickFirst": "Pilih sparepart terlebih dahulu.",
     "none": "Belum ada sparepart.",
     "putBackAction": "Kembalikan ke stok",
     "searchHint": "Cari sparepart",
@@ -165,20 +165,20 @@
     "fitsDevice": "Cocok untuk {model}",
     "otherParts": "Sparepart lain",
     "overStock": "Lebih {extra} dari stok.",
-    "searchMore": "Cari untuk lihat sparepart lain."
+    "searchMore": "Cari untuk melihat sparepart lain."
   },
   "done": {
     "added": "Barang ditambahkan.",
     "saved": "Perubahan disimpan.",
     "counted": "Stok dikoreksi.",
     "archived": "Barang diarsipkan.",
-    "restored": "Barang aktif lagi.",
+    "restored": "Barang aktif kembali.",
     "taken": "Sparepart diambil.",
     "putBack": "Sparepart dikembalikan ke stok."
   },
   "discard": {
     "title": "Keluar tanpa menyimpan?",
-    "message": "Isian yang belum disimpan akan hilang.",
+    "message": "Data yang belum disimpan akan hilang.",
     "confirm": "Keluar",
     "keep": "Tetap di sini"
   },
@@ -196,13 +196,13 @@
     "editTitle": "Ubah kategori",
     "name": "Nama kategori",
     "namePlaceholder": "Contoh: LCD",
-    "nameRequired": "Tulis nama kategorinya dulu.",
+    "nameRequired": "Tulis nama kategori terlebih dahulu.",
     "isPart": "Sparepart",
-    "isPartCaption": "Bisa diambil untuk servisan.",
-    "fields": "Isian",
-    "fieldsHint": "Yang diisi untuk setiap barang di kategori ini.",
-    "addField": "Tambah isian",
-    "fieldLabel": "Nama isian",
+    "isPartCaption": "Dapat diambil untuk servisan.",
+    "fields": "Kolom",
+    "fieldsHint": "Diisi untuk setiap barang di kategori ini.",
+    "addField": "Tambah kolom",
+    "fieldLabel": "Nama kolom",
     "fieldLabelPlaceholder": "Contoh: Kualitas",
     "kind": {
       "one": "Pilih satu",
@@ -214,35 +214,37 @@
     "addOption": "Tambah",
     "newOption": "Pilihan baru",
     "optionCount": "{count} pilihan",
-    "removeField": "Hapus isian",
+    "removeField": "Hapus kolom",
     "done": "Selesai",
     "format": "Format nama",
-    "formatHint": "Ketuk isian untuk menambahkannya ke nama.",
+    "formatHint": "Ketuk kolom untuk menambahkannya ke nama.",
     "example": "Contoh: {name}",
     "saved": "Kategori disimpan.",
     "savedRenamed": "Kategori disimpan. Nama {count} barang ikut diperbarui.",
+    "archivedNotice": "Kategori diarsipkan.",
+    "restoredNotice": "Kategori aktif kembali.",
     "archive": "Arsipkan kategori",
     "archiveTitle": "Arsipkan kategori ini?",
-    "archiveMessage": "Barangnya tetap ada, tapi kategori ini tidak bisa dipilih lagi.",
-    "restore": "Aktifkan lagi",
+    "archiveMessage": "Barang tetap ada, tetapi kategori ini tidak dapat dipilih lagi.",
+    "restore": "Aktifkan kembali",
     "archived": "Diarsipkan",
-    "fieldCount": "{count} isian",
+    "fieldCount": "{count} kolom",
     "none": "Belum ada kategori.",
     "noneHint": "Kategori membuat nama barang seragam dan mudah difilter.",
     "problem": {
-      "labelEmpty": "Isi nama isiannya.",
-      "labelTwice": "Nama isian ini sudah dipakai.",
-      "phonesTwice": "Isian Tipe HP cukup satu.",
-      "formatUnknown": "Format menyebut isian yang tidak ada: {label}.",
-      "formatEmpty": "Isi format namanya."
+      "labelEmpty": "Isi nama kolom.",
+      "labelTwice": "Nama kolom ini sudah dipakai.",
+      "phonesTwice": "Kolom Tipe HP cukup satu.",
+      "formatUnknown": "Format menyebut kolom yang tidak ada: {label}.",
+      "formatEmpty": "Isi format nama."
     },
     "dragHandle": "Geser untuk mengubah urutan",
     "moveUp": "Naikkan",
     "moveDown": "Turunkan",
     "removeOption": "Hapus pilihan {option}",
     "addToName": "Tambahkan {label} ke nama",
-    "noOptions": "Belum ada pilihan. Pilihan baru juga bisa ditulis saat mengisi barang.",
-    "kindLabel": "Jenis isian",
+    "noOptions": "Belum ada pilihan. Pilihan baru juga dapat ditulis saat mengisi barang.",
+    "kindLabel": "Jenis kolom",
     "formatHintPc": "Tambahkan ke nama:",
     "optionsPlaceholder": "Tulis pilihan, lalu Enter"
   },
@@ -286,15 +288,15 @@
       "stock": "Stok"
     },
     "problem": {
-      "tooLong": "Paling banyak {max} huruf.",
-      "tooMany": "Paling banyak {max}.",
-      "phoneUnknown": "{phones} belum ada di daftar HP, jadi disimpan seperti ditulis.",
-      "phoneNear": "{phones} belum ada di daftar HP. Maksudnya {near}?",
+      "tooLong": "Maksimal {max} huruf.",
+      "tooMany": "Maksimal {max}.",
+      "phoneUnknown": "{phones} belum ada di daftar HP, jadi disimpan sesuai yang ditulis.",
+      "phoneNear": "{phones} belum ada di daftar HP. Apakah maksudnya {near}?",
       "wholeNumber": "Tulis angka bulat, misalnya 5.",
-      "nameOrFields": "Isi kolom isiannya atau tulis namanya dulu."
+      "nameOrFields": "Isi kolom kategori atau tulis nama terlebih dahulu."
     },
     "saved": "{count} barang disimpan.",
-    "left": "{count} baris belum disimpan, cek yang ditandai merah.",
+    "left": "{count} baris belum disimpan. Periksa yang ditandai merah.",
     "blocked": "{count} belum lengkap",
     "save": "Simpan {count} barang",
     "saving": "Menyimpan {done} dari {total}…",
@@ -332,7 +334,7 @@
       "partial": "Sebagian sampai",
       "done": "Selesai",
       "cancelled": "Dibatalkan",
-      "over": "Perlu dicek"
+      "over": "Perlu diperiksa"
     },
     "detail": {
       "route": "{from} ke {to}",
@@ -345,7 +347,7 @@
       "extra": "Lebih {count}",
       "notSent": "Tidak terkirim",
       "overHint": "Tercatat sampai lebih banyak dari yang dikirim. Pemilik toko pengirim perlu menyelesaikannya.",
-      "missingHint": "Pemilik toko pengirim bisa mengembalikan yang belum sampai ke stok atau mencatatnya hilang.",
+      "missingHint": "Pemilik toko pengirim dapat mengembalikan yang belum sampai ke stok atau mencatatnya hilang.",
       "history": "Riwayat",
       "arrival": "Diterima",
       "line": "{name} × {qty}"
@@ -376,7 +378,7 @@
       "qty": "Jumlah",
       "note": "Catatan (opsional)",
       "send": "Kirim",
-      "pickFirst": "Pilih toko tujuan dan sparepartnya dulu.",
+      "pickFirst": "Pilih toko tujuan dan sparepart terlebih dahulu.",
       "stockLeaves": "Stok toko ini langsung berkurang."
     },
     "receive": {
@@ -384,7 +386,7 @@
       "hint": "Isi jumlah yang benar-benar sampai.",
       "arrived": "Sampai",
       "save": "Masukkan ke stok",
-      "nothing": "Isi jumlah yang sampai dulu.",
+      "nothing": "Isi jumlah yang sampai terlebih dahulu.",
       "note": "Catatan (opsional)"
     },
     "settle": {
@@ -398,9 +400,9 @@
       "over": "Lebih {count}",
       "reason": "Alasan hilang",
       "save": "Simpan",
-      "nothing": "Isi jumlahnya dulu.",
-      "tooMany": "Lebih dari yang belum sampai.",
-      "needReason": "Tulis alasannya dulu."
+      "nothing": "Isi jumlah terlebih dahulu.",
+      "tooMany": "Melebihi yang belum sampai.",
+      "needReason": "Tulis alasan terlebih dahulu."
     },
     "done": {
       "sent": "Sparepart dikirim.",
@@ -410,7 +412,7 @@
     },
     "discard": {
       "title": "Keluar tanpa mengirim?",
-      "message": "Isian kiriman ini akan hilang."
+      "message": "Data kiriman ini akan hilang."
     },
     "desk": {
       "col": {
@@ -438,6 +440,6 @@
     "line": "{count} pcs",
     "missing": "Belum ada harga",
     "total": "Total modal",
-    "unpriced": "{count} sparepart belum ada harga belinya"
+    "unpriced": "{count} sparepart belum memiliki harga beli"
   }
 }

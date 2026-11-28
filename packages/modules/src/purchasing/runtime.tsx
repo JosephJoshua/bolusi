@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import type { ModulePort } from '@bolusi/core';
 
 import type { PurchasingModule } from './manifest.js';
+import type { BillRow } from './bills/queries.js';
 import type { OrderFilter, OrderRow } from './queries.js';
 import {
   createRuntimeContext,
@@ -47,25 +48,46 @@ export function usePurchasingQuery<TData>(
 }
 
 /**
- * The first `pages` pages of orders, re-read whole on each refresh so a live list stays complete.
- * One page at a time, as the query caps its page size.
+ * The first `pages` pages of a list, re-read whole on each refresh so a live list stays complete.
+ * One page at a time, as each query caps its page size.
  */
-export async function loadOrderPages(
-  rt: PurchasingRuntime,
-  filter: OrderFilter,
+async function loadPages<TRow>(
+  read: (
+    offset: number,
+  ) => Promise<{ readonly rows: readonly TRow[]; readonly nextCursor: string | null }>,
   pages: number,
-  pageSize: number,
-): Promise<{ readonly rows: readonly OrderRow[]; readonly hasMore: boolean }> {
-  let rows: OrderRow[] = [];
+): Promise<{ readonly rows: readonly TRow[]; readonly hasMore: boolean }> {
+  let rows: TRow[] = [];
   let next: string | null = '0';
   for (let n = 0; n < pages && next !== null; n += 1) {
-    const page: { readonly rows: readonly OrderRow[]; readonly nextCursor: string | null } =
-      await rt.query('listOrders', { filter, limit: pageSize, offset: Number(next) });
+    const page: { readonly rows: readonly TRow[]; readonly nextCursor: string | null } = await read(
+      Number(next),
+    );
     rows = [...rows, ...page.rows];
     next = page.nextCursor;
   }
   return { rows, hasMore: next !== null };
 }
+
+/** The first `pages` pages of orders. */
+export const loadOrderPages = (
+  rt: PurchasingRuntime,
+  filter: OrderFilter,
+  pages: number,
+  pageSize: number,
+): Promise<{ readonly rows: readonly OrderRow[]; readonly hasMore: boolean }> =>
+  loadPages((offset) => rt.query('listOrders', { filter, limit: pageSize, offset }), pages);
+
+/** The first `pages` pages of the store's bills, open and void, the soonest due first. */
+export const loadBillPages = (
+  rt: PurchasingRuntime,
+  pages: number,
+  pageSize: number,
+): Promise<{ readonly rows: readonly BillRow[]; readonly hasMore: boolean }> =>
+  loadPages(
+    (offset) => rt.query('listBills', { filter: 'all', orderId: null, limit: pageSize, offset }),
+    pages,
+  );
 
 /** The store's name for the order message; null while it loads or when it has none. */
 export function useOrderStoreName(): string | null {

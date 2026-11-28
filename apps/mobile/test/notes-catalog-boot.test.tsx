@@ -65,7 +65,7 @@ describe('the REAL app boot registers the notes module catalog (task 122)', () =
     // "Show archived", "New" — which is exactly the English chrome task 116's screenshot caught.
     expect(tNotes('notes.list.title')).toBe('Catatan');
     expect(tNotes('notes.filter.showArchived')).toBe('Tampilkan arsip');
-    expect(tNotes('notes.action.new')).toBe('Catatan Baru');
+    expect(tNotes('notes.action.new')).toBe('Catatan baru');
   });
 
   test('a shipping NotesList renders Indonesian chrome after the production boot', async () => {
@@ -90,7 +90,7 @@ describe('the REAL app boot registers the notes module catalog (task 122)', () =
     // the create CTA — in Indonesian, not the English key fallback.
     expect(texts).toContain('Catatan');
     expect(texts).toContain('Tampilkan arsip');
-    expect(texts).toContain('Catatan Baru');
+    expect(texts).toContain('Catatan baru');
     // And the English fallbacks are ABSENT — the denominator that makes the assertion mean something.
     expect(texts).not.toContain('Title');
     expect(texts).not.toContain('New');

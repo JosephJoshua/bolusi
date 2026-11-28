@@ -172,11 +172,15 @@ export function opensParts(reader: { hasPermission(permissionId: string): boolea
   return reader.hasPermission(INVENTORY_PERMISSION.read);
 }
 
-/** Who sees "Kiriman": whoever reads the stock and sends parts to another store or receives them. */
+/**
+ * Who sees "Kiriman": whoever reads the stock and sends parts to another store, receives them, or
+ * settles what never arrived.
+ */
 export function opensTransfers(reader: { hasPermission(permissionId: string): boolean }): boolean {
   return (
     reader.hasPermission(INVENTORY_PERMISSION.read) &&
     (reader.hasPermission(INVENTORY_PERMISSION.transfer) ||
-      reader.hasPermission(INVENTORY_PERMISSION.receive))
+      reader.hasPermission(INVENTORY_PERMISSION.receive) ||
+      reader.hasPermission(INVENTORY_PERMISSION.settleTransfer))
   );
 }

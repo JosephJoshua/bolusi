@@ -55,13 +55,33 @@ test('a new category needs a format that names only its fields', async ({ page }
     .getByTestId('inventory.categoryForm.format.field')
     .first()
     .fill('Speaker {Posisi} {Warna}');
+  // Saved from the top of the form, the format below the fold is brought clear of the bottom action.
+  await page.getByTestId('inventory.categoryForm.name.field').first().focus();
+  await page.getByTestId('inventory.categoryForm.name.field').first().blur();
+  await page.mouse.wheel(0, -5000);
   await tap(page, 'inventory.categoryForm.primary');
   await expect(
-    page.getByText('Format menyebut isian yang tidak ada: Warna.').first(),
+    page.getByText('Format menyebut kolom yang tidak ada: Warna.').first(),
   ).toBeVisible();
+  await expect(async () => {
+    const field = await page.getByTestId('inventory.categoryForm.format').first().boundingBox();
+    const action = await page.getByTestId('inventory.categoryForm.primary').first().boundingBox();
+    expect(field!.y + field!.height).toBeLessThanOrEqual(action!.y);
+  }).toPass();
   await shoot(page, 'format-problem');
   await page.getByTestId('inventory.categoryForm.format.field').first().fill('Speaker {Posisi}');
   await tap(page, 'inventory.categoryForm.primary');
   await expect(page.getByText('Kategori disimpan.').first()).toBeVisible();
   await expect(page.getByText('Speaker').first()).toBeVisible();
+});
+
+test('archiving and restoring a category say so', async ({ page }) => {
+  await openCategories(page);
+  await tap(page, 'inventory.categories.row.cat-bat');
+  await tap(page, 'inventory.categoryForm.archive');
+  await tap(page, 'inventory.categoryForm.archiveSheet.confirm');
+  await expect(page.getByText('Kategori diarsipkan.').first()).toBeVisible();
+  await tap(page, 'inventory.categories.row.cat-bat');
+  await tap(page, 'inventory.categoryForm.restore');
+  await expect(page.getByText('Kategori aktif kembali.').first()).toBeVisible();
 });

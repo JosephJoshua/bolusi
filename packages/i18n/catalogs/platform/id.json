@@ -6,8 +6,8 @@
   },
   "refusal": {
     "conflictNotFound": "Data bentrok ini tidak ditemukan.",
-    "notYourPreference": "Bahasa hanya bisa diubah oleh pemilik akunnya.",
-    "idTaken": "Data ini belum bisa disimpan. Buat ulang, ya.",
-    "decisionNeedsPin": "Belum disetujui. Perlu PIN persetujuan Anda, dicek saat online, atau setujui lewat HP Anda sendiri."
+    "notYourPreference": "Bahasa hanya dapat diubah oleh pemilik akun.",
+    "idTaken": "Data ini belum dapat disimpan. Silakan buat ulang.",
+    "decisionNeedsPin": "Perlu PIN persetujuan Anda, yang diperiksa secara online, atau persetujuan melalui HP Anda sendiri."
   }
 }

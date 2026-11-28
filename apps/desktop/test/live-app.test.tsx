@@ -53,7 +53,7 @@ describe('the PC over the offline core', () => {
     renderApp();
     expect(screen.getByTestId('boot')).toBeTruthy();
     core.set({ phase: 'failed', bootError: 'SQLITE_CORRUPT' });
-    expect(screen.getByTestId('boot.failed').textContent).toContain('belum bisa dibuka');
+    expect(screen.getByTestId('boot.failed').textContent).toContain('belum dapat dibuka');
     // The reason is for support, not for the counter.
     expect(screen.getByTestId('boot.failed').textContent).not.toContain('SQLITE');
   });
@@ -171,7 +171,7 @@ describe('the PC over the offline core', () => {
     // Sending cannot help, so registering again is the one action offered.
     expect(screen.queryByTestId('desktop.sync.now')).toBeNull();
     expect(screen.getByTestId('desktop.sync.dialog').textContent).toContain(
-      'Server tidak mengenali komputer ini lagi',
+      'Server tidak lagi mengenali komputer ini',
     );
     fireEvent.click(screen.getByTestId('desktop.sync.reenrol'));
     expect(await screen.findByTestId('enrol.credentials')).toBeTruthy();
@@ -227,7 +227,7 @@ describe('the PC over the offline core', () => {
     renderApp();
     fireEvent.click(await screen.findByText('Yohanis Wenda'));
     await screen.findByText('2 perubahan ditolak server.');
-    fireEvent.click(screen.getByRole('button', { name: 'Cek status sinkron' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Periksa status sinkronisasi' }));
     const panel = await screen.findByTestId('desktop.sync.dialog');
     expect(panel.textContent).toContain('Ditolak server (2)');
     expect(panel.textContent).toContain('Perubahan ini tidak berlaku.');
@@ -305,7 +305,7 @@ describe('the PC over the offline core', () => {
     renderApp();
     await screen.findByTestId('desktop.shell');
     core.session({ active: null, locked: true, lockReason: 'manual_lock', permissions: [] });
-    expect(screen.getByTestId('switcher').textContent).toContain('Siapa yang pakai?');
+    expect(screen.getByTestId('switcher').textContent).toContain('Pilih pengguna');
     expect(screen.queryByTestId('switcher.back')).toBeNull();
     expect(screen.queryByTestId('desktop.shell')).toBeNull();
   });
@@ -368,6 +368,34 @@ describe('the PC over the offline core', () => {
     const latest = after.at(-1)!.args[1] as Record<string, unknown>;
     expect(latest['startedBy']).toEqual({ userId: OWNER.id, name: OWNER.name });
     expect(JSON.stringify(latest)).toContain('Yakobus M.');
+  });
+
+  it('shows the servisan a kept intake already opened instead of opening it twice', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    renderApp();
+    await screen.findByTestId('repair.desk.board.newIntake');
+    fireEvent.keyDown(window, { key: 'F2' });
+    fireEvent.change(await screen.findByTestId('repair.desk.intake.name'), {
+      target: { value: 'Yakobus Mandowen' },
+    });
+    const writes = core.calls.filter((call) => call.method === 'session.updateDeviceDraft');
+    const kept = writes.at(-1)!.args[1] as Record<string, unknown>;
+    // The draft carries its servisan's id from the start, so a save can be recognised later.
+    expect(typeof kept['ticketId']).toBe('string');
+
+    // The PC closed between opening the servisan and clearing the draft: bringing the draft back
+    // shows that servisan and offers nothing to save a second time.
+    const opened = (await core.demo.query('listTickets', {})).rows[0] as { id: string };
+    core.session({ active: null, locked: true, permissions: [] });
+    core.session({
+      ...signedIn(OWNER, ALL),
+      locked: false,
+      deviceDrafts: { repair: { ...kept, ticketId: opened.id } },
+    });
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.intake')).toBeNull());
+    await screen.findByTestId('repair.desk.ticket');
+    const cleared = core.calls.filter((call) => call.method === 'session.updateDeviceDraft');
+    expect(cleared.at(-1)!.args[1]).toBeNull();
   });
 
   it("brings back an intake an older version kept in the person's own workspace, and moves it to the PC", async () => {

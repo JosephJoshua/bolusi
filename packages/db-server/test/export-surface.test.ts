@@ -45,6 +45,8 @@ const EXPECTED_EXPORTS = [
   // Migration 0028: the customer's status page resolves its link code the same way, through one
   // definer function that returns where the servisan lives and nothing else.
   'findStatusLink',
+  // Migration 0037: the server's own check of unpaid QRIS charges lists them by tenant and id only.
+  'findUnpaidQrisCharges',
   // Task 204 (approach 1): the lookups' SQL as UNEXECUTED query builders, so @bolusi/harness
   // can run the production statement against its own handle instead of a hand-copied mirror.
   // Deliberately NOT functions that accept a `Kysely` — threading an external executor into this
@@ -57,6 +59,7 @@ const EXPECTED_EXPORTS = [
   'mapControlSessionRow',
   // The status page's lookup, on the same terms (the emulator lane serves the page too).
   'statusLinkQuery',
+  'unpaidQrisChargesQuery',
   // Task 47: the server watermark store (10-db §8). It CONSUMES a tenant-bound handle rather
   // than producing one, and returns a read/advance store with no `selectFrom` — so the D7
   // invariant this file guards is unchanged, and the `queryish` assertion below still covers it.

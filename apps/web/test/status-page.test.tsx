@@ -88,7 +88,7 @@ describe('a servisan in the store', () => {
     const url = new URL(chat.getAttribute('href')!);
     expect(url.origin + url.pathname).toBe('https://wa.me/6281248001234');
     expect(url.searchParams.get('text')).toBe(
-      'Halo, saya mau tanya servisan K7Q-0042 (Samsung Galaxy A14).',
+      'Halo, saya ingin menanyakan servisan K7Q-0042 (Samsung Galaxy A14).',
     );
     expect(chat.getAttribute('rel')).toContain('noopener');
     expect(screen.getByRole('link', { name: 'Telepon' }).getAttribute('href')).toBe(
@@ -162,7 +162,7 @@ describe('a cancelled servisan', () => {
     render(<StatusPage code="K7M2Q9XA4BRS" fetcher={serverAnswering(200, status)} />);
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Dibatalkan' })).toBeTruthy();
-    expect(screen.getByText('HP-mu bisa diambil di toko.')).toBeTruthy();
+    expect(screen.getByText('HP Anda dapat diambil di toko.')).toBeTruthy();
     const money = squashed(screen.getByTestId('money'));
     expect(money).toContain('BiayapembatalanRp50.000');
     expect(money).toContain('KelebihanbayarRp50.000');
@@ -238,6 +238,6 @@ describe('the front page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cek' }));
 
     expect(onOpen).not.toHaveBeenCalled();
-    expect(screen.getByText('Kodenya 12 huruf dan angka. Cek lagi, ya.')).toBeTruthy();
+    expect(screen.getByText('Kode terdiri dari 12 huruf dan angka. Periksa kembali.')).toBeTruthy();
   });
 });

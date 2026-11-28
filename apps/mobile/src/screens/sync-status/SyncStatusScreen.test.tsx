@@ -593,7 +593,7 @@ describe('what leads on Status data', () => {
     expect(inBar(screen, 'sync-now')).toBe(true);
   });
 
-  test('with refused changes, "Tandai sudah dicek" leads and "Kirim sekarang" steps back', () => {
+  test('with refused changes, "Tandai sudah diperiksa" leads and "Kirim sekarang" steps back', () => {
     const screen = renderWith({ rejected: REJECTED, pendingOperationCount: 2 });
     expect(inBar(screen, 'sync-rejected-handled')).toBe(true);
     expect(inBar(screen, 'sync-now')).toBe(false);

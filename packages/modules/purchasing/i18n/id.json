@@ -6,22 +6,32 @@
     "orderEdited": "Pesanan diubah",
     "orderPlaced": "Pesanan dipesan",
     "orderCancelled": "Pesanan dibatalkan",
-    "orderReceived": "Barang pesanan diterima"
+    "orderReceived": "Barang pesanan diterima",
+    "billRecorded": "Tagihan supplier dicatat",
+    "billEdited": "Tagihan supplier diubah",
+    "billVoided": "Tagihan supplier dibatalkan"
   },
   "refusal": {
     "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
     "supplierNotFound": "Supplier ini tidak ada di daftar.",
     "orderNotFound": "Pesanan ini tidak ada di toko ini.",
     "itemNotFound": "Ada barang yang tidak ada di daftar.",
-    "notDraft": "Pesanan ini sudah dipesan, jadi tidak bisa diubah lagi.",
+    "notDraft": "Pesanan ini sudah dipesan, jadi tidak dapat diubah.",
     "notOrdered": "Pesanan ini belum dipesan atau sudah dibatalkan.",
     "alreadyCancelled": "Pesanan ini sudah dibatalkan.",
     "notOnOrder": "Ada barang yang tidak ada di pesanan ini.",
-    "receiptMismatch": "Jumlah barangnya tidak sesuai dengan yang diterima.",
-    "nothingToCancel": "Semua barang pesanan ini sudah datang, jadi tidak bisa dibatalkan.",
+    "receiptMismatch": "Jumlah barang tidak sesuai dengan yang diterima.",
+    "nothingToCancel": "Semua barang pesanan ini sudah datang, jadi tidak dapat dibatalkan.",
     "numberNotThisDevice": "Nomor pesanan ini bukan dari HP ini.",
     "numberUsed": "Nomor pesanan ini sudah dipakai.",
-    "partArchived": "Ada barang di pesanan ini yang sudah diarsipkan. Hapus dulu dari pesanannya."
+    "partArchived": "Ada barang di pesanan ini yang sudah diarsipkan. Hapus terlebih dahulu dari pesanan.",
+    "billNotFound": "Tagihan ini tidak ada di toko ini.",
+    "billVoid": "Tagihan ini sudah dibatalkan.",
+    "orderOtherSupplier": "Pesanan ini dari supplier lain.",
+    "orderNotPlaced": "Pesanan ini masih draf, jadi belum bisa ditagih.",
+    "billNumberNotThisDevice": "Nomor tagihan ini bukan dari perangkat ini.",
+    "billNumberUsed": "Nomor tagihan ini sudah dipakai.",
+    "notaUsed": "Nota supplier ini sudah dicatat di tagihan lain."
   },
   "stage": {
     "draft": "Draf",
@@ -32,7 +42,7 @@
     "cancelled": "Dibatalkan"
   },
   "message": {
-    "greeting": "Halo {supplier}, kami mau pesan:",
+    "greeting": "Halo {supplier}, kami ingin memesan:",
     "line": "{n}. {name}: {qty} pcs",
     "note": "Catatan: {note}",
     "thanks": "Terima kasih.",
@@ -65,7 +75,7 @@
     "receipts": "Riwayat terima",
     "created": "Dibuat {date}",
     "ordered": "Dipesan {date}",
-    "overHint": "Ada barang yang diterima lebih dari pesanan. Cek lalu koreksi stoknya.",
+    "overHint": "Ada barang yang diterima melebihi pesanan. Periksa, lalu koreksi stoknya.",
     "qty": "{qty} pcs",
     "receivedOf": "{received} dari {qty}",
     "receiptLine": "{name} ({qty})",
@@ -73,7 +83,7 @@
     "costLine": "{qty} × {price}",
     "costMissing": "Belum diisi",
     "costTotal": "Total",
-    "costUnpriced": "{count} barang belum ada harganya"
+    "costUnpriced": "{count} barang belum memiliki harga"
   },
   "cancel": {
     "title": "Batalkan pesanan ini?",
@@ -82,15 +92,15 @@
   },
   "discard": {
     "title": "Buang pesanan ini?",
-    "message": "Isian pesanan ini akan hilang.",
+    "message": "Data pesanan ini akan hilang.",
     "confirm": "Buang",
-    "keep": "Lanjut isi"
+    "keep": "Lanjutkan mengisi"
   },
   "form": {
     "newTitle": "Pesanan baru",
     "editTitle": "Ubah draf",
     "supplier": "Supplier",
-    "noSuppliers": "Belum ada supplier. Tambah dulu.",
+    "noSuppliers": "Belum ada supplier. Tambahkan terlebih dahulu.",
     "addPart": "Tambah barang",
     "noParts": "Belum ada barang.",
     "remove": "Hapus",
@@ -98,20 +108,20 @@
     "decrease": "Kurangi",
     "increase": "Tambah",
     "note": "Catatan untuk supplier",
-    "pickFirst": "Pilih supplier dan barangnya dulu."
+    "pickFirst": "Pilih supplier dan barang terlebih dahulu."
   },
   "pick": {
     "title": "Pilih barang"
   },
   "receive": {
     "title": "Terima barang",
-    "hint": "Isi jumlah yang datang. Harga beli bisa diisi nanti.",
+    "hint": "Isi jumlah yang datang. Harga beli dapat diisi nanti.",
     "arrived": "Datang",
     "ordered": "Dipesan {qty}",
     "orderedSoFar": "Dipesan {qty}, sudah datang {received}",
     "over": "Lebih {extra} dari pesanan.",
     "note": "Catatan",
-    "nothing": "Isi jumlah barang yang datang dulu.",
+    "nothing": "Isi jumlah barang yang datang terlebih dahulu.",
     "save": "Simpan",
     "price": "Harga beli per pcs"
   },
@@ -126,18 +136,21 @@
     "name": "Nama",
     "phone": "Nomor WhatsApp",
     "note": "Catatan",
-    "nameFirst": "Isi nama supplier dulu.",
+    "nameFirst": "Isi nama supplier terlebih dahulu.",
     "save": "Simpan",
     "archive": "Arsipkan",
-    "restore": "Aktifkan lagi"
+    "restore": "Aktifkan kembali"
   },
   "done": {
-    "placed": "Pesanan dipesan. Kirim ke supplier lewat WhatsApp.",
+    "placed": "Pesanan dipesan. Kirim ke supplier melalui WhatsApp.",
     "drafted": "Draf disimpan.",
-    "received": "Barang diterima. Stok sudah bertambah.",
+    "received": "Barang diterima dan stok bertambah.",
     "cancelled": "Pesanan dibatalkan.",
     "supplierSaved": "Supplier disimpan.",
-    "priced": "Harga beli disimpan."
+    "priced": "Harga beli disimpan.",
+    "billRecorded": "Tagihan dicatat.",
+    "billSaved": "Tagihan disimpan.",
+    "billVoided": "Tagihan dibatalkan."
   },
   "desk": {
     "col": {
@@ -148,8 +161,8 @@
     },
     "close": "Tutup pesanan",
     "copied": "Pesan disalin. Tempel di chat supplier.",
-    "copyFailed": "Pesan tidak bisa disalin.",
-    "emptyHint": "Pesanan ke supplier muncul di sini.",
+    "copyFailed": "Pesan tidak dapat disalin.",
+    "emptyHint": "Pesanan ke supplier akan muncul di sini.",
     "suppliersHint": "Supplier dipakai di semua toko.",
     "currency": "Rp"
   },
@@ -157,8 +170,72 @@
     "title": "Harga beli",
     "field": "Harga per pcs",
     "save": "Simpan harga",
-    "empty": "Isi harganya dulu.",
+    "empty": "Isi harga terlebih dahulu.",
     "discardTitle": "Buang harga ini?",
-    "discardMessage": "Harga yang kamu ketik akan hilang."
+    "discardMessage": "Harga yang diketik akan hilang."
+  },
+  "bill": {
+    "tab": "Tagihan",
+    "listEmpty": "Belum ada tagihan supplier.",
+    "new": "Catat tagihan",
+    "newTitle": "Catat tagihan",
+    "editTitle": "Ubah tagihan",
+    "save": "Simpan tagihan",
+    "supplier": "Supplier",
+    "order": "Pesanan {number}",
+    "supplierRef": "No. nota supplier",
+    "billedOn": "Tanggal nota",
+    "today": "Hari ini",
+    "yesterday": "Kemarin",
+    "otherDay": "Tanggal lain",
+    "dateField": "Tanggal (hh/bb/tttt)",
+    "terms": "Jatuh tempo",
+    "termNone": "Tanpa tempo",
+    "termDays": "{count} hari",
+    "termOther": "Lainnya",
+    "termDaysField": "Jumlah hari",
+    "due": "Jatuh tempo {date}",
+    "noDue": "Tanpa tempo",
+    "nota": "Nota {ref} · {date}",
+    "notaDate": "Nota {date}",
+    "lines": "Barang",
+    "price": "Harga satuan",
+    "lineAmount": "{qty} × {price} = {amount}",
+    "charges": "Ongkir & biaya lain",
+    "subtotal": "Harga barang",
+    "total": "Total",
+    "note": "Catatan",
+    "notOrdered": "Tidak ada di pesanan",
+    "notArrived": "{count} belum datang",
+    "checkArrived": "Ada barang yang belum datang. Cocokkan dengan supplier.",
+    "checkOrdered": "Ada barang yang tidak ada di pesanan. Cocokkan dengan supplier.",
+    "checkBoth": "Ada barang yang belum datang atau tidak ada di pesanan. Cocokkan dengan supplier.",
+    "recorded": "Dicatat {name}, {date}",
+    "recordedAt": "Dicatat {date}",
+    "voided": "Dibatalkan {date}",
+    "voidedBy": "Dibatalkan {name}, {date}",
+    "statusVoid": "Dibatalkan",
+    "voidTitle": "Batalkan tagihan",
+    "voidHint": "Tagihan yang dibatalkan tetap ada di riwayat, tetapi tidak dihitung lagi.",
+    "voidReason": "Alasan",
+    "voidConfirm": "Batalkan tagihan",
+    "voidReasonFirst": "Tulis alasan terlebih dahulu.",
+    "orderBills": "Tagihan",
+    "orderNoBills": "Belum ada tagihan untuk pesanan ini.",
+    "pickOne": "Pilih tagihan untuk melihat detailnya.",
+    "gap": {
+      "supplier": "Pilih supplier terlebih dahulu.",
+      "lines": "Tambahkan barang terlebih dahulu.",
+      "price": "Isi harga setiap barang.",
+      "date": "Isi tanggal nota dengan benar.",
+      "days": "Isi jumlah hari tempo, 1 sampai 365."
+    },
+    "col": {
+      "bill": "Tagihan",
+      "supplier": "Supplier",
+      "due": "Jatuh tempo",
+      "total": "Total"
+    },
+    "linePrice": "{qty} × {price}"
   }
 }

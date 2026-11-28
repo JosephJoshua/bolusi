@@ -57,7 +57,12 @@ export interface PaymentEntry {
   /** Change to hand back on cash lines with what was handed over. */
   readonly change: number;
   readonly problems: Readonly<Record<string, PaymentLineProblem>>;
-  /** Every line is complete and together they pay exactly what is due. */
+  /**
+   * A QR the customer can still pay is open for the bill: nothing is taken another way until it is
+   * paid, cancelled or expired (qris-hooks.ts, "One way at a time").
+   */
+  readonly blocked: boolean;
+  /** Every line is complete, together they pay exactly what is due, and no QR is open. */
   readonly complete: boolean;
 }
 
@@ -143,12 +148,14 @@ export function paidByQr(line: PaymentLine, qrAccounts: ReadonlySet<string>): bo
 /**
  * `qrAccounts` are the methods (`account:<id>`) connected to Xendit here: their lines count toward
  * what is paid, so the rest adds up, but stay incomplete until the customer pays the QR.
+ * `openQrs` is how many QRs for the bill the customer can still pay (`QrisCheckout.blocking`).
  */
 export function paymentEntry(
   due: number,
   lines: readonly PaymentLine[],
   accounts: readonly PaymentAccountRow[],
   qrAccounts: ReadonlySet<string> = NO_QR_ACCOUNTS,
+  openQrs = 0,
 ): PaymentEntry {
   const problems: Record<string, PaymentLineProblem> = {};
   const payments: PaymentInput[] = [];
@@ -194,7 +201,8 @@ export function paymentEntry(
       tendered,
     });
   }
-  const complete = Object.keys(problems).length === 0 && paid === due && due > 0;
+  const blocked = openQrs > 0;
+  const complete = !blocked && Object.keys(problems).length === 0 && paid === due && due > 0;
   return {
     payments: complete ? payments : [],
     paid,
@@ -202,6 +210,7 @@ export function paymentEntry(
     overpaid: Math.max(0, paid - due),
     change,
     problems,
+    blocked,
     complete,
   };
 }
