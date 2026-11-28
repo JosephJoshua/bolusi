@@ -221,6 +221,8 @@
     "example": "Contoh: {name}",
     "saved": "Kategori disimpan.",
     "savedRenamed": "Kategori disimpan. Nama {count} barang ikut diperbarui.",
+    "archivedNotice": "Kategori diarsipkan.",
+    "restoredNotice": "Kategori aktif lagi.",
     "archive": "Arsipkan kategori",
     "archiveTitle": "Arsipkan kategori ini?",
     "archiveMessage": "Barangnya tetap ada, tapi kategori ini tidak bisa dipilih lagi.",

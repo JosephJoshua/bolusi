@@ -35,7 +35,7 @@ import {
   type NativeSyntheticEvent,
   type ScrollView,
   type TextInput,
-  type View,
+  View,
 } from 'react-native';
 
 import { space } from '../tokens.js';
@@ -192,6 +192,35 @@ export function useRevealOnFocus(mode: RevealMode = 'into-view'): {
     else reveal();
   }, [port, mode]);
   return { ref, anchorRef, onFocus };
+}
+
+/**
+ * A box brought into sight each time `token` changes to something other than null, such as the
+ * first thing to fix after a refused save. A component rather than a hook, so it always sits inside
+ * the scrolling shell it asks. Outside a scrollable shell it does nothing.
+ */
+export function RevealWhen({
+  token,
+  children,
+}: {
+  readonly token: object | null;
+  readonly children: React.ReactNode;
+}): React.JSX.Element {
+  const port = useContext(RevealContext);
+  const ref = useRef<View | null>(null);
+  useEffect(() => {
+    if (token === null || port === null) return;
+    // After this render's layout, so a row that just opened is measured at its new size.
+    const frame = requestAnimationFrame(() => {
+      if (ref.current !== null) port.show(ref.current);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [token, port]);
+  return (
+    <View ref={ref} collapsable={false}>
+      {children}
+    </View>
+  );
 }
 
 /**

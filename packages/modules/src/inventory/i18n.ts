@@ -191,6 +191,8 @@ export const INVENTORY_KEYS = [
   'inventory.category.example',
   'inventory.category.saved',
   'inventory.category.savedRenamed',
+  'inventory.category.archivedNotice',
+  'inventory.category.restoredNotice',
   'inventory.category.archive',
   'inventory.category.archiveTitle',
   'inventory.category.archiveMessage',
