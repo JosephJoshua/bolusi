@@ -19,6 +19,7 @@ import {
   color,
   size,
   space,
+  Rows,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
@@ -157,7 +158,7 @@ export function DeviceSetupScreen({
           testID={`${testID}.header`}
         />
         {step === 'permissions' ? (
-          <View>
+          <Rows>
             {camera === undefined ? null : (
               <PermissionRow
                 icon="camera"
@@ -178,7 +179,7 @@ export function DeviceSetupScreen({
                 testID={`${testID}.notifications`}
               />
             )}
-          </View>
+          </Rows>
         ) : (
           paper?.choice
         )}

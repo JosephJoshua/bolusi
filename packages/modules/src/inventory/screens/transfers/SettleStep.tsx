@@ -3,7 +3,7 @@
  * into this store's stock or are written off with a reason; parts the other store recorded beyond
  * what was sent are settled as arrived, and come off this store's stock.
  */
-import { QuantityStepper, TextInput, border, color, space, type, Text, numeric } from '@bolusi/ui';
+import { QuantityStepper, TextInput, color, space, type, Text, numeric, Rows } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -82,58 +82,60 @@ export function SettleStep({
       <Text style={styles.hint}>
         {ti(over ? 'inventory.transfer.settle.hintOver' : 'inventory.transfer.settle.hintMissing')}
       </Text>
-      {settleLines(transfer).map((line) => {
-        const open = over ? -line.missing : line.missing;
-        const back = counts.back[line.itemId] ?? 0;
-        const lost = counts.lost[line.itemId] ?? 0;
-        return (
-          <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
-            <View style={styles.lineTop}>
-              <Text style={styles.name}>{line.name}</Text>
-              <Text style={styles.open}>
-                {ti(over ? 'inventory.transfer.settle.over' : 'inventory.transfer.settle.open', {
-                  count: open,
-                })}
-              </Text>
+      <Rows>
+        {settleLines(transfer).map((line) => {
+          const open = over ? -line.missing : line.missing;
+          const back = counts.back[line.itemId] ?? 0;
+          const lost = counts.lost[line.itemId] ?? 0;
+          return (
+            <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
+              <View style={styles.lineTop}>
+                <Text style={styles.name}>{line.name}</Text>
+                <Text style={styles.open}>
+                  {ti(over ? 'inventory.transfer.settle.over' : 'inventory.transfer.settle.open', {
+                    count: open,
+                  })}
+                </Text>
+              </View>
+              {over ? (
+                <QuantityStepper
+                  label={ti('inventory.transfer.settle.arrived')}
+                  value={counts.arrived[line.itemId] ?? 0}
+                  onChange={(qty) => set('arrived', line.itemId, qty)}
+                  min={0}
+                  max={open}
+                  decreaseLabel={ti('inventory.stepper.decrease')}
+                  increaseLabel={ti('inventory.stepper.increase')}
+                  testID={`${testID}.line.${line.itemId}.arrived`}
+                />
+              ) : (
+                <>
+                  <QuantityStepper
+                    label={ti('inventory.transfer.settle.back')}
+                    value={back}
+                    onChange={(qty) => set('back', line.itemId, qty)}
+                    min={0}
+                    max={open - lost}
+                    decreaseLabel={ti('inventory.stepper.decrease')}
+                    increaseLabel={ti('inventory.stepper.increase')}
+                    testID={`${testID}.line.${line.itemId}.back`}
+                  />
+                  <QuantityStepper
+                    label={ti('inventory.transfer.settle.lost')}
+                    value={lost}
+                    onChange={(qty) => set('lost', line.itemId, qty)}
+                    min={0}
+                    max={open - back}
+                    decreaseLabel={ti('inventory.stepper.decrease')}
+                    increaseLabel={ti('inventory.stepper.increase')}
+                    testID={`${testID}.line.${line.itemId}.lost`}
+                  />
+                </>
+              )}
             </View>
-            {over ? (
-              <QuantityStepper
-                label={ti('inventory.transfer.settle.arrived')}
-                value={counts.arrived[line.itemId] ?? 0}
-                onChange={(qty) => set('arrived', line.itemId, qty)}
-                min={0}
-                max={open}
-                decreaseLabel={ti('inventory.stepper.decrease')}
-                increaseLabel={ti('inventory.stepper.increase')}
-                testID={`${testID}.line.${line.itemId}.arrived`}
-              />
-            ) : (
-              <>
-                <QuantityStepper
-                  label={ti('inventory.transfer.settle.back')}
-                  value={back}
-                  onChange={(qty) => set('back', line.itemId, qty)}
-                  min={0}
-                  max={open - lost}
-                  decreaseLabel={ti('inventory.stepper.decrease')}
-                  increaseLabel={ti('inventory.stepper.increase')}
-                  testID={`${testID}.line.${line.itemId}.back`}
-                />
-                <QuantityStepper
-                  label={ti('inventory.transfer.settle.lost')}
-                  value={lost}
-                  onChange={(qty) => set('lost', line.itemId, qty)}
-                  min={0}
-                  max={open - back}
-                  decreaseLabel={ti('inventory.stepper.decrease')}
-                  increaseLabel={ti('inventory.stepper.increase')}
-                  testID={`${testID}.line.${line.itemId}.lost`}
-                />
-              </>
-            )}
-          </View>
-        );
-      })}
+          );
+        })}
+      </Rows>
       {/* Asked for only once something is written off: the reason is for the write-off. */}
       {over || !writesOff ? null : (
         <View style={styles.noteField}>
@@ -157,8 +159,6 @@ const styles = StyleSheet.create({
   line: {
     paddingVertical: space.md,
     gap: space.sm,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   lineTop: {
     flexDirection: 'row',

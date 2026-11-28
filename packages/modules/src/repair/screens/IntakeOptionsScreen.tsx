@@ -13,13 +13,13 @@ import {
   SwitchRow,
   TextButton,
   TextInput,
-  border,
   color,
   space,
   touch,
   type,
   Text,
   ValueText,
+  Rows,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -138,7 +138,7 @@ export function IntakeOptionsScreen({
             <Text style={repairStyles.muted}>
               {tn(can.manageIntakeOptions ? 'repair.options.intro' : 'repair.options.introStore')}
             </Text>
-            <View style={styles.overview}>
+            <Rows style={styles.overview}>
               {INTAKE_OPTION_LISTS.map((list) => (
                 <ListRow
                   key={list}
@@ -149,7 +149,7 @@ export function IntakeOptionsScreen({
                   testID={`${testID}.open.${list}`}
                 />
               ))}
-            </View>
+            </Rows>
           </View>
         )}
       </QueryView>
@@ -532,13 +532,9 @@ const styles = StyleSheet.create({
     marginTop: space.lg,
     // Rows run edge to edge so their dividers and pressed state span the screen, like the board.
     marginHorizontal: -space.lg,
-    borderTopWidth: border.hairline,
-    borderTopColor: color.border,
   },
   row: {
     paddingHorizontal: space.lg,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
     backgroundColor: color.surface,
   },
   collapsed: {

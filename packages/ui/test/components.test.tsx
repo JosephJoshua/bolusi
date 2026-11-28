@@ -15,6 +15,7 @@ import { FreshnessCell } from '../src/components/FreshnessCell.js';
 import { setDataArriving } from '../src/arrival.js';
 import { List } from '../src/components/List.js';
 import { ListRow } from '../src/components/ListRow.js';
+import { RowDivider, Rows } from '../src/components/Rows.js';
 import {
   LoadingState,
   LOADING_DELAY_MS,
@@ -410,6 +411,55 @@ describe('Avatar (§3.12) — identity recognised, not read', () => {
   });
 });
 
+describe('Rows — dividers between rows only', () => {
+  test('three rows get two dividers: none above the first, none under the last', () => {
+    const r = render(
+      <Rows testID="rows">
+        <ListRow testID="row.a" primaryText="a" />
+        <ListRow testID="row.b" primaryText="b" />
+        <ListRow testID="row.c" primaryText="c" />
+      </Rows>,
+    );
+    expect(r.all('ui.rowDivider')).toHaveLength(2);
+    const kids = r.get('rows').children as unknown as { props: Record<string, unknown> }[];
+    expect(kids.map((kid) => kid.props['testID'])).toEqual([
+      'row.a',
+      'ui.rowDivider',
+      'row.b',
+      'ui.rowDivider',
+      'row.c',
+    ]);
+  });
+
+  test('a row that is not shown gets no divider, and one row gets none', () => {
+    const hidden = false;
+    const r = render(
+      <Rows>
+        {hidden ? <ListRow primaryText="x" /> : null}
+        <ListRow testID="row.only" primaryText="only" />
+        {[].map(() => null)}
+      </Rows>,
+    );
+    expect(r.all('ui.rowDivider')).toHaveLength(0);
+  });
+
+  test('a mapped list is divided like written-out rows', () => {
+    const r = render(
+      <Rows>
+        {['a', 'b', 'c', 'd'].map((item) => (
+          <ListRow key={item} testID={`row.${item}`} primaryText={item} />
+        ))}
+      </Rows>,
+    );
+    expect(r.all('ui.rowDivider')).toHaveLength(3);
+  });
+
+  test('a row draws no border of its own', () => {
+    const r = render(<ListRow testID="row" primaryText="a" />);
+    expect(r.styleOf('row')['borderBottomWidth']).toBeUndefined();
+  });
+});
+
 describe('List (§3.13) — virtualization and the four mandatory states', () => {
   const row = (item: string): React.JSX.Element => (
     <ListRow testID={`row.${item}`} primaryText={item} />
@@ -423,6 +473,7 @@ describe('List (§3.13) — virtualization and the four mandatory states', () =>
     expect(list.props['windowSize']).toBe(7);
     expect(list.props['initialNumToRender']).toBe(10);
     expect(list.props['removeClippedSubviews']).toBe(true);
+    expect(list.props['ItemSeparatorComponent']).toBe(RowDivider);
   });
 
   test('variable-height rows use native measurement instead of fixed offsets', () => {

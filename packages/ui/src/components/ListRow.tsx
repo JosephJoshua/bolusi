@@ -3,6 +3,8 @@
  *
  * Text wraps instead of truncating (design guide §4/§9): a long name or a 1.3x font grows the row
  * from its 64 dp default rather than cutting a word off.
+ *
+ * A row draws no divider: put rows in `Rows` or `List`, which draw one between rows only.
  */
 import type { ReactNode } from 'react';
 import { Text } from '../text.js';
@@ -59,8 +61,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: space.lg,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   leading: {
     width: size.avatarRow,

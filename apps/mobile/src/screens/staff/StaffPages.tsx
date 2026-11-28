@@ -21,11 +21,11 @@ import {
   ListRow,
   TextButton,
   TextInput,
-  border,
   color,
   space,
   type,
   Text,
+  Rows,
 } from '@bolusi/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -208,7 +208,7 @@ export function PersonForm({
         <View>
           <Text style={styles.label}>{t('auth.staff.roles')}</Text>
           <Text style={styles.hint}>{t('auth.staff.rolesHint')}</Text>
-          <View style={styles.rows}>
+          <Rows style={styles.rows}>
             {roles.map((role) => (
               <ListRow
                 key={role.id}
@@ -223,7 +223,7 @@ export function PersonForm({
                 testID={`${testID}-role-${role.key}`}
               />
             ))}
-          </View>
+          </Rows>
           {attempted && problem === 'roleMissing' ? (
             <Text style={styles.error} testID={`${testID}-role-problem`}>
               {t(PROBLEM_KEY.roleMissing)}
@@ -363,8 +363,6 @@ const styles = StyleSheet.create({
   rows: {
     marginHorizontal: -space.lg,
     marginTop: space.sm,
-    borderTopWidth: border.hairline,
-    borderTopColor: color.border,
   },
   more: { gap: space.lg },
   pinNote: { gap: space.xs },
