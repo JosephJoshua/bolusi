@@ -72,11 +72,6 @@ export interface PersonAccess {
     readonly userId: string;
     readonly pin: string;
     readonly mayRead: (permissionId: string) => boolean;
-    /**
-     * They hold an owner's or manager's decision and this device is shared: their session is opened
-     * at sign-in even with nothing extra to read, so a cancel or refund is proven at once.
-     */
-    readonly mayDecide?: boolean;
   }): Promise<void>;
   /** The person left: drop their store and end their session (best effort). */
   end(): Promise<void>;
@@ -118,18 +113,36 @@ export interface PersonAccess {
   proofs(authors: readonly string[]): readonly string[];
   /** A sync cycle finished: sessions kept only for what has now been sent are ended. */
   pushed(): Promise<void>;
-  /** Whether a session proves `userId` right now (signed in here, or just left with work unsent). */
+  /**
+   * Whether a decision session proves `userId` right now: opened here on their approval PIN, while
+   * signed in or just after they left with work unsent (server oplog/steps/decision.ts).
+   */
   canProve(userId: string): boolean;
+  /**
+   * Open a decision session for the signed-in person with their approval PIN, which only the
+   * server checks (server auth/approval-pins.ts). It proves their decisions here for
+   * DECISION_LIVE_MS, or until they leave.
+   */
+  openDecision(userId: string, approvalPin: string): Promise<DecisionOpening>;
   status(): PersonAccessStatus;
   /** The signed-in person this access is for, or null. */
   userId(): string | null;
   subscribe(listener: () => void): () => void;
 }
 
+/**
+ * What opening a decision session came to. `wrong`: not their approval PIN. `notSet`: they have none
+ * yet. `locked`: too many wrong ones, wait. `offline`: the server could not be reached. `failed`:
+ * anything else, or they are no longer the one signed in.
+ */
+export type DecisionOpening = 'opened' | 'wrong' | 'notSet' | 'locked' | 'offline' | 'failed';
+
+/** How long one approval PIN proves a run of decisions here (the server keeps it a little longer). */
+export const DECISION_LIVE_MS = 10 * 60 * 1000;
+
 interface Person {
   readonly userId: string;
   readonly mayRead: (permissionId: string) => boolean;
-  readonly mayDecide: boolean;
   /** Kept in memory until the server has checked it, or until they leave if it never needs to. */
   pin: string | null;
   /** A PIN they changed to here: the server takes it once the change reaches it. */
@@ -139,6 +152,8 @@ interface Person {
   tokenExpiresAt: number;
   /** A session being opened for an online call (`sessionFor`), which later calls wait for. */
   opening: Promise<string | null> | null;
+  /** The decision session their approval PIN opened, and until when it proves them here. */
+  decision: { readonly token: string; readonly until: number } | null;
   store: PersonStoreLike | null;
   /** The store pulled to the end at least once: its reads are here. */
   complete: boolean;
@@ -155,6 +170,8 @@ interface Leaving {
   readonly token: string;
   readonly since: number;
   readonly expiresAt: number;
+  /** A decision session (it proves their decisions), not their sign-in one. */
+  readonly decides: boolean;
 }
 
 /** Opened again this long before the server's expiry, so a device clock a little behind still works. */
@@ -171,7 +188,7 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
    * them: a decision still waiting to be pushed (the server takes it only with their session, server
    * oplog/steps/decision.ts) and a PIN change still waiting to be sent (the next sign-in, with the
    * new PIN, cannot prove it while the server still knows the old one). A lock right after a cancel
-   * or a PIN change must not strand either. Never past LEAVING_MAX_MS.
+   * or a PIN change must not strand either. Never past LEAVING_MAX_MS or the session's own end.
    */
   const leaving: Leaving[] = [];
   const finishLeaving = (entry: Leaving): void => {
@@ -182,7 +199,7 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
   };
   const settleLeaving = async (): Promise<void> => {
     for (const entry of [...leaving]) {
-      const overdue = deps.clock.now() - entry.since > LEAVING_MAX_MS;
+      const overdue = deps.clock.now() - entry.since > LEAVING_MAX_MS || !live(entry.expiresAt);
       const waiting =
         !overdue &&
         ((await unpushed(entry.userId).catch(() => false)) ||
@@ -349,8 +366,6 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
         // signed in, so if the device comes to hold less (the store's first staff person was just
         // added) their extra opens without asking for it again.
         setStatus(target, 'none');
-        // Someone who decides here is proven now, while the connection is up.
-        if (target.mayDecide) await access.sessionFor(target.userId);
         return;
       }
       if (target.pin === null) {
@@ -389,19 +404,19 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
 
     heldReads: () => deps.deviceReads.heldReads(),
 
-    async begin({ userId, pin, mayRead, mayDecide = false }) {
+    async begin({ userId, pin, mayRead }) {
       const mine = (generation += 1);
       await access.end();
       if (mine !== generation) return;
       person = {
         userId,
         mayRead,
-        mayDecide,
         pin,
         nextPin: null,
         token: null,
         tokenExpiresAt: 0,
         opening: null,
+        decision: null,
         store: null,
         complete: false,
         reopen: null,
@@ -417,17 +432,34 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
       person = null;
       const token = target.token;
       target.token = null;
+      const decision = target.decision;
+      target.decision = null;
       await drop(target);
       notify();
       const port = transport;
-      if (token === null || port === null) return;
-      const entry: Leaving = {
+      const since = deps.clock.now();
+      if (decision !== null && port !== null) {
+        leaving.push({
+          userId: target.userId,
+          token: decision.token,
+          since,
+          expiresAt: decision.until + SESSION_EXPIRY_MARGIN_MS,
+          decides: true,
+        });
+      } else if (decision !== null) {
+        void transport?.end(decision.token).catch(() => undefined);
+      }
+      if (token === null || port === null) {
+        await settleLeaving();
+        return;
+      }
+      leaving.push({
         userId: target.userId,
         token,
-        since: deps.clock.now(),
+        since,
         expiresAt: target.tokenExpiresAt,
-      };
-      leaving.push(entry);
+        decides: false,
+      });
       if (await pinPending(target.userId).catch(() => false)) {
         // Sent now, proven by this session; the queue keeps it if the send fails.
         await port.sendPendingPins().catch(() => undefined);
@@ -439,10 +471,13 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
       const wanted = new Set(authors);
       const tokens = new Set<string>();
       for (const entry of leaving) {
-        if (wanted.has(entry.userId) && live(entry.expiresAt)) tokens.add(entry.token);
+        if (entry.decides && wanted.has(entry.userId) && live(entry.expiresAt)) {
+          tokens.add(entry.token);
+        }
       }
-      if (person?.token != null && wanted.has(person.userId) && live(person.tokenExpiresAt)) {
-        tokens.add(person.token);
+      const decision = person?.decision ?? null;
+      if (person !== null && decision !== null && wanted.has(person.userId)) {
+        if (decision.until > deps.clock.now()) tokens.add(decision.token);
       }
       return [...tokens];
     },
@@ -452,13 +487,47 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
     },
 
     canProve(userId) {
-      if (leaving.some((entry) => entry.userId === userId && live(entry.expiresAt))) return true;
+      if (
+        leaving.some((entry) => entry.decides && entry.userId === userId && live(entry.expiresAt))
+      ) {
+        return true;
+      }
       return (
         person !== null &&
         person.userId === userId &&
-        person.token !== null &&
-        live(person.tokenExpiresAt)
+        person.decision !== null &&
+        person.decision.until > deps.clock.now()
       );
+    },
+
+    async openDecision(userId, approvalPin) {
+      const target = person;
+      const port = transport;
+      if (target === null || target.userId !== userId || port === null) return 'failed';
+      let opened: { readonly token: string; readonly expiresAt: number };
+      try {
+        opened = await port.openDecision({ userId, approvalPin });
+      } catch (error) {
+        // A fetch that never reached the server rejects with a TypeError.
+        if (error instanceof TypeError) return 'offline';
+        if (!(error instanceof SyncTransportError)) return 'failed';
+        if (error.code === 'AUTH_INVALID_CREDENTIALS') return 'wrong';
+        if (error.code === 'APPROVAL_PIN_NOT_SET') return 'notSet';
+        if (error.code === 'RATE_LIMITED') return 'locked';
+        // No answer at all (a timeout, no connection) is offline; any other answer a failure.
+        return error.status === null ? 'offline' : 'failed';
+      }
+      if (person !== target) {
+        void port.end(opened.token).catch(() => undefined);
+        return 'failed';
+      }
+      if (target.decision !== null) void port.end(target.decision.token).catch(() => undefined);
+      const until = Math.min(
+        deps.clock.now() + DECISION_LIVE_MS,
+        opened.expiresAt - SESSION_EXPIRY_MARGIN_MS,
+      );
+      target.decision = { token: opened.token, until };
+      return 'opened';
     },
 
     sync() {
@@ -532,7 +601,9 @@ export function createPersonAccess(deps: PersonAccessDeps): PersonAccess {
     async sessionFor(userId) {
       const target = person;
       const port = transport;
-      const left = leaving.find((entry) => entry.userId === userId && live(entry.expiresAt));
+      const left = leaving.find(
+        (entry) => !entry.decides && entry.userId === userId && live(entry.expiresAt),
+      );
       if (left !== undefined && (target === null || target.token === null)) return left.token;
       if (target === null || target.userId !== userId || port === null) return null;
       if (target.token !== null) {

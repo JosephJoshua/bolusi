@@ -31,6 +31,8 @@ export interface SessionView {
   /** May block a lost device of this store (`auth.device_revoke`): Settings › Perangkat. */
   readonly canBlockDevices: boolean;
   readonly tenantAdmin: boolean;
+  /** Makes owner's or manager's decisions here, so has an approval PIN to set (Settings › Akun). */
+  readonly makesDecisions: boolean;
   /**
    * Every module's permissions the signed-in person holds (repair's, money's, ...), for showing
    * actions; the core enforces.
