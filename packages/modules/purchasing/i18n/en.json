@@ -6,7 +6,10 @@
     "orderEdited": "Order edited",
     "orderPlaced": "Order placed",
     "orderCancelled": "Order cancelled",
-    "orderReceived": "Order parts received"
+    "orderReceived": "Order parts received",
+    "billRecorded": "Supplier bill recorded",
+    "billEdited": "Supplier bill changed",
+    "billVoided": "Supplier bill voided"
   },
   "refusal": {
     "alreadyRecorded": "This was already recorded.",
@@ -21,7 +24,14 @@
     "nothingToCancel": "Everything on this order has arrived, so it can’t be cancelled.",
     "numberNotThisDevice": "This order number wasn’t made on this device.",
     "numberUsed": "This order number is already used.",
-    "partArchived": "A part on this order is archived. Remove it from the order first."
+    "partArchived": "A part on this order is archived. Remove it from the order first.",
+    "billNotFound": "This bill is not in this store.",
+    "billVoid": "This bill has been voided.",
+    "orderOtherSupplier": "This order is from another supplier.",
+    "orderNotPlaced": "This order is still a draft, so it cannot be billed yet.",
+    "billNumberNotThisDevice": "This bill number is not from this device.",
+    "billNumberUsed": "This bill number is already used.",
+    "notaUsed": "This supplier’s nota is already recorded on another bill."
   },
   "stage": {
     "draft": "Draft",
@@ -137,7 +147,10 @@
     "received": "Parts received. The stock went up.",
     "cancelled": "Order cancelled.",
     "supplierSaved": "Supplier saved.",
-    "priced": "Buy price saved."
+    "priced": "Buy price saved.",
+    "billRecorded": "Bill recorded.",
+    "billSaved": "Bill saved.",
+    "billVoided": "Bill voided."
   },
   "desk": {
     "col": {
@@ -160,5 +173,69 @@
     "empty": "Type the price first.",
     "discardTitle": "Discard this price?",
     "discardMessage": "The price you typed will be lost."
+  },
+  "bill": {
+    "tab": "Bills",
+    "listEmpty": "No supplier bills yet.",
+    "new": "Record bill",
+    "newTitle": "Record bill",
+    "editTitle": "Change bill",
+    "save": "Save bill",
+    "supplier": "Supplier",
+    "order": "Order {number}",
+    "supplierRef": "Supplier’s invoice no.",
+    "billedOn": "Invoice date",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "otherDay": "Another date",
+    "dateField": "Date (dd/mm/yyyy)",
+    "terms": "Due",
+    "termNone": "No terms",
+    "termDays": "{count} days",
+    "termOther": "Other",
+    "termDaysField": "Days",
+    "due": "Due {date}",
+    "noDue": "No terms",
+    "nota": "Invoice {ref} · {date}",
+    "notaDate": "Invoice {date}",
+    "lines": "Parts",
+    "price": "Unit price",
+    "lineAmount": "{qty} × {price} = {amount}",
+    "charges": "Shipping & other charges",
+    "subtotal": "Parts",
+    "total": "Total",
+    "note": "Note",
+    "notOrdered": "Not on the order",
+    "notArrived": "{count} not arrived",
+    "checkArrived": "Some parts have not arrived. Check with the supplier.",
+    "checkOrdered": "Some parts are not on the order. Check with the supplier.",
+    "checkBoth": "Some parts have not arrived or are not on the order. Check with the supplier.",
+    "recorded": "Recorded by {name}, {date}",
+    "recordedAt": "Recorded {date}",
+    "voided": "Voided {date}",
+    "voidedBy": "Voided by {name}, {date}",
+    "statusVoid": "Voided",
+    "voidTitle": "Void bill",
+    "voidHint": "A voided bill stays in the history but no longer counts.",
+    "voidReason": "Reason",
+    "voidConfirm": "Void bill",
+    "voidReasonFirst": "Write the reason first.",
+    "orderBills": "Bills",
+    "orderNoBills": "No bills for this order yet.",
+    "pickOne": "Pick a bill to see its details.",
+    "gap": {
+      "supplier": "Pick a supplier first.",
+      "lines": "Add a part first.",
+      "price": "Enter a price for every part.",
+      "date": "Enter a valid invoice date.",
+      "days": "Enter the days to pay, 1 to 365."
+    },
+    "col": {
+      "bill": "Bill",
+      "supplier": "Supplier",
+      "due": "Due",
+      "total": "Total"
+    },
+    "linePrice": "{qty} × {price}"
   }
 }

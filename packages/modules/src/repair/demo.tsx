@@ -81,7 +81,7 @@ export const DEMO_REPAIR_ROLES = {
       ...Object.values(P),
       ...Object.values(I),
       ...Object.values(M),
-      PURCHASING_PERMISSION.buy,
+      ...Object.values(PURCHASING_PERMISSION),
     ],
   },
   counter: {
