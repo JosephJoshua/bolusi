@@ -21,13 +21,12 @@ import {
   AppShell,
   Banner,
   Button,
-  ChipRow,
   ConfirmSheet,
   Icon,
   ListRow,
+  SegmentedControl,
   StepHeader,
   TextInput,
-  ToggleChip,
   color,
   radius,
   size,
@@ -209,6 +208,9 @@ function ConfirmStep({ state, onChange }: EnrollmentScreenProps): React.JSX.Elem
  * store signs in, and it holds staff-level data. Someone's own phone holds what they may see, owner
  * costs included, and only they sign in. Hidden when the server offers nobody (an older server).
  */
+/** The store's phone among the people's ids in the owner choice. */
+const SHARED = 'shared';
+
 function PhoneOwner({
   state,
   onChange,
@@ -217,8 +219,6 @@ function PhoneOwner({
   if (people.length === 0) return null;
   const chosen = chosenPersonalUserId(state);
   const self = state.login?.user.id;
-  const pick = (personalUserId: string | null) =>
-    state.busy ? () => undefined : () => onChange({ personalUserId });
   const chosenName = people.find((person) => person.id === chosen)?.name;
   const hint =
     chosen === null
@@ -229,24 +229,20 @@ function PhoneOwner({
   return (
     <View style={styles.section} testID="enroll-owner">
       <Text style={styles.fieldLabel}>{t('auth.enroll.ownerField')}</Text>
-      <ChipRow testID="enroll-owner-chips">
-        <ToggleChip
-          label={t('auth.enroll.ownerShared')}
-          selected={chosen === null}
-          onToggle={pick(null)}
-          testID="enroll-owner-shared"
-        />
-        {people.map((person) => (
-          <ToggleChip
-            key={person.id}
-            label={person.id === self ? t('auth.enroll.ownerSelf') : person.name}
-            selected={chosen === person.id}
-            // Tapping the picked one again goes back to the store's.
-            onToggle={pick(chosen === person.id ? null : person.id)}
-            testID={`enroll-owner-${person.id}`}
-          />
-        ))}
-      </ChipRow>
+      <SegmentedControl
+        options={[
+          { value: SHARED, label: t('auth.enroll.ownerShared') },
+          ...people.map((person) => ({
+            value: person.id,
+            label: person.id === self ? t('auth.enroll.ownerSelf') : person.name,
+          })),
+        ]}
+        value={chosen ?? SHARED}
+        onChange={(picked) => {
+          if (!state.busy) onChange({ personalUserId: picked === SHARED ? null : picked });
+        }}
+        testID="enroll-owner-choice"
+      />
       <Text style={styles.fieldHint} testID="enroll-owner-hint">
         {hint}
       </Text>

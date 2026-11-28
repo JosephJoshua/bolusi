@@ -1,4 +1,5 @@
 // Small layout pieces for detail panes and forms: a titled section, label/value facts, a card.
+// A section's title sits close over its content (8) and far from the next section (the pane's 32).
 import { clsx } from 'clsx';
 import type { ReactNode } from 'react';
 
@@ -18,7 +19,7 @@ export function Section({
   readonly testId?: string | undefined;
 }): React.JSX.Element {
   return (
-    <section data-testid={testId} className={clsx('flex flex-col gap-3', className)}>
+    <section data-testid={testId} className={clsx('flex flex-col gap-2', className)}>
       <div className="flex min-h-8 items-center justify-between gap-3">
         <h3 className="text-heading font-semibold text-text">{title}</h3>
         {action}

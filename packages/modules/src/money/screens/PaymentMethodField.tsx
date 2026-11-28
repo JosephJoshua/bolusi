@@ -3,7 +3,7 @@
  * as chips, and the reference the picked one takes (an EDC's approval code). Shows nothing while
  * the store takes cash only.
  */
-import { ChipRow, TextInput, ToggleChip, space } from '@bolusi/ui';
+import { SegmentedControl, TextInput, space } from '@bolusi/ui';
 import { StyleSheet, View } from 'react-native';
 
 import { referenceRequired } from '../constants.js';
@@ -33,17 +33,15 @@ export function PaymentMethodField({
   const kind = lineKind(chosen, accounts);
   return (
     <View style={styles.field} testID={testID}>
-      <ChipRow testID={`${testID}.methods`}>
-        {paymentMethods(accounts).map((method) => (
-          <ToggleChip
-            key={method.account}
-            label={method.label}
-            selected={chosen === method.account}
-            onToggle={() => onChange({ account: method.account, reference: '' })}
-            testID={`${testID}.method.${method.account}`}
-          />
-        ))}
-      </ChipRow>
+      <SegmentedControl
+        options={paymentMethods(accounts).map((method) => ({
+          value: method.account,
+          label: method.label,
+        }))}
+        value={chosen}
+        onChange={(picked) => onChange({ account: picked, reference: '' })}
+        testID={`${testID}.method`}
+      />
       {kind === 'cash' ? null : (
         <TextInput
           label={tm(referenceRequired(kind) ? 'money.pay.approvalCode' : 'money.pay.reference')}

@@ -7,6 +7,7 @@ import { ListRow } from '../src/components/ListRow.js';
 import { PatternLock } from '../src/components/PatternLock.js';
 import { PhotoSlot } from '../src/components/PhotoSlot.js';
 import { QuantityStepper } from '../src/components/QuantityStepper.js';
+import { gridColumns } from '../src/components/OptionGrid.js';
 import { SegmentedControl } from '../src/components/SegmentedControl.js';
 import { StepHeader } from '../src/components/StepHeader.js';
 import { ToggleChip } from '../src/components/ToggleChip.js';
@@ -46,6 +47,7 @@ describe('SegmentedControl', () => {
     const r = render(
       <SegmentedControl
         testID="seg"
+        layout="scroll"
         options={[{ value: 'a', label: 'A' }]}
         value="a"
         onChange={vi.fn()}
@@ -54,21 +56,49 @@ describe('SegmentedControl', () => {
     expect(StyleSheet.flatten(r.get('seg').props['style'])).toMatchObject({ flexGrow: 0 });
   });
 
-  test('wrap lays the options out on lines instead of scrolling them out of view', () => {
+  // Joseph (2026-11-28): a few pills sized to their labels left half the screen empty. A form's
+  // answers now share the full width in equal cells.
+  test('by default the options share the full width in equal cells, the picked one checked', () => {
     const r = render(
       <SegmentedControl
         testID="seg"
-        wrap
         options={[
-          { value: 'a', label: 'A' },
-          { value: 'b', label: 'B' },
+          { value: 'cash', label: 'Laci kas' },
+          { value: 'bank', label: 'BCA Toko' },
+          { value: 'owner', label: 'Uang pribadi pemilik' },
         ]}
-        value="a"
+        value="bank"
         onChange={vi.fn()}
       />,
     );
-    expect(StyleSheet.flatten(r.get('seg').props['style'])).toMatchObject({ flexWrap: 'wrap' });
-    expect(r.get('seg.b')).toBeDefined();
+    expect(r.get('seg').props['accessibilityRole']).toBe('radiogroup');
+    fire(r.get('seg'), 'onLayout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 328, height: 0 } },
+    });
+    const labels = { 'Laci kas': 60, 'BCA Toko': 70, 'Uang pribadi pemilik': 100 };
+    for (const [label, width] of Object.entries(labels)) {
+      const measured = r.container.queryAll(
+        (n) => n.props['children'] === label && n.props['onLayout'] !== undefined,
+      )[0];
+      fire(measured!, 'onLayout', { nativeEvent: { layout: { x: 0, y: 0, width, height: 20 } } });
+    }
+    // 100 + check and padding fits two to a row of 328: the third stretches across the last row.
+    const basis = (value: string): unknown =>
+      StyleSheet.flatten(r.get(`seg.${value}`).props['style']).flexBasis;
+    expect(basis('cash')).toBe(160);
+    expect(StyleSheet.flatten(r.get('seg.owner').props['style'])).toMatchObject({ flexGrow: 1 });
+    expect(r.get('seg.bank.check')).toBeDefined();
+    expect(r.query('seg.cash.check')).toBeNull();
+  });
+});
+
+describe('gridColumns', () => {
+  test('puts as many to a row as fit, then evens the rows out', () => {
+    expect(gridColumns(328, 80, 3)).toBe(3);
+    expect(gridColumns(328, 190, 3)).toBe(1);
+    expect(gridColumns(328, 150, 3)).toBe(2);
+    // Four fit a row of five: 3 + 2 rather than 4 + 1.
+    expect(gridColumns(328, 70, 5)).toBe(3);
   });
 });
 
@@ -78,7 +108,7 @@ describe('SegmentedControl inline', () => {
     const r = render(
       <SegmentedControl
         testID="seg"
-        inline
+        layout="inline"
         size="compact"
         options={[{ value: 'not_checked', label: 'Tidak dicek' }]}
         value="not_checked"

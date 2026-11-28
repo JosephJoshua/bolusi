@@ -11,15 +11,14 @@ import { QRIS_MIN_AMOUNT } from '@bolusi/schemas';
 import {
   border,
   Button,
-  ChipRow,
   color,
   ConfirmSheet,
   numeric,
+  SegmentedControl,
   space,
   Text,
   TextButton,
   TextInput,
-  ToggleChip,
   type,
 } from '@bolusi/ui';
 import { StyleSheet, View } from 'react-native';
@@ -133,25 +132,20 @@ export function PaymentLines({
         return (
           <View key={line.key} style={[styles.line, index > 0 && styles.nextLine]} testID={id}>
             {methods.length > 1 || !offered ? (
-              <ChipRow testID={`${id}.methods`}>
-                {methods.map((method) => (
-                  <ToggleChip
-                    key={method.account}
-                    label={method.label}
-                    selected={account === method.account}
-                    onToggle={() =>
-                      set(line.key, {
-                        account: method.account,
-                        tendered: '',
-                        reference: '',
-                        qr: undefined,
-                        manual: false,
-                      })
-                    }
-                    testID={`${id}.method.${method.account}`}
-                  />
-                ))}
-              </ChipRow>
+              <SegmentedControl
+                options={methods.map((method) => ({ value: method.account, label: method.label }))}
+                value={account}
+                onChange={(picked) =>
+                  set(line.key, {
+                    account: picked,
+                    tendered: '',
+                    reference: '',
+                    qr: undefined,
+                    manual: false,
+                  })
+                }
+                testID={`${id}.method`}
+              />
             ) : null}
             <TextInput
               label={tm('money.pay.amount')}

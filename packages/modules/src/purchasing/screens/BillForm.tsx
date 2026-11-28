@@ -7,17 +7,16 @@
 import { formatMoney, formatPhone, keepNumbersWhole } from '@bolusi/i18n';
 import {
   AmountRow,
-  ChipRow,
   color,
   ListRow,
   QuantityStepper,
+  Rows,
+  SegmentedControl,
   space,
   Text,
   TextButton,
   TextInput,
-  ToggleChip,
   type,
-  Rows,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -191,23 +190,21 @@ export function BillForm({
       </View>
 
       <Section title={tp('purchasing.bill.billedOn')} testID={`${testID}.billedOn`}>
-        <ChipRow testID={`${testID}.days`}>
-          {DAYS.map((day) => (
-            <ToggleChip
-              key={day}
-              label={tp(
-                day === 'today'
-                  ? 'purchasing.bill.today'
-                  : day === 'yesterday'
-                    ? 'purchasing.bill.yesterday'
-                    : 'purchasing.bill.otherDay',
-              )}
-              selected={draft.billedDay === day}
-              onToggle={() => onChange({ ...draft, billedDay: day })}
-              testID={`${testID}.day.${day}`}
-            />
-          ))}
-        </ChipRow>
+        <SegmentedControl
+          options={DAYS.map((day) => ({
+            value: day,
+            label: tp(
+              day === 'today'
+                ? 'purchasing.bill.today'
+                : day === 'yesterday'
+                  ? 'purchasing.bill.yesterday'
+                  : 'purchasing.bill.otherDay',
+            ),
+          }))}
+          value={draft.billedDay}
+          onChange={(billedDay) => onChange({ ...draft, billedDay })}
+          testID={`${testID}.day`}
+        />
         {draft.billedDay === 'other' ? (
           <View style={styles.field}>
             <TextInput
@@ -223,23 +220,25 @@ export function BillForm({
       </Section>
 
       <Section title={tp('purchasing.bill.terms')} testID={`${testID}.terms`}>
-        <ChipRow testID={`${testID}.termChips`}>
-          {[...BILL_TERMS, 'other' as const].map((term) => (
-            <ToggleChip
-              key={String(term)}
-              label={
-                term === 0
-                  ? tp('purchasing.bill.termNone')
-                  : term === 'other'
-                    ? tp('purchasing.bill.termOther')
-                    : tp('purchasing.bill.termDays', { count: term })
-              }
-              selected={draft.term === term}
-              onToggle={() => onChange({ ...draft, term })}
-              testID={`${testID}.term.${String(term)}`}
-            />
-          ))}
-        </ChipRow>
+        <SegmentedControl
+          options={[...BILL_TERMS, 'other' as const].map((term) => ({
+            value: String(term),
+            label:
+              term === 0
+                ? tp('purchasing.bill.termNone')
+                : term === 'other'
+                  ? tp('purchasing.bill.termOther')
+                  : tp('purchasing.bill.termDays', { count: term }),
+          }))}
+          value={String(draft.term)}
+          onChange={(picked) =>
+            onChange({
+              ...draft,
+              term: BILL_TERMS.find((term) => String(term) === picked) ?? 'other',
+            })
+          }
+          testID={`${testID}.term`}
+        />
         {draft.term === 'other' ? (
           <View style={styles.field}>
             <TextInput

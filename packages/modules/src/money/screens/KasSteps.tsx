@@ -8,15 +8,14 @@ import { useReceiveDebt } from '../receive-debt.js';
 import { useCashCount, useCashMove, useSettleCount } from '../cash-forms.js';
 import { formatDateTime, formatMoney } from '@bolusi/i18n';
 import {
-  ChipRow,
   color,
   EmptyState,
   numeric,
+  SegmentedControl,
   space,
   Text,
   TextButton,
   TextInput,
-  ToggleChip,
   type,
 } from '@bolusi/ui';
 import { type ReactNode } from 'react';
@@ -258,32 +257,24 @@ export function MoveCashStep({
       testID={testID}
     >
       <Text style={styles.fieldLabel}>{tm('money.move.kind')}</Text>
-      {/* Four fixed choices: wrapped, so every one stays in view. */}
-      <View style={styles.wrap} testID={`${testID}.kinds`}>
-        {CASH_MOVE_KINDS.map((option) => (
-          <ToggleChip
-            key={option}
-            label={tm(CASH_MOVE_LABEL[option])}
-            selected={kind === option}
-            onToggle={() => setKind(option)}
-            testID={`${testID}.kind.${option}`}
-          />
-        ))}
-      </View>
+      <SegmentedControl
+        options={CASH_MOVE_KINDS.map((option) => ({
+          value: option,
+          label: tm(CASH_MOVE_LABEL[option]),
+        }))}
+        value={kind}
+        onChange={setKind}
+        testID={`${testID}.kind`}
+      />
       {kind === 'deposit' && banks.length > 1 ? (
         <View style={styles.gap}>
           <Text style={styles.fieldLabel}>{tm('money.move.account')}</Text>
-          <ChipRow testID={`${testID}.accounts`}>
-            {banks.map((row) => (
-              <ToggleChip
-                key={row.id}
-                label={row.name}
-                selected={depositAccount?.id === row.id}
-                onToggle={() => setAccount(`account:${row.id}`)}
-                testID={`${testID}.account.${row.id}`}
-              />
-            ))}
-          </ChipRow>
+          <SegmentedControl
+            options={banks.map((row) => ({ value: row.id, label: row.name }))}
+            value={depositAccount?.id ?? ''}
+            onChange={(id) => setAccount(`account:${id}`)}
+            testID={`${testID}.account`}
+          />
         </View>
       ) : null}
       <View style={styles.gap}>
@@ -560,17 +551,15 @@ export function RefundStep({
         <>
           <View style={styles.gap}>
             <Text style={styles.fieldLabel}>{tm('money.refund.method')}</Text>
-            <ChipRow testID={`${testID}.methods`}>
-              {form.methods.map((method) => (
-                <ToggleChip
-                  key={method.account}
-                  label={method.label}
-                  selected={form.account === method.account}
-                  onToggle={() => form.setAccount(method.account)}
-                  testID={`${testID}.method.${method.account}`}
-                />
-              ))}
-            </ChipRow>
+            <SegmentedControl
+              options={form.methods.map((method) => ({
+                value: method.account,
+                label: method.label,
+              }))}
+              value={form.account}
+              onChange={form.setAccount}
+              testID={`${testID}.method`}
+            />
           </View>
           <View style={styles.gap}>
             <AmountField
@@ -730,7 +719,6 @@ const styles = StyleSheet.create({
     ...numeric,
     flexShrink: 0,
   },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   fieldLabel: { ...type.caption, color: color.textMuted, marginBottom: space.sm },
   muted: { ...type.bodySm, color: color.textMuted, marginTop: space.sm },
   heading: { ...type.heading, color: color.text },

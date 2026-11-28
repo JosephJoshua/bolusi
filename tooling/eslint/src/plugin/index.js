@@ -10,6 +10,7 @@ import noMediaColumnUpdate from './rules/no-media-column-update.js';
 import noOpTableUpdate from './rules/no-op-table-update.js';
 import noRowDivider from './rules/no-row-divider.js';
 import numericToken from './rules/numeric-token.js';
+import singleChoiceControl from './rules/single-choice-control.js';
 import permissionModulePrefix from './rules/permission-module-prefix.js';
 import reactOnlyInTsx from './rules/react-only-in-tsx.js';
 import refusalsInRules from './rules/refusals-in-rules.js';
@@ -31,6 +32,7 @@ const plugin = {
     'no-op-table-update': noOpTableUpdate,
     'no-row-divider': noRowDivider,
     'numeric-token': numericToken,
+    'single-choice-control': singleChoiceControl,
     'permission-module-prefix': permissionModulePrefix,
     'react-only-in-tsx': reactOnlyInTsx,
     'refusals-in-rules': refusalsInRules,

@@ -20,7 +20,10 @@ export interface ToggleChipProps {
 }
 
 // What the check adds beside the label, split over both sides while it is hidden.
-const CHECK_ROOM = (size.iconChip + space.xs) / 2;
+const CHECK_ROOM = (size.iconChip + space.sm) / 2;
+
+/** Grows the 36 dp chip's touch height to the §1.4 floor without growing what is drawn. */
+const CHIP_SLOP = (touch.min - size.control) / 2;
 
 const styles = StyleSheet.create({
   chip: {
@@ -29,14 +32,16 @@ const styles = StyleSheet.create({
     // In a wrapped list (the handover checks) a label wider than the screen at a large font
     // wraps inside the chip instead of running off the edge. A sideways ChipRow never squeezes it.
     flexShrink: 1,
-    minHeight: touch.min,
+    // Drawn compact like a filter pill so a row of chips does not outweigh the fields around it;
+    // the hit area is padded back to the 48 dp floor.
+    minHeight: size.control,
     // Room above and below a label that took a second line.
     paddingVertical: space.xs,
     borderRadius: radius.full,
     borderWidth: border.hairline,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.xs,
+    gap: space.sm,
   },
   label: { ...type.bodySm, flexShrink: 1 },
 });
@@ -54,6 +59,7 @@ export function ToggleChip({
       accessibilityLabel={label}
       accessibilityState={{ checked: selected }}
       onPress={onToggle}
+      hitSlop={{ top: CHIP_SLOP, bottom: CHIP_SLOP }}
       style={[
         styles.chip,
         {

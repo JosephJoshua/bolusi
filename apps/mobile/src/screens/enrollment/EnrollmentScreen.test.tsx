@@ -262,24 +262,25 @@ describe('whose phone this is', () => {
 
   test('defaults to the store’s phone, the owner reads as Saya, and says who signs in', () => {
     const screen = renderScreen(withPeople(), vi.fn());
-    expect(screen.get('enroll-owner-shared').props['accessibilityState']).toEqual({
+    expect(screen.get('enroll-owner-choice.shared').props['accessibilityState']).toEqual({
       checked: true,
+      selected: true,
     });
-    expect(textsIn(screen.get('enroll-owner-user-1'))).toContain(t('auth.enroll.ownerSelf'));
+    expect(textsIn(screen.get('enroll-owner-choice.user-1'))).toContain(t('auth.enroll.ownerSelf'));
     expect(textsIn(screen.get('enroll-owner-hint'))).toContain(t('auth.enroll.ownerSharedHint'));
   });
 
-  test('picking a person makes it theirs; picking them again gives it back to the store', () => {
+  test('picking a person makes it theirs; picking the store’s phone gives it back', () => {
     const onChange = vi.fn();
     const screen = renderScreen(withPeople(), onChange);
-    fire(screen.get('enroll-owner-user-budi'), 'onPress');
+    fire(screen.get('enroll-owner-choice.user-budi'), 'onPress');
     expect(onChange).toHaveBeenCalledWith({ personalUserId: 'user-budi' });
 
     const picked = renderScreen(withPeople({ personalUserId: 'user-budi' }), onChange);
     expect(textsIn(picked.get('enroll-owner-hint'))).toContain(
       t('auth.enroll.ownerPersonHint', { name: 'Budi' }),
     );
-    fire(picked.get('enroll-owner-user-budi'), 'onPress');
+    fire(picked.get('enroll-owner-choice.shared'), 'onPress');
     expect(onChange).toHaveBeenLastCalledWith({ personalUserId: null });
   });
 

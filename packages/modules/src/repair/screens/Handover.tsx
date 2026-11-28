@@ -16,7 +16,7 @@ import {
   RollingText,
   TextButton,
   TextInput,
-  ToggleChip,
+  CheckGrid,
   border,
   color,
   space,
@@ -291,17 +291,22 @@ export function Handover({
             </QueryView>
             {checks.lines.length === 0 || stale !== null ? null : (
               <Section title={tn('repair.handover.checks')} testID={`${testID}.checks`}>
-                {/* Wrapped, not a sideways row: every line must be in sight to be gone through. */}
-                <View style={styles.checks} testID={`${testID}.checkList`}>
-                  {checks.lines.map((line) => (
-                    <ToggleChip
-                      key={`${line.kind}:${line.item}`}
-                      label={handoverLineLabel(line)}
-                      selected={line.done}
-                      onToggle={() => checks.toggle(line)}
-                      testID={`${testID}.check.${line.kind}.${line.item}`}
-                    />
-                  ))}
+                {/* A grid, not a sideways row: every line must be in sight to be gone through. */}
+                <View testID={`${testID}.checkList`}>
+                  <CheckGrid
+                    options={checks.lines.map((line) => ({
+                      value: `${line.kind}.${line.item}`,
+                      label: handoverLineLabel(line),
+                    }))}
+                    selected={checks.lines
+                      .filter((line) => line.done)
+                      .map((line) => `${line.kind}.${line.item}`)}
+                    onToggle={(value) => {
+                      const line = checks.lines.find((l) => `${l.kind}.${l.item}` === value);
+                      if (line !== undefined) checks.toggle(line);
+                    }}
+                    testID={`${testID}.check`}
+                  />
                 </View>
               </Section>
             )}
@@ -445,6 +450,5 @@ const styles = StyleSheet.create({
   },
   totalLabel: { ...type.bodyBold, color: color.text },
   payLater: { gap: space.sm },
-  checks: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   proof: { marginTop: space.xl },
 });

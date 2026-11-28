@@ -110,9 +110,14 @@ for (const [width, height] of [
           .map((name) => name!.textContent);
       });
       expect(cutNames).toEqual([]);
-      // Every queue is in sight: the tabs wrap rather than scroll sideways.
+      // The queues stay on one line: past the edge they scroll, and that edge fades.
       const views = page.getByTestId('repair.desk.board.views');
-      expect(await views.evaluate((tabs) => tabs.scrollWidth <= tabs.clientWidth + 1)).toBe(true);
+      const tabsBox = (await views.boundingBox())!;
+      expect(tabsBox.height).toBeLessThan(48);
+      const scrolls = await views.evaluate((tabs) => tabs.scrollWidth > tabs.clientWidth + 1);
+      await expect(page.getByTestId('repair.desk.board.views.fade.end')).toHaveCount(
+        scrolls ? 1 : 0,
+      );
       await expect(page.getByTestId('repair.desk.board.views.active')).toBeInViewport({ ratio: 1 });
       // Every filter shows whole: none runs under the toolbar's faded edge.
       const filters = page.getByTestId('repair.desk.board.filters').locator('> div').first();
@@ -175,7 +180,7 @@ for (const [width, height, sidebar] of [
   });
 }
 
-test('an owner sees every queue beside an open servisan on a 1366×768 screen', async () => {
+test('an owner reaches every queue beside an open servisan on a 1366×768 screen', async () => {
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.getByTestId('desktop.person').click();
   await page.getByRole('menuitem', { name: 'Yosua Wonda' }).click();
@@ -186,13 +191,12 @@ test('an owner sees every queue beside an open servisan on a 1366×768 screen', 
   await page.getByText('Lince Wakerkwa').click();
   await expect(page.getByTestId('repair.desk.ticket.customer')).toBeVisible();
   const views = page.getByTestId('repair.desk.board.views');
-  // Measured once the pane and the approvals count have settled, not mid-layout.
-  await expect
-    .poll(() => views.evaluate((tabs) => tabs.scrollWidth <= tabs.clientWidth + 1))
-    .toBe(true);
-  for (const view of ['active', 'cancelled']) {
-    await expect(page.getByTestId(`repair.desk.board.views.${view}`)).toBeInViewport({ ratio: 1 });
-  }
+  // One line of queues; the picked one is scrolled into sight, the others a scroll away.
+  expect((await views.boundingBox())!.height).toBeLessThan(48);
+  await expect(page.getByTestId('repair.desk.board.views.cancelled')).toBeInViewport({ ratio: 1 });
+  await page.getByTestId('repair.desk.board.views.active').click();
+  await expect(page.getByTestId('repair.desk.board.views.active')).toBeInViewport({ ratio: 1 });
+  await page.getByTestId('repair.desk.board.views.cancelled').click();
   // Nor is a filter cut off at the toolbar's edge.
   await expect(page.getByTestId('repair.desk.filter.priceWaiting')).toBeInViewport({ ratio: 1 });
   const toolbar = (await page.getByTestId('repair.desk.board.filters').boundingBox())!;

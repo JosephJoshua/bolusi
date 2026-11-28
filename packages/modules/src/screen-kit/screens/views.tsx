@@ -282,7 +282,11 @@ export function FlowScreen({
   );
 }
 
-/** A captioned group on a detail or review screen, with an optional compact action beside the title. */
+/**
+ * A captioned group on a detail or review screen, with an optional compact action beside the title.
+ * Its title sits close over its own content and far from the section above (8 vs 32), and is a step
+ * larger than the bold values inside, so what belongs to which section reads at a glance.
+ */
 export function Section({
   title,
   action,
@@ -299,7 +303,9 @@ export function Section({
 }): React.JSX.Element {
   return (
     <View style={first ? undefined : styles.section} testID={testID}>
-      <View style={styles.sectionHeader}>
+      <View
+        style={[styles.sectionHeader, action === undefined ? null : styles.sectionHeaderAction]}
+      >
         <Text style={styles.sectionTitle}>{title}</Text>
         {/* A TextButton's padding is hit area: its text lines up with the content's right edge. */}
         {action === undefined ? null : <View style={styles.sectionAction}>{action}</View>}
@@ -315,16 +321,17 @@ const styles = StyleSheet.create({
   question: { ...type.bodyBold, color: color.text, marginBottom: space.md, textAlign: 'center' },
   answers: { flexDirection: 'row', gap: space.md },
   answer: { flex: 1 },
-  section: { marginTop: space.xl },
+  section: { marginTop: space['2xl'] },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: size.control,
     marginBottom: space.sm,
     gap: space.sm,
   },
+  // Room for the compact action's 36 dp beside the title; without one the title adds no padding.
+  sectionHeaderAction: { minHeight: size.control },
   // Shares the row with the title and wraps inside it at a large font, never running off the edge.
   sectionAction: { marginRight: -space.sm, flexShrink: 1 },
-  sectionTitle: { ...type.bodyBold, color: color.text, flexShrink: 1 },
+  sectionTitle: { ...type.heading, color: color.text, flexShrink: 1 },
 });

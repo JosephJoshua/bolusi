@@ -305,7 +305,7 @@ export function DeviceStep({
                       key={option.id}
                       label={choice}
                       selected={device.brand === choice}
-                      onToggle={() => set({ brand: choice })}
+                      onToggle={() => set({ brand: device.brand === choice ? '' : choice })}
                       testID={`${testID}.brandChoice.${choice}`}
                     />
                   );
@@ -542,7 +542,7 @@ export function ConditionStep({
                 value={draft.checks[option.id] ?? 'not_checked'}
                 onChange={(state) => update({ checks: { ...draft.checks, [option.id]: state } })}
                 size="compact"
-                inline
+                layout="inline"
                 testID={`${testID}.check.${option.id}`}
               />
             </View>
@@ -795,7 +795,6 @@ export function PriceStep({
           value={chosenReady(draft, options.readyBy)}
           onChange={(ready) => update({ ready })}
           size="compact"
-          wrap
           testID={`${testID}.ready`}
         />
       </Section>

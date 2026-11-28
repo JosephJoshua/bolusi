@@ -339,6 +339,7 @@ export function RepairBoard({
             // One compact row that scrolls sideways and runs to the screen edges: the cut-off pill
             // at the edge shows there are more queues, and the list keeps the screen.
             size="compact"
+            layout="scroll"
             bleed
             onChange={(next) => {
               setView(next);

@@ -9,15 +9,14 @@ import {
   AppShell,
   Button,
   Chip,
-  ChipRow,
-  List,
-  ToggleChip,
   color,
+  List,
+  type ListState,
+  SegmentedControl,
   space,
+  Text,
   touch,
   type,
-  type ListState,
-  Text,
   ValueText,
 } from '@bolusi/ui';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
@@ -186,34 +185,25 @@ export function OrderList({
     >
       {place.sections}
       <View style={styles.chips}>
-        <ChipRow testID={`${testID}.chips`}>
-          <ToggleChip
-            label={tp('purchasing.list.open')}
-            selected={filter === 'open'}
-            onToggle={() => pick('open')}
-            testID={`${testID}.filter.open`}
-          />
-          <ToggleChip
-            label={tp('purchasing.list.done')}
-            selected={filter === 'done'}
-            onToggle={() => pick('done')}
-            testID={`${testID}.filter.done`}
-          />
-          {opensBills(runtime) ? (
-            <ToggleChip
-              label={tp('purchasing.bill.tab')}
-              selected={bills}
-              onToggle={() => pick('bills')}
-              testID={`${testID}.filter.bills`}
-            />
-          ) : null}
-          <ActionChip
-            label={tp('purchasing.supplier.listTitle')}
-            icon="store"
-            onPress={onOpenSuppliers}
-            testID={`${testID}.suppliers`}
-          />
-        </ChipRow>
+        <SegmentedControl<BelanjaTab>
+          options={[
+            { value: 'open', label: tp('purchasing.list.open') },
+            { value: 'done', label: tp('purchasing.list.done') },
+            ...(opensBills(runtime)
+              ? [{ value: 'bills' as const, label: tp('purchasing.bill.tab') }]
+              : []),
+          ]}
+          value={bills ? 'bills' : filter === 'done' ? 'done' : 'open'}
+          onChange={pick}
+          size="compact"
+          testID={`${testID}.filter`}
+        />
+        <ActionChip
+          label={tp('purchasing.supplier.listTitle')}
+          icon="store"
+          onPress={onOpenSuppliers}
+          testID={`${testID}.suppliers`}
+        />
       </View>
       <List
         key={filter}
@@ -341,7 +331,8 @@ const BillListRow = memo(function BillListRow({
 
 const styles = StyleSheet.create({
   chipLine: { flexDirection: 'row' },
-  chips: { marginBottom: space.xs },
+  // The filters across the width, the suppliers' list under them at the start.
+  chips: { marginBottom: space.xs, gap: space.sm },
   row: {
     minHeight: touch.rowMin,
     marginHorizontal: -space.lg,

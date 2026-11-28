@@ -188,6 +188,11 @@ export const size = Object.freeze({
    * field): drawn at 36 dp so it does not outweigh content, hit area padded to `touch.min`.
    */
   control: 36,
+  /**
+   * An answer in a form's `SegmentedControl` grid: smaller than a 48 dp pill so a row of answers
+   * does not outweigh the fields around it, hit area padded to `touch.min`.
+   */
+  option: 44,
   /** A photo in a scrolling strip: big enough to tell shots apart, small enough to keep a row. */
   photoStrip: 88,
   /** §3.5 Chip icon — mandatory, no color-only signalling. */

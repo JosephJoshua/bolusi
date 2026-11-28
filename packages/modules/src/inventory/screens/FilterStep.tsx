@@ -78,7 +78,6 @@ export function FilterStep({
             value={draft.stock}
             onChange={(stock) => setDraft((current) => ({ ...current, stock }))}
             size="compact"
-            wrap
             testID={`${testID}.stock`}
           />
         </View>

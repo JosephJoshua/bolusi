@@ -24,7 +24,7 @@ import {
 import { Defs, LinearGradient, Rect, Stop, Svg } from 'react-native-svg';
 
 import { bleedMargins, bleedPadding, useBleed } from '../layout.js';
-import { color, space } from '../tokens.js';
+import { color, size, space, touch } from '../tokens.js';
 
 export interface ChipRowProps {
   /** ToggleChip, ActionChip or Chip elements, in order. */
@@ -49,7 +49,14 @@ const styles = StyleSheet.create({
   frame: { flexGrow: 0 },
   // A ScrollView grows by default; inside a scrolling screen that stretched the row to fill it.
   scroller: { flexGrow: 0 },
-  row: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
+  // Chips are drawn at 36 dp with their touch padded to 48: Android delivers no touch outside a
+  // ScrollView's bounds, so that padding lives inside the row.
+  row: {
+    flexDirection: 'row',
+    gap: space.sm,
+    alignItems: 'center',
+    paddingVertical: (touch.min - size.control) / 2,
+  },
   fade: { position: 'absolute', top: 0, bottom: 0, width: FADE },
   fadeStart: { left: 0 },
   fadeEnd: { right: 0 },

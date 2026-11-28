@@ -60,6 +60,7 @@ describe('SegmentedControl in a scrolling row', () => {
   const views = (value: string) => (
     <SegmentedControl
       testID="views"
+      layout="scroll"
       bleed
       size="compact"
       options={[

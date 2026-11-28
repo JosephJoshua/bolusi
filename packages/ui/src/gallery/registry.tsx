@@ -478,6 +478,23 @@ export const stateRegistry: Record<InventoryName, readonly GalleryState[]> = {
     },
   ],
 
+  CheckGrid: [
+    {
+      id: 'some-ticked',
+      render: (l) => (
+        <componentInventory.CheckGrid
+          options={[
+            { value: 'a', label: l.primaryText },
+            { value: 'b', label: l.secondaryText },
+            { value: 'c', label: l.title },
+          ]}
+          selected={['b']}
+          onToggle={noop}
+        />
+      ),
+    },
+  ],
+
   ToggleChip: [
     {
       id: 'off',

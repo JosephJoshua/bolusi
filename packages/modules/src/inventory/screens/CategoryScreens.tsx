@@ -405,7 +405,6 @@ function FieldRow({
             value={field.kind}
             onChange={(kind) => onChange({ kind })}
             size="compact"
-            wrap
             testID={`${testID}.kind`}
           />
           {picks ? (

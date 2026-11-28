@@ -1,57 +1,50 @@
 /**
- * SegmentedControl — one choice from a short, fixed set (a board's views, a checklist item's
- * state). Every option shows its label; the selected one is filled, so the state never rides on
- * colour alone (§6.3): it is also announced as `selected`. Scrolls sideways in a `ChipRow` when the
- * labels do not fit a narrow phone or a large font, rather than truncating them: the edge with more
- * fades, and the picked option is scrolled into sight.
+ * SegmentedControl — one choice from a short, fixed set (how a payment came in, which paper, a
+ * board's views, a checklist item's state). Every option shows its whole label and the picked one is
+ * announced as `selected`, so the state never rides on colour alone (§6.3).
  *
- * `compact` is for a control that is not the screen's subject (a board's filters, a checklist row's
- * state): a 36 dp pill whose hit area is still padded to the 48 dp floor, so it does not outweigh
- * the content it filters.
+ * Three layouts:
+ * - `fill` (default), an answer in a form or a place's sections: the options share the full width in
+ *   equal cells, as many to a row as fit every label on one line, so short answers sit in one row
+ *   across the screen and long ones fall to two columns or a stack. A row the options do not fill
+ *   stretches its cells, so the control always ends on the content's right edge (`OptionGrid`).
+ * - `scroll`, a list's views with counts ("Antrean (12)"): one compact row that scrolls sideways in
+ *   a `ChipRow`, so a long set keeps one line's height; the edge with more fades, and the picked
+ *   option is scrolled into sight.
+ * - `inline`, a few short options beside a label (a condition check's state): a plain row sized to
+ *   its options whose pills never shrink; the caller stacks it under its label when it does not fit.
+ *
+ * `compact` is for a control that is not the screen's subject: a 36 dp option whose hit area is
+ * still padded to the 48 dp floor, so it does not outweigh the content it filters.
  */
 import { Text } from '../text.js';
 import { Pressable, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 
 import { ChipRow, useRevealInRow } from './ChipRow.js';
+import { OptionGrid, type GridOption } from './OptionGrid.js';
 import { border, color, radius, size as sizes, space, touch, type } from '../tokens.js';
 
 /** Grows a compact pill's touch height to the §1.4 floor without growing what is drawn. */
 const COMPACT_SLOP = (touch.min - sizes.control) / 2;
 
-export interface SegmentedOption<V extends string> {
-  readonly value: V;
-  /** Already-localized. */
-  readonly label: string;
-}
+export type SegmentedOption<V extends string> = GridOption<V>;
 
 export interface SegmentedControlProps<V extends string> {
   readonly options: readonly SegmentedOption<V>[];
   readonly value: V;
   readonly onChange: (value: V) => void;
-  /** Wrap onto more lines instead of scrolling sideways, so every choice stays in view. */
-  readonly wrap?: boolean | undefined;
+  readonly layout?: 'fill' | 'scroll' | 'inline' | undefined;
   readonly size?: 'regular' | 'compact' | undefined;
   /**
-   * Run the scrolling row through the screen's side padding (AppShell content, `space.lg`) to the
-   * screen edges, so a pill cut off at the edge shows there are more to swipe to.
+   * `scroll` only: run the row through the screen's side padding (AppShell content, `space.lg`) to
+   * the screen edges, so a pill cut off at the edge shows there are more to swipe to.
    */
   readonly bleed?: boolean | undefined;
-  /**
-   * A plain row sized to its options, no wrapping or scrolling: a few short options beside a label
-   * (a condition check's state). Each pill keeps its text's width and never shrinks, so a label is
-   * never cut; the caller stacks the row under its label when it does not fit beside it.
-   */
-  readonly inline?: boolean | undefined;
   readonly testID?: string | undefined;
 }
 
 const styles = StyleSheet.create({
   row: { gap: touch.gap },
-  wrapped: { flexDirection: 'row', flexWrap: 'wrap', gap: touch.gap },
-  // Compact pills carry vertical slop; wrapped rows sit far enough apart that the slops never meet.
-  compactWrapped: { rowGap: 2 * COMPACT_SLOP },
-  // Android delivers no touch outside a ScrollView's bounds, so the slop lives inside the row.
-  compactRow: { paddingVertical: COMPACT_SLOP },
   option: {
     minHeight: touch.min,
     paddingHorizontal: space.lg,
@@ -77,17 +70,35 @@ const styles = StyleSheet.create({
   inlineOption: { flexShrink: 0 },
 });
 
-export function SegmentedControl<V extends string>({
+export function SegmentedControl<V extends string>(
+  props: SegmentedControlProps<V>,
+): React.JSX.Element {
+  const { layout = 'fill' } = props;
+  if (layout !== 'fill') return <PillRow {...props} layout={layout} />;
+  const { options, value, onChange, size, testID = 'ui.segmented' } = props;
+  return (
+    <OptionGrid
+      options={options}
+      isSelected={(option) => option === value}
+      onPress={onChange}
+      role="radio"
+      size={size}
+      testID={testID}
+    />
+  );
+}
+
+function PillRow<V extends string>({
   options,
   value,
   onChange,
-  wrap = false,
+  layout,
   size = 'regular',
   bleed = false,
-  inline = false,
   testID = 'ui.segmented',
-}: SegmentedControlProps<V>): React.JSX.Element {
+}: SegmentedControlProps<V> & { readonly layout: 'scroll' | 'inline' }): React.JSX.Element {
   const compact = size === 'compact';
+  const inline = layout === 'inline';
   const items = options.map((option) => {
     const selected = option.value === value;
     return (
@@ -95,7 +106,6 @@ export function SegmentedControl<V extends string>({
         key={option.value}
         selected={selected}
         testID={`${testID}.${option.value}`}
-        // One choice of several: a radio in a radio group, so a screen reader says "1 of 3, selected".
         accessibilityRole="radio"
         accessibilityLabel={option.label}
         accessibilityState={{ checked: selected, selected }}
@@ -128,24 +138,8 @@ export function SegmentedControl<V extends string>({
       </View>
     );
   }
-  if (wrap) {
-    return (
-      <View
-        style={[styles.wrapped, compact ? styles.compactWrapped : null]}
-        accessibilityRole="radiogroup"
-        testID={testID}
-      >
-        {items}
-      </View>
-    );
-  }
   return (
-    <ChipRow
-      bleed={bleed}
-      contentStyle={[styles.row, compact ? styles.compactRow : null]}
-      accessibilityRole="radiogroup"
-      testID={testID}
-    >
+    <ChipRow bleed={bleed} contentStyle={styles.row} accessibilityRole="radiogroup" testID={testID}>
       {items}
     </ChipRow>
   );

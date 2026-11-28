@@ -23,12 +23,17 @@ export interface ActionChipProps {
   readonly testID?: string | undefined;
 }
 
+/** Grows the 36 dp chip's touch height to the §1.4 floor without growing what is drawn. */
+const CHIP_SLOP = (touch.min - size.control) / 2;
+
 const styles = StyleSheet.create({
   chip: {
     alignSelf: 'flex-start',
     // Like ToggleChip: wraps its label rather than run off a narrow screen.
     flexShrink: 1,
-    minHeight: touch.min,
+    // Drawn compact like a filter pill so a row of chips does not outweigh the fields around it;
+    // the hit area is padded back to the 48 dp floor.
+    minHeight: size.control,
     // Room above and below a label that took a second line.
     paddingVertical: space.xs,
     paddingHorizontal: space.md,
@@ -55,6 +60,7 @@ export function ActionChip({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       onPress={onPress}
+      hitSlop={{ top: CHIP_SLOP, bottom: CHIP_SLOP }}
       style={({ pressed }) => [
         styles.chip,
         {

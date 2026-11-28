@@ -8,15 +8,14 @@ import {
   AppShell,
   Button,
   Chip,
-  ChipRow,
-  List,
-  ToggleChip,
   color,
+  List,
+  type ListState,
+  SegmentedControl,
   space,
+  Text,
   touch,
   type,
-  type ListState,
-  Text,
 } from '@bolusi/ui';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -141,20 +140,16 @@ export function TransferList({
     >
       {place.sections}
       <View style={styles.chips}>
-        <ChipRow testID={`${testID}.chips`}>
-          <ToggleChip
-            label={ti('inventory.transfer.list.open')}
-            selected={filter === 'open'}
-            onToggle={() => onFilter('open')}
-            testID={`${testID}.filter.open`}
-          />
-          <ToggleChip
-            label={ti('inventory.transfer.list.all')}
-            selected={filter === 'all'}
-            onToggle={() => onFilter('all')}
-            testID={`${testID}.filter.all`}
-          />
-        </ChipRow>
+        <SegmentedControl<TransferFilter>
+          options={[
+            { value: 'open', label: ti('inventory.transfer.list.open') },
+            { value: 'all', label: ti('inventory.transfer.list.all') },
+          ]}
+          value={filter}
+          onChange={onFilter}
+          size="compact"
+          testID={`${testID}.filter`}
+        />
       </View>
       <List
         key={filter}

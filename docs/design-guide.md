@@ -59,9 +59,11 @@ Use the type scale and nothing in between: display 32, title 24, heading 20,
 body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
 
 - Screen title in the header, entity name (customer) `title`, section titles
-  `bodyBold`, values `bodySm` 600, labels `caption` muted.
-- Controls are sized to their importance. Filters, segmented controls and
-  in-content buttons are compact (36 dp drawn, 48 dp hit area via hitSlop).
+  `heading` (a step above the bold values inside), values `bodySm` 600, labels
+  `caption` muted.
+- Controls are sized to their importance. Chips, filters, segmented controls
+  and in-content buttons are compact (36 dp drawn, 48 dp hit area via hitSlop);
+  an answer cell in a form is 44 dp.
   The status filter once took a quarter of the board; filters stay one row.
 - Photos are thumbnails in one scrolling `PhotoStrip` with "Lihat semua (n)",
   not grids that eat the screen. Tap opens `PhotoViewer` (zoom, swipe, share).
@@ -72,8 +74,9 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
   The 14 floor is the same. Mouse-first controls are 32 to 40 px tall; tables,
   not cards, carry lists.
 - The PC window goes down to 1024 × 520 (a small laptop at 125% scaling) and
-  nothing is cut off there: tabs and filters wrap to a second row instead of
-  scrolling sideways out of a mouse's reach, and an open servisan sits beside
+  nothing is cut off there: a list's view tabs stay on one line and scroll
+  sideways (the mouse wheel scrolls them, an edge with more fades, the picked
+  tab is brought into sight), filters wrap to a second row, and an open servisan sits beside
   the table, which folds to number, customer and status, never over it.
 
 ## 4. Alignment and spacing
@@ -88,8 +91,15 @@ body 18, bodySm 16, caption 14. Limit a component to 2 or 3 sizes.
   phone, large font), every row stacks the same way, label on top and the
   control under it. Never squeeze a control to make it fit.
 - Amounts are right-aligned and top-aligned with their description.
-- Related things close, unrelated things far: section gap `space.xl`, items in
-  a group `space.sm` to `space.md`.
+- Related things close, unrelated things far: a section's title sits `space.sm`
+  over its own content and `space['2xl']` below the section before it (`Section`
+  on the phone, `Section` in ui-web on the PC), so the eye groups each title with
+  what follows it. Items in a group are `space.sm` to `space.md` apart.
+- Use the width. One answer from a short set (how it was paid, which day, a
+  filter) is a `SegmentedControl`: equal cells across the whole content width,
+  as many to a row as keep every label on one line, never a few pills sized to
+  their text with half the row empty. A short checklist is a `CheckGrid`. Lint
+  `bolusi/single-choice-control` refuses `ToggleChip`s used as radios.
 - Group with background (`surfaceAlt` box, card) or spacing before reaching for
   borders. Dividers are hairlines.
 - Rows in a list are edge to edge, with no chevrons when the whole row is
@@ -167,7 +177,7 @@ sees only the places they work in. Settings stay in the account menu.
 ## 6. Use real, modern components
 
 Prefer a proper component over a hand-made approximation. Already built:
-`SearchField`, `SegmentedControl` (compact, bleed), `TextButton`, `Timeline`
+`SearchField`, `SegmentedControl` (full-width grid; `scroll` for a list's views; `inline` beside a label), `CheckGrid`, `TextButton`, `Timeline`
 (history, "Riwayat"), `PhotoStrip`, `ChipRow` (choice chips that scroll sideways; an edge with more to swipe to fades), `Sheet` (bottom sheet to show more, never a
 form), `PhotoViewer` (pinch and double-tap zoom, pager, share), `ConfirmSheet`,
 `Chip`/`StatusChip`, `FactGrid`/`Fact`, `Banner`, `EmptyState`,
@@ -185,8 +195,9 @@ setting).
   step; picking a suggestion closes the keyboard. Check a screenshot at a
   keyboard-up height (about 390 x 520).
 - Design for the realistic amount, not the demo's three items: owner-edited
-  lists, catalog data and records grow. Choice chips from such a list sit in one
-  `ChipRow` that scrolls sideways instead of wrapping down the screen; long lists
+  lists, catalog data and records grow. Suggestion chips from such a list
+  (colours, brands, accessories) sit in one `ChipRow` that scrolls sideways
+  instead of wrapping down the screen; long lists
   get search or paging; tables keep their header and scroll. Try each screen
   with 20+ options, long names and an empty list.
 - Desktop and admin screens: enterprise-grade tables with sorting, filtering,
