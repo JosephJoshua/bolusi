@@ -343,6 +343,27 @@ describe('an intake restored after the app died mid-submit', () => {
 });
 
 describe('technician work', () => {
+  test('a start that is refused is said on the step, which stays open', async () => {
+    h = await openRepairScreenHarness(5202);
+    const ticketId = await openTicket(h);
+    const real = repairRuntimeFor(h, h.technicianId);
+    const runtime = {
+      ...real,
+      run: ((name: string, input: unknown) =>
+        name === 'startWork'
+          ? Promise.reject(new Error('refused'))
+          : real.run(name as never, input as never)) as typeof real.run,
+    };
+    const screen = await mount(h, h.technicianId, { runtime });
+    await press(screen, 'repair.board.views.unassigned');
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.start');
+    await press(screen, 'repair.work.before.take.press');
+    await press(screen, 'repair.work.before.primary');
+    expect(screen.query('repair.work.before.error')).not.toBeNull();
+    expect(screen.query('repair.work.before')).not.toBeNull();
+  });
+
   test('starting needs a before photo and marking repaired needs an after photo', async () => {
     h = await openRepairScreenHarness(5201);
     const ticketId = await openTicket(h);
