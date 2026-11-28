@@ -380,6 +380,34 @@ describe('the PC over the offline core', () => {
     expect(JSON.stringify(latest)).toContain('Yakobus M.');
   });
 
+  it('shows the servisan a kept intake already opened instead of opening it twice', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    renderApp();
+    await screen.findByTestId('repair.desk.board.newIntake');
+    fireEvent.keyDown(window, { key: 'F2' });
+    fireEvent.change(await screen.findByTestId('repair.desk.intake.name'), {
+      target: { value: 'Yakobus Mandowen' },
+    });
+    const writes = core.calls.filter((call) => call.method === 'session.updateDeviceDraft');
+    const kept = writes.at(-1)!.args[1] as Record<string, unknown>;
+    // The draft carries its servisan's id from the start, so a save can be recognised later.
+    expect(typeof kept['ticketId']).toBe('string');
+
+    // The PC closed between opening the servisan and clearing the draft: bringing the draft back
+    // shows that servisan and offers nothing to save a second time.
+    const opened = (await core.demo.query('listTickets', {})).rows[0] as { id: string };
+    core.session({ active: null, locked: true, permissions: [] });
+    core.session({
+      ...signedIn(OWNER, ALL),
+      locked: false,
+      deviceDrafts: { repair: { ...kept, ticketId: opened.id } },
+    });
+    await waitFor(() => expect(screen.queryByTestId('repair.desk.intake')).toBeNull());
+    await screen.findByTestId('repair.desk.ticket');
+    const cleared = core.calls.filter((call) => call.method === 'session.updateDeviceDraft');
+    expect(cleared.at(-1)!.args[1]).toBeNull();
+  });
+
   it("brings back an intake an older version kept in the person's own workspace, and moves it to the PC", async () => {
     const draft = { ...emptyIntakeDraft(), customer: { kind: 'new', name: 'Ester', phone: '' } };
     const workspace = { ownerUserId: OWNER.id, route: 'home', drafts: { repair: draft } };

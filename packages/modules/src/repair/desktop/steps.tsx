@@ -21,38 +21,21 @@ import {
 import { Check, Printer, Signature } from 'lucide-react';
 import { Fragment, useState, type ReactNode } from 'react';
 
-import { useChangeCheck } from '../../money/change-check.js';
 import { ChangeCheckDialog, PaymentLines } from '../../money/desktop/PaymentLines.js';
 import { QrisDialog } from '../../money/desktop/QrisDialog.js';
 import { canSimulateQris } from '../../money/qris.js';
 import { PaymentMethodField } from '../../money/desktop/PaymentMethodField.js';
-import { accountLabel } from '../../money/kas.js';
-import {
-  chosenMethod,
-  methodMissing,
-  offeredAccount,
-  referenceMissing,
-} from '../../money/payment-entry.js';
-import { handoverLineLabel, useHandoverChecks } from '../handover-checks.js';
-import { freeHandoverNeedsOwner } from '../rules.js';
-import { payLaterHintKey, payLaterLines, useHandoverPayment } from '../handover-payment.js';
+import { handoverLineLabel } from '../handover-checks.js';
+import { useHandoverForm } from '../handover-form.js';
+import { payLaterHintKey, payLaterLines } from '../handover-payment.js';
 import { useActionRunner, useCapture, type ActionRunner } from '../../screen-kit/index.js';
-import {
-  REPAIR_APPROVAL_KIND,
-  REPAIR_PERMISSION,
-  WORK_PHOTOS_MAX,
-  type SlipKind,
-  type WorkPhotoStage,
-} from '../constants.js';
-import { useCancelFeeAsk, type CancelFeeTicket } from '../cancel-fee-ask.js';
-import { useDownPaymentAsk } from '../down-payment-ask.js';
+import { WORK_PHOTOS_MAX, type SlipKind, type WorkPhotoStage } from '../constants.js';
+import { useChangeCancelFee, type CancelFeeTicket } from '../cancel-fee-ask.js';
+import { useDownPaymentForm } from '../down-payment-form.js';
 import {
   amountOwed,
-  askedBecauseKey,
-  asksApproval,
   balanceLabelKey,
   INTAKE_PROBLEM_KEY,
-  ticketBalance,
   capturedThumbnailRef,
   correctionDraft,
   correctionOptions,
@@ -60,47 +43,28 @@ import {
   toCorrectionInput,
   type IntakeDraft,
   type IntakeProblem,
-  downPaymentEntry,
   printableSlips,
-  priceKinds,
   signedAmount,
   toggled,
   type PriceKind,
   type StaleStep,
-  cancelRefund,
 } from '../flows.js';
 import { repairTypeChoices, storeIntakeOptions } from '../intake-options.js';
 import { ta } from '../../approvals/i18n.js';
-import {
-  cancelDrop,
-  cancelRoom,
-  standardCancelFee,
-  type QuoteLineRow,
-  type TicketDetailRow,
-} from '../queries.js';
+import { type QuoteLineRow, type TicketDetailRow } from '../queries.js';
+import { useAssignTechnician } from '../assign-technician.js';
+import { useCancelTicket } from '../cancel-ticket.js';
+import { useRepairTypesPick } from '../repair-types-pick.js';
+import { useDecideProposal, usePriceChange } from '../price-change.js';
 import { tn, type RepairKey } from '../i18n.js';
 import {
-  cancelConsequenceKey,
   cancelFeeText,
-  DOWN_PAYMENT_GAP_KEY,
   INTAKE_STEP_KEY,
   PRICE_KIND_KEY,
-  discountLimitHint,
-  downPaymentChangeLine,
-  downPaymentTitleKey,
   optionLabel,
   refundLabel,
 } from '../labels.js';
-import {
-  useCancelFees,
-  useIntakeOptionSettings,
-  useDownPaymentMethod,
-  usePaymentAccounts,
-  useTicketQris,
-  useRepairQuery,
-  useRepairRuntime,
-  type RepairPrinting,
-} from '../runtime.js';
+import { useIntakeOptionSettings, useRepairRuntime, type RepairPrinting } from '../runtime.js';
 import { DESK_PAPERS, paperLabel, useDevicePaper, useDevicePrinters } from '../paper.js';
 import { logSlipPrinted, outputSlip } from '../slip-output.js';
 
@@ -413,23 +377,11 @@ export function RepairTypesDialog({
   onDone,
   onClose,
 }: StepDialogProps & { readonly current: TicketDetailRow['repairTypes'] }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
   const settings = useIntakeOptionSettings();
-  const [picked, setPicked] = useState<readonly string[]>(() => current.map((type) => type.item));
-  const changed =
-    picked.length !== current.length || picked.some((id, i) => id !== current[i]!.item);
-  const submit = (): void => {
-    if (!changed) {
-      onClose();
-      return;
-    }
-    void runner
-      .run(() => runtime.run('setRepairTypes', { ticketId, repairTypes: [...picked] }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
+  const { runner, picked, setPicked, submit } = useRepairTypesPick(
+    { ticketId, current },
+    { onDone, onUnchanged: onClose },
+  );
   return (
     <StepDialog
       title={tn('repair.repairTypes.title')}
@@ -503,49 +455,16 @@ export function CancelDialog({
   readonly claimOf: string | null;
   readonly onAsked: () => void;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [reloadNonce, setReloadNonce] = useState(0);
-  const fees = useCancelFees(reloadNonce);
   const [reason, setReason] = useState('');
-  // Null until the owner chooses to change it; the store's fee applies until then.
+  // Undefined until the owner chooses to change it; the store's fee applies until then.
   const [fee, setFee] = useState<number | null | undefined>(undefined);
   const changing = fee !== undefined;
-  const standard =
-    fees.status === 'ready'
-      ? standardCancelFee({ workStarted, claimOfTicketId: claimOf, quoteTotal: price }, fees.data)
-      : null;
-  const charged = changing ? fee : standard;
-  const changed = standard !== null && charged !== null && charged !== standard;
-  const complete = charged !== null && reason.trim() !== '';
-  const holds = runtime.hasPermission(REPAIR_PERMISSION.cancel);
-  // A limited role (a manager) sees how far below the store's fee they may go before it is asked.
-  const limit = holds ? runtime.limitOf(REPAIR_PERMISSION.cancel) : null;
-  const asking = asksApproval(
-    holds,
-    limit,
-    standard === null || charged === null ? 0 : cancelDrop(standard, charged, discounted),
+  const cancel = useCancelTicket(
+    { ticketId, workStarted, price, claimOf, downPayment, discounted },
+    { fee, reason },
+    { onDone, onAsked },
   );
-  const room = cancelRoom(limit, standard, discounted);
-
-  const submit = (): void => {
-    if (!complete || charged === null) return;
-    // An unchanged fee is left to the command, which fills in the store's fee as it is then.
-    const input = changing ? { ticketId, reason, fee: charged } : { ticketId, reason };
-    void runner
-      .run<unknown>(() =>
-        asking
-          ? runtime.approvals.run('requestApproval', {
-              kind: REPAIR_APPROVAL_KIND.cancel,
-              input,
-              reason,
-            })
-          : runtime.run('cancelTicket', input),
-      )
-      .then((result) => {
-        if (result !== undefined) (asking ? onAsked : onDone)();
-      });
-  };
+  const { runner, fees, standard, charged, changed, complete, asking, room } = cancel;
 
   const leave = useLeaveGuard(
     stale === null && (reason.trim() !== '' || fee !== undefined),
@@ -554,34 +473,20 @@ export function CancelDialog({
   return (
     <>
       <StepDialog
-        title={tn('repair.cancel.title')}
-        description={
-          cancelRefund(downPayment, charged) > 0
-            ? tn('repair.cancel.refundsDp', {
-                amount: formatMoney(cancelRefund(downPayment, charged)),
-              })
-            : tn(cancelConsequenceKey(charged))
-        }
+        title={cancel.title}
+        description={cancel.consequence}
         runner={runner}
         stale={stale}
         onRequestClose={leave.requestClose}
         testId="repair.desk.cancel"
         footer={
           <>
-            {complete ? null : (
-              <p className="mr-auto text-small text-text-muted">
-                {tn(
-                  charged === null && fees.status !== 'loading'
-                    ? 'repair.hint.cancelFee'
-                    : 'repair.hint.reason',
-                )}
-              </p>
-            )}
+            {complete ? null : <p className="mr-auto text-small text-text-muted">{cancel.hint}</p>}
             <CancelButton onClick={leave.requestClose} />
             <Button
-              label={asking ? ta('approvals.action.ask') : tn('repair.action.cancel')}
+              label={cancel.submitLabel}
               variant={asking ? 'primary' : 'danger'}
-              onClick={submit}
+              onClick={cancel.submit}
               busy={runner.busy}
               disabled={!complete || stale !== null}
               data-testid="repair.desk.cancel.submit"
@@ -589,7 +494,7 @@ export function CancelDialog({
           </>
         }
       >
-        <QueryPanel query={fees} onRetry={() => setReloadNonce((n) => n + 1)}>
+        <QueryPanel query={fees} onRetry={cancel.retry}>
           {() => (
             <div className="rounded-sm bg-surface-alt p-4" data-testid="repair.desk.cancel.fee">
               <div className="flex items-center justify-between gap-4">
@@ -615,7 +520,7 @@ export function CancelDialog({
                   autoFocus
                   data-testid="repair.desk.cancel.feeInput"
                 />
-              ) : charged === 0 && cancelRefund(downPayment, charged) === 0 ? null : (
+              ) : cancel.free ? null : (
                 // Free is already said above ("HP dikembalikan tanpa biaya."), so no "Rp 0".
                 <p
                   className="tabular text-title font-bold text-text"
@@ -624,17 +529,7 @@ export function CancelDialog({
                   {charged === null ? '–' : formatMoney(charged)}
                 </p>
               )}
-              <p className="mt-1 text-small text-text-muted">
-                {changed
-                  ? tn('repair.cancel.storeFee', { amount: formatMoney(standard) })
-                  : tn(
-                      claimOf !== null
-                        ? 'repair.cancel.claimFree'
-                        : workStarted
-                          ? 'repair.cancel.afterWork'
-                          : 'repair.cancel.beforeWork',
-                    )}
-              </p>
+              <p className="mt-1 text-small text-text-muted">{cancel.feeBasis}</p>
               {!changing || room === null ? null : (
                 <p
                   className="mt-1 text-small text-text-muted"
@@ -654,11 +549,11 @@ export function CancelDialog({
           onChange={(event) => setReason(event.target.value)}
           data-testid="repair.desk.cancel.reason"
         />
-        {asking ? (
+        {cancel.askedBecause === null ? null : (
           <p className="mt-4 text-small text-text-muted" data-testid="repair.desk.cancel.asks">
-            {tn(askedBecauseKey(holds))}
+            {cancel.askedBecause}
           </p>
-        ) : null}
+        )}
       </StepDialog>
       {leave.confirm}
     </>
@@ -731,7 +626,6 @@ export function UndoHandoverDialog({
  * device after the cancel: the bill follows the new fee, charging or giving back the difference.
  */
 export function ChangeCancelFeeDialog({
-  ticketId,
   stale,
   ticket,
   current,
@@ -748,64 +642,32 @@ export function ChangeCancelFeeDialog({
   /** A manager beyond their limit asked an owner instead. */
   readonly onAsked: () => void;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
   const [fee, setFee] = useState<number | null>(current);
   const [reason, setReason] = useState('');
-  const changed = fee !== null && fee !== current;
-  const complete = changed && reason.trim() !== '';
-  const ask = useCancelFeeAsk(ticket, current, changed ? fee : null);
-  const submit = (): void => {
-    if (fee === null || !complete) return;
-    const asking = ask.asking;
-    void runner
-      .run<unknown>(() =>
-        asking
-          ? runtime.approvals.run('requestApproval', ask.request(reason.trim()))
-          : runtime.run('changeCancelFee', { ticketId, fee, reason }),
-      )
-      .then((result) => {
-        if (result !== undefined) (asking ? onAsked : onDone)();
-      });
-  };
-  const leave = useLeaveGuard(stale === null && (changed || reason.trim() !== ''), onClose);
+  const form = useChangeCancelFee({ ticket, current, paid }, { fee, reason }, { onDone, onAsked });
+  const leave = useLeaveGuard(stale === null && form.dirty, onClose);
   return (
     <>
       <StepDialog
         title={tn('repair.cancelFee.title')}
-        description={
-          paid > 0
-            ? tn('repair.cancelFee.paid', {
-                bill: formatMoney(current),
-                amount: formatMoney(paid),
-              })
-            : tn('repair.cancelFee.unpaid', { bill: formatMoney(current) })
-        }
-        runner={runner}
+        description={form.explain}
+        runner={form.runner}
         stale={stale}
         onRequestClose={leave.requestClose}
         size="sm"
         testId="repair.desk.cancelFee"
         footer={
           <>
-            {complete ? null : (
-              <p className="mr-auto text-small text-text-muted">
-                {tn(
-                  fee === null
-                    ? 'repair.hint.cancelFee'
-                    : changed
-                      ? 'repair.hint.reason'
-                      : 'repair.cancelFee.same',
-                )}
-              </p>
+            {form.complete ? null : (
+              <p className="mr-auto text-small text-text-muted">{form.hint}</p>
             )}
             <CancelButton onClick={leave.requestClose} />
             <Button
-              label={ask.asking ? ta('approvals.action.ask') : tn('repair.cancelFee.save')}
+              label={form.submitLabel}
               variant="primary"
-              onClick={submit}
-              busy={runner.busy}
-              disabled={!complete || stale !== null}
+              onClick={form.submit}
+              busy={form.runner.busy}
+              disabled={!form.complete || stale !== null}
               data-testid="repair.desk.cancelFee.submit"
             />
           </>
@@ -825,11 +687,11 @@ export function ChangeCancelFeeDialog({
           onChange={(event) => setReason(event.target.value)}
           data-testid="repair.desk.cancelFee.reason"
         />
-        {ask.asking ? (
+        {form.askedBecause === null ? null : (
           <p className="mt-4 text-small text-text-muted" data-testid="repair.desk.cancelFee.asks">
-            {tn(askedBecauseKey(true))}
+            {form.askedBecause}
           </p>
-        ) : null}
+        )}
       </StepDialog>
       {leave.confirm}
     </>
@@ -1001,29 +863,11 @@ export function AssignDialog({
   onDone,
   onClose,
 }: StepDialogProps & { readonly currentTechnicianId: string | null }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [reloadNonce, setReloadNonce] = useState(0);
-  // Each technician with how many repairs they already hold, so the counter can spread the work.
-  const technicians = useRepairQuery(
-    async (rt) => {
-      const [people, loads] = await Promise.all([
-        rt.technicians(),
-        rt.query('technicianLoads', {}),
-      ]);
-      const load = new Map(loads.rows.map((row) => [row.technicianId, row.load]));
-      return people.map((tech) => ({ ...tech, load: load.get(tech.id) ?? 0 }));
-    },
-    `technicians:${String(reloadNonce)}`,
+  const { runner, technicians, retry, assign } = useAssignTechnician(
+    { ticketId, currentTechnicianId },
+    onDone,
   );
-  const assign = (technicianId: string): void => {
-    if (technicianId === currentTechnicianId) return;
-    void runner
-      .run(() => runtime.run('assignTechnician', { ticketId, technicianId }))
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
+
   return (
     <StepDialog
       title={tn(currentTechnicianId === null ? 'repair.action.assign' : 'repair.action.reassign')}
@@ -1034,7 +878,7 @@ export function AssignDialog({
       testId="repair.desk.assign"
       footer={<CancelButton onClick={onClose} />}
     >
-      <QueryPanel query={technicians} onRetry={() => setReloadNonce((n) => n + 1)}>
+      <QueryPanel query={technicians} onRetry={retry}>
         {(rows) =>
           rows.length === 0 ? (
             <p className="text-body text-text-muted">{tn('repair.assign.none')}</p>
@@ -1095,43 +939,17 @@ export function PriceChangeDialog({
   /** Set where a discount may be asked of an owner (changing the price, not proposing it). */
   readonly onAsked?: (() => void) | undefined;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const holdsDiscount = runtime.hasPermission(REPAIR_PERMISSION.discount);
-  const kinds = priceKinds(holdsDiscount || onAsked !== undefined);
-  // A limited role (a manager) sees how far they may discount before it goes to an owner.
-  const discountLimit = runtime.limitOf(REPAIR_PERMISSION.discount);
   const [kind, setKind] = useState<PriceKind>('part');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState<number | null>(null);
   const [reason, setReason] = useState('');
-  const complete = description.trim() !== '' && amount !== null && reason.trim() !== '';
+  const form = usePriceChange(
+    { ticketId, mode, discounted },
+    { kind, description, amount, reason },
+    { onDone, onAsked },
+  );
   const testId = `repair.desk.price.${mode}`;
-  const asking =
-    onAsked !== undefined &&
-    kind === 'discount' &&
-    asksApproval(holdsDiscount, discountLimit, discounted + (amount ?? 0));
-
-  const submit = (customerAgreed: boolean): void => {
-    if (!complete || amount === null) return;
-    const line = { ticketId, kind, description, amount: signedAmount(kind, amount), reason };
-    void runner
-      .run<unknown>(() =>
-        asking
-          ? runtime.approvals.run('requestApproval', {
-              kind: REPAIR_APPROVAL_KIND.discount,
-              input: { ...line, customerAgreed: false },
-              reason,
-            })
-          : mode === 'change'
-            ? runtime.run('changeQuote', { ...line, customerAgreed })
-            : runtime.run('proposeQuoteChange', line),
-      )
-      .then((result) => {
-        if (result !== undefined) (asking ? (onAsked ?? onDone) : onDone)();
-      });
-  };
-  const blocked = !complete || stale !== null;
+  const blocked = !form.complete || stale !== null;
 
   const leave = useLeaveGuard(
     stale === null && (description.trim() !== '' || amount !== null || reason.trim() !== ''),
@@ -1140,45 +958,45 @@ export function PriceChangeDialog({
   return (
     <>
       <StepDialog
-        title={tn('repair.price.editTitle')}
-        runner={runner}
+        title={form.title}
+        runner={form.runner}
         stale={stale}
         onRequestClose={leave.requestClose}
         testId={testId}
         footer={
-          mode === 'change' && !asking ? (
+          form.deciding ? (
             <>
               <p id={`${testId}.question`} className="mr-auto text-body font-semibold text-text">
                 {tn('repair.price.alreadyAgreed')}
               </p>
               <Button
                 label={tn('repair.action.applyUnconfirmed')}
-                onClick={() => submit(false)}
+                onClick={() => form.submit(false)}
                 aria-describedby={`${testId}.question`}
-                disabled={blocked || runner.busy}
+                disabled={blocked || form.runner.busy}
                 data-testid={`${testId}.unconfirmed`}
               />
               <Button
                 label={tn('repair.action.agreedYes')}
                 variant="primary"
-                onClick={() => submit(true)}
+                onClick={() => form.submit(true)}
                 aria-describedby={`${testId}.question`}
-                busy={runner.busy}
+                busy={form.runner.busy}
                 disabled={blocked}
                 data-testid={`${testId}.agreed`}
               />
             </>
           ) : (
             <>
-              {complete ? null : (
+              {form.complete ? null : (
                 <p className="mr-auto text-small text-text-muted">{tn('repair.hint.priceLine')}</p>
               )}
               <CancelButton onClick={leave.requestClose} />
               <Button
-                label={asking ? ta('approvals.action.ask') : tn('repair.action.proposePrice')}
+                label={form.sendLabel}
                 variant="primary"
-                onClick={() => submit(true)}
-                busy={runner.busy}
+                onClick={() => form.submit(true)}
+                busy={form.runner.busy}
                 disabled={blocked}
                 data-testid={`${testId}.submit`}
               />
@@ -1189,7 +1007,7 @@ export function PriceChangeDialog({
         <div className="flex flex-col gap-4">
           <Segmented
             label={tn('repair.desk.priceKind')}
-            options={kinds.map((value) => ({ value, label: tn(PRICE_KIND_KEY[value]) }))}
+            options={form.kinds.map((value) => ({ value, label: tn(PRICE_KIND_KEY[value]) }))}
             value={kind}
             onChange={setKind}
             testId={`${testId}.kind`}
@@ -1222,14 +1040,14 @@ export function PriceChangeDialog({
             onChange={(event) => setReason(event.target.value)}
             data-testid={`${testId}.reason`}
           />
-          {kind !== 'discount' || !holdsDiscount || discountLimit === null ? null : (
+          {form.limitLine === null ? null : (
             <p className="text-small text-text-muted" data-testid={`${testId}.discountLimit`}>
-              {discountLimitHint(discountLimit, discounted)}
+              {form.limitLine}
             </p>
           )}
-          {asking ? (
+          {form.askedBecause !== null ? (
             <p className="text-small text-text-muted" data-testid={`${testId}.asks`}>
-              {tn(askedBecauseKey(holdsDiscount))}
+              {form.askedBecause}
             </p>
           ) : mode === 'change' ? (
             <p className="text-small text-text-muted">{tn('repair.price.waitsHint')}</p>
@@ -1257,22 +1075,8 @@ export function ProposalDialog({
   /** The agreed total now, so the change reads as what the customer will pay. */
   readonly total: number;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
   const [note, setNote] = useState('');
-  // A line that lowers the price is an owner's to apply; anyone deciding may still decline it.
-  const mayApply = line.amount >= 0 || runtime.hasPermission(REPAIR_PERMISSION.discount);
-  const decide = (decision: 'agreed' | 'declined'): void => {
-    void runner
-      .run(() =>
-        decision === 'declined'
-          ? runtime.run('declineProposal', { ticketId, lineId: line.id, note })
-          : runtime.run('applyProposal', { ticketId, lineId: line.id, customerAgreed: true, note }),
-      )
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
+  const { runner, mayApply, decide } = useDecideProposal({ ticketId, line }, note, onDone);
   const leave = useLeaveGuard(stale === null && note.trim() !== '', onClose);
   return (
     <>
@@ -1388,33 +1192,19 @@ export function HandoverDialog({
   readonly customerName: string;
 }): React.JSX.Element {
   const runtime = useRepairRuntime();
-  const runner = useActionRunner();
   const [photo, setPhoto] = useState<MediaRef | null>(null);
   const [signature, setSignature] = useState<MediaRef | null>(null);
   const [note, setNote] = useState('');
-  // Until the store's methods load, a method picked earlier would read as cash.
-  const loadedAccounts = usePaymentAccounts();
-  const accounts = loadedAccounts ?? [];
+  const handover = useHandoverForm(ticketId, ticket, { photo, signature, note }, onDone);
+  const { runner, accounts, balance, due, qris, payment, checks, ownerNeeded, changeCheck } =
+    handover;
+  const { settled } = payment;
   const cancelled = ticket.outcome === 'cancelled';
   const { downPayment, reduced } = ticket;
   /** The price, or a cancelled servisan's fee, before any reduction (shown beneath it). */
   const amount = amountOwed(ticket) + reduced;
-  const balance = ticketBalance(ticket);
   const split = balance.kind === 'refund' ? ticket.refunds : [];
-  const due = balance.kind === 'due' ? balance.amount : 0;
-  const qris = useTicketQris(ticketId, ticket.ticketNumber);
-  const payment = useHandoverPayment(ticketId, due, accounts, qris);
-  const { settled } = payment;
-  const checks = useHandoverChecks(ticket);
-  const leave = useLeaveGuard(
-    stale === null &&
-      (photo !== null ||
-        signature !== null ||
-        note.trim() !== '' ||
-        payment.touched ||
-        checks.touched),
-    onClose,
-  );
+  const leave = useLeaveGuard(stale === null && handover.touched, onClose);
   const photoState = usePhotoState(photo === null ? null : capturedThumbnailRef(photo));
   const signatureState = usePhotoState(signature === null ? null : capturedThumbnailRef(signature));
 
@@ -1427,31 +1217,8 @@ export function HandoverDialog({
       if (captured !== undefined && captured !== null) keep(captured.mediaRef);
     });
   };
-  const captured = photo !== null && signature !== null;
-  const ownerNeeded =
-    freeHandoverNeedsOwner(ticket) && !runtime.hasPermission(REPAIR_PERMISSION.warrantyException);
-  const complete =
-    !ownerNeeded && captured && settled && loadedAccounts !== null && checks.ready(note);
-  const changeCheck = useChangeCheck();
-  const submit = (): void => {
-    if (!complete || photo === null || signature === null) return;
-    changeCheck.guard(payment.input.payments, () => {
-      void runner
-        .run(() =>
-          runtime.run('returnDevice', {
-            ticketId,
-            handoverPhoto: photo,
-            signature,
-            note,
-            checklist: [...checks.lines],
-            ...payment.input,
-          }),
-        )
-        .then((result) => {
-          if (result !== undefined) onDone();
-        });
-    });
-  };
+  const complete = handover.ready;
+  const submit = handover.submit;
 
   return (
     <>
@@ -1725,75 +1492,21 @@ export function DownPaymentDialog({
   /** A fix beyond this person was asked of an owner instead. */
   readonly onAsked: () => void;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
   const [typed, setTyped] = useState<number | null>(null);
   const [reason, setReason] = useState('');
-  const [method, setMethod] = useDownPaymentMethod(ticketId, mode);
-  // Until the store's methods load, a method picked earlier would read as cash.
-  const loadedAccounts = usePaymentAccounts();
-  const accounts = loadedAccounts ?? [];
-  const correcting = mode === 'correct';
-  const { amount, aboveTotal, gap } = downPaymentEntry({
-    mode,
-    typed,
-    reason,
-    current,
-    total,
-    methodMissing: methodMissing(method.account, accounts),
-    referenceMissing: referenceMissing(method.account, method.reference, accounts),
-  });
+  const form = useDownPaymentForm(
+    { ticketId, mode, current, total },
+    { typed, reason },
+    { onDone, onAsked },
+  );
+  const { correcting } = form;
   const testId = `repair.desk.downPayment.${mode}`;
-  // Through which method is said once one is picked.
-  const changeLine = methodMissing(method.account, accounts)
-    ? null
-    : downPaymentChangeLine(
-        current,
-        amount,
-        accountLabel(offeredAccount(method.account, accounts), accounts),
-      );
-  const fix =
-    correcting && gap === null && amount !== null && loadedAccounts !== null
-      ? { ticketId, amount, reason, ...chosenMethod(method.account, method.reference, accounts) }
-      : null;
-  // Whether it goes to an owner shows as soon as the new amount is typed, before the reason.
-  const typedFix =
-    correcting && amount !== null && amount !== current && !aboveTotal && loadedAccounts !== null
-      ? { ticketId, amount, ...chosenMethod(method.account, method.reference, accounts) }
-      : null;
-  const ask = useDownPaymentAsk(typedFix, current ?? 0);
-  const asking = correcting && ask.asking;
-
-  const submit = (): void => {
-    if (gap !== null || amount === null || loadedAccounts === null) return;
-    void runner
-      .run<unknown>(() =>
-        fix === null
-          ? runtime.run('recordDownPayment', {
-              ticketId,
-              amount,
-              ...chosenMethod(method.account, method.reference, accounts),
-            })
-          : asking
-            ? runtime.approvals.run('requestApproval', {
-                kind: REPAIR_APPROVAL_KIND.downPayment,
-                input: fix,
-                reason,
-              })
-            : runtime.run('correctDownPayment', fix),
-      )
-      .then((result) => {
-        if (result !== undefined) (asking ? onAsked : onDone)();
-      });
-  };
   const leave = useLeaveGuard(stale === null && (typed !== null || reason.trim() !== ''), onClose);
   return (
     <>
       <StepDialog
-        title={tn(
-          downPaymentTitleKey(mode, runtime.hasPermission(REPAIR_PERMISSION.correctDownPayment)),
-        )}
-        runner={runner}
+        title={form.title}
+        runner={form.runner}
         stale={stale}
         onRequestClose={leave.requestClose}
         size="sm"
@@ -1801,16 +1514,16 @@ export function DownPaymentDialog({
         footer={
           <>
             {/* Above the total is said under the amount; anything else missing is said here. */}
-            {gap === null || gap === 'aboveTotal' ? null : (
-              <p className="mr-auto text-small text-text-muted">{tn(DOWN_PAYMENT_GAP_KEY[gap])}</p>
+            {form.gapHint === null || form.aboveTotal ? null : (
+              <p className="mr-auto text-small text-text-muted">{form.gapHint}</p>
             )}
             <CancelButton onClick={leave.requestClose} />
             <Button
-              label={asking ? ta('approvals.action.ask') : tn('repair.downPayment.save')}
+              label={form.submitLabel}
               variant="primary"
-              onClick={submit}
-              busy={runner.busy}
-              disabled={gap !== null || stale !== null || loadedAccounts === null}
+              onClick={form.submit}
+              busy={form.runner.busy}
+              disabled={!form.complete || stale !== null}
               data-testid={`${testId}.submit`}
             />
           </>
@@ -1820,7 +1533,7 @@ export function DownPaymentDialog({
           className="flex flex-col gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            submit();
+            form.submit();
           }}
         >
           {correcting && current !== null ? (
@@ -1834,30 +1547,30 @@ export function DownPaymentDialog({
           <MoneyField
             label={tn(correcting ? 'repair.downPayment.newAmount' : 'repair.downPayment.amount')}
             hint={
-              aboveTotal
+              form.aboveTotal
                 ? undefined
                 : tn('repair.downPayment.ofTotal', { amount: formatMoney(total) })
             }
-            error={aboveTotal ? tn('repair.problem.downPaymentAboveTotal') : undefined}
+            error={form.aboveTotal ? tn('repair.problem.downPaymentAboveTotal') : undefined}
             value={typed}
             onChange={setTyped}
             autoFocus
             data-testid={`${testId}.amount`}
           />
-          {correcting && (amount ?? 0) === 0 ? null : (
+          {form.asksMethod ? (
             <PaymentMethodField
-              accounts={accounts}
-              account={method.account}
-              reference={method.reference}
-              onChange={setMethod}
+              accounts={form.accounts}
+              account={form.method.account}
+              reference={form.method.reference}
+              onChange={form.setMethod}
               testId={`${testId}.method`}
             />
-          )}
-          {correcting && changeLine !== null ? (
-            <p className="text-small text-text-muted" data-testid={`${testId}.change`}>
-              {changeLine}
-            </p>
           ) : null}
+          {form.changeLine === null ? null : (
+            <p className="text-small text-text-muted" data-testid={`${testId}.change`}>
+              {form.changeLine}
+            </p>
+          )}
           {correcting ? (
             <TextArea
               label={tn('repair.downPayment.reason')}
@@ -1868,21 +1581,21 @@ export function DownPaymentDialog({
               data-testid={`${testId}.reason`}
             />
           ) : null}
-          {correcting && ask.limit !== null ? (
+          {form.limitLine === null ? null : (
             <p className="text-small text-text-muted" data-testid={`${testId}.limit`}>
-              {tn('repair.hint.downPaymentLimit', { amount: formatMoney(ask.limit) })}
-            </p>
-          ) : null}
-          {ask.withEarlier === null ? null : (
-            <p className="text-small text-text-muted" data-testid={`${testId}.withEarlier`}>
-              {tn('repair.hint.downPaymentWithEarlier', { amount: formatMoney(ask.withEarlier) })}
+              {form.limitLine}
             </p>
           )}
-          {asking ? (
-            <p className="text-small text-text-muted" data-testid={`${testId}.asks`}>
-              {tn(ask.because)}
+          {form.withEarlierLine === null ? null : (
+            <p className="text-small text-text-muted" data-testid={`${testId}.withEarlier`}>
+              {form.withEarlierLine}
             </p>
-          ) : null}
+          )}
+          {form.askedBecause === null ? null : (
+            <p className="text-small text-text-muted" data-testid={`${testId}.asks`}>
+              {form.askedBecause}
+            </p>
+          )}
         </form>
       </StepDialog>
       {leave.confirm}
