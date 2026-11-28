@@ -35,14 +35,7 @@ import { useDownPaymentForm } from '../down-payment-form.js';
 import {
   amountOwed,
   balanceLabelKey,
-  INTAKE_PROBLEM_KEY,
   capturedThumbnailRef,
-  correctionDraft,
-  correctionOptions,
-  correctionProblems,
-  toCorrectionInput,
-  type IntakeDraft,
-  type IntakeProblem,
   printableSlips,
   signedAmount,
   toggled,
@@ -54,6 +47,7 @@ import { ta } from '../../approvals/i18n.js';
 import { type QuoteLineRow, type TicketDetailRow } from '../queries.js';
 import { useAssignTechnician } from '../assign-technician.js';
 import { useCancelTicket } from '../cancel-ticket.js';
+import { useCorrectDetails } from '../correct-details.js';
 import { useUndoHandover, useWaitForParts, useWorkPhotos } from '../work-steps.js';
 import { useRepairTypesPick } from '../repair-types-pick.js';
 import { useDecideProposal, usePriceChange } from '../price-change.js';
@@ -665,49 +659,20 @@ export function CorrectDetailsDialog({
   onDone,
   onClose,
 }: Omit<StepDialogProps, 'ticketId'> & { readonly ticket: TicketDetailRow }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const settings = useIntakeOptionSettings();
-  const [initial] = useState(() => correctionDraft(ticket));
-  const [draft, setDraft] = useState(initial);
-  const [reason, setReason] = useState('');
-  const [showProblems, setShowProblems] = useState(false);
-  const update = (patch: Partial<IntakeDraft>): void => setDraft((d) => ({ ...d, ...patch }));
-  const options =
-    settings.status === 'ready'
-      ? correctionOptions(storeIntakeOptions(settings.data), ticket)
-      : null;
-  const problems = options === null ? [] : correctionProblems(draft, options);
-  const problemText = (problem: IntakeProblem): string | undefined =>
-    showProblems && problems.includes(problem) ? tn(INTAKE_PROBLEM_KEY[problem]) : undefined;
-  const dirty = JSON.stringify(draft) !== JSON.stringify(initial) || reason.trim() !== '';
-  const handedOver = ticket.returnedAt !== null;
-
-  const submit = (): void => {
-    if (options === null) return;
-    if (problems.length > 0) {
-      setShowProblems(true);
-      // The first field to fix may be below the fold of the dialog: take the counter to it.
+  const form = useCorrectDetails(ticket, {
+    onDone,
+    onUnchanged: onClose,
+    // The first field to fix may be below the fold of the dialog: take the counter to it.
+    onProblems: () =>
       requestAnimationFrame(() =>
         document
           .querySelector<HTMLElement>('[data-testid="repair.desk.correct"] [aria-invalid="true"]')
           ?.focus(),
-      );
-      return;
-    }
-    if (JSON.stringify(draft) === JSON.stringify(initial)) {
-      onClose();
-      return;
-    }
-    void runner
-      .run(() =>
-        runtime.run('correctTicketDetails', toCorrectionInput(ticket, draft, options, reason)),
-      )
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
-  const leave = useLeaveGuard(stale === null && dirty, onClose);
+      ),
+  });
+  const { runner, settings, draft, update, reason, setReason, options, problemText, submit } = form;
+  const handedOver = ticket.returnedAt !== null;
+  const leave = useLeaveGuard(stale === null && form.dirty, onClose);
   return (
     <>
       <StepDialog
