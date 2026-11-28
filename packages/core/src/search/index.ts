@@ -24,10 +24,13 @@ export {
   type PreparedDocument,
   type SearchDocument,
   type SynonymLookup,
+  type Alternatives,
+  NO_ALTERNATIVES,
   type Words,
 } from './fuzzy.js';
 export { FuzzyIndex, type SearchHit } from './fuzzy-index.js';
-export { DEFAULT_SYNONYMS, SHOP_SYNONYMS, Synonyms, type SynonymGroups } from './synonyms.js';
+export { SHOP_VOCABULARY } from './shop-vocabulary.js';
+export { DEFAULT_SYNONYMS, Synonyms, type SynonymGroups } from './synonyms.js';
 export {
   searchIndexFor,
   SearchIndexCache,

@@ -225,8 +225,8 @@ export function wordSimilarity(query: string, target: string, typed = query.leng
 export const SYNONYM_WEIGHT = 0.9;
 
 /**
- * How well query word `i` (as typed, folded, or one of its synonyms) matches one target term. The
- * index compares vocabulary terms with this too, so both give the same scores.
+ * How well query word `i` (as typed, folded, or one of its one-word synonyms) matches one target
+ * term. The index compares vocabulary terms with this too, so both give the same scores.
  */
 export function queryWordSimilarity(query: CompiledQuery, i: number, term: string): number {
   const plain = query.words.plain[i]!;
@@ -234,19 +234,45 @@ export function queryWordSimilarity(query: CompiledQuery, i: number, term: strin
   let best = wordSimilarity(plain, term);
   if (best === 1) return 1;
   if (folded !== plain) best = Math.max(best, wordSimilarity(folded, term, plain.length));
-  for (const other of query.synonyms[i]!) {
-    if (best >= SYNONYM_WEIGHT) break;
+  return Math.max(best, synonymSimilarity(query.synonyms[i]!.words, term));
+}
+
+/** The best of `alternatives` against one term, weighted as a synonym. */
+export function synonymSimilarity(alternatives: readonly string[], term: string): number {
+  let best = 0;
+  for (const other of alternatives) {
     best = Math.max(best, SYNONYM_WEIGHT * wordSimilarity(other, term));
+    if (best === SYNONYM_WEIGHT) break;
   }
   return best;
 }
 
-/** Best similarity of query word `i` against any target term. */
+/** Best similarity of query word `i` against any target term, or a phrase synonym of it. */
 function bestWord(query: CompiledQuery, i: number, target: Words): number {
   let best = 0;
   for (const term of target.terms) {
     best = Math.max(best, queryWordSimilarity(query, i, term));
-    if (best === 1) break;
+    if (best === 1) return 1;
+  }
+  const phrases = query.synonyms[i]!.phrases;
+  if (phrases.length > 0) {
+    for (const term of target.compact) best = Math.max(best, synonymSimilarity(phrases, term));
+  }
+  return best;
+}
+
+/**
+ * The whole query as one phrase synonym ("mati total" for "matot"): its other words against the
+ * target's words, its other phrases against the target's joined neighbours.
+ */
+function phraseScore(query: CompiledQuery, target: Words): number {
+  const { words: alternatives, phrases } = query.phraseSynonyms;
+  let best = 0;
+  if (alternatives.length > 0) {
+    for (const term of target.terms) best = Math.max(best, synonymSimilarity(alternatives, term));
+  }
+  if (phrases.length > 0) {
+    for (const term of target.compact) best = Math.max(best, synonymSimilarity(phrases, term));
   }
   return best;
 }
@@ -328,16 +354,28 @@ export interface SearchDocument {
 }
 
 /** A query prepared once and scored against many documents. */
-/** Where a query finds the other words of a word's synonym groups (synonyms.ts). */
+/** What else to look for: one-word synonyms, and phrases as their folded words joined. */
+export interface Alternatives {
+  readonly words: readonly string[];
+  readonly phrases: readonly string[];
+}
+
+export const NO_ALTERNATIVES: Alternatives = { words: [], phrases: [] };
+
+/** Where a query finds the other members of a word's or phrase's synonym groups (synonyms.ts). */
 export interface SynonymLookup {
-  /** The folded words that mean the same as this folded word, not including it. */
-  alternatives(folded: string): readonly string[];
+  /** What means the same as this folded word, not including it. */
+  alternatives(folded: string): Alternatives;
+  /** What means the same as this phrase (its folded words joined), not including it. */
+  phraseAlternatives(joined: string): Alternatives;
 }
 
 export interface CompiledQuery {
   readonly words: Words;
-  /** Per query word, the folded synonyms it also looks for (see `SYNONYM_WEIGHT`). */
-  readonly synonyms: readonly (readonly string[])[];
+  /** Per query word, the synonyms it also looks for (see `SYNONYM_WEIGHT`). */
+  readonly synonyms: readonly Alternatives[];
+  /** The synonyms of the query as a whole phrase, when it has more than one word. */
+  readonly phraseSynonyms: Alternatives;
   /** The folded words joined, for `compactSimilarity`. */
   readonly compact: string;
   /** `compact`'s length for its edit budget: what was typed, if the folds made it longer. */
@@ -369,7 +407,11 @@ export function compileQuery(query: string, synonyms?: SynonymLookup): CompiledQ
   const compactLength = Math.min(compact.length, parsed.plain.join('').length);
   return {
     words: parsed,
-    synonyms: parsed.folded.map((word) => synonyms?.alternatives(word) ?? []),
+    synonyms: parsed.folded.map((word) => synonyms?.alternatives(word) ?? NO_ALTERNATIVES),
+    phraseSynonyms:
+      synonyms === undefined || parsed.folded.length < 2
+        ? NO_ALTERNATIVES
+        : synonyms.phraseAlternatives(compact),
     compact,
     compactLength,
     compactTolerance:
@@ -472,7 +514,11 @@ export function scoreNumbers(query: CompiledQuery, fields: NumberFields, parts: 
 
 /** The prepared document's score for the query, in [0, 1]; 0 when it does not match. */
 export function scorePrepared(query: CompiledQuery, prepared: PreparedDocument): number {
-  const text = Math.max(wordsScore(query, prepared.words), compactScore(query, prepared.words));
+  const text = Math.max(
+    wordsScore(query, prepared.words),
+    compactScore(query, prepared.words),
+    phraseScore(query, prepared.words),
+  );
   return Math.max(text >= MIN_SCORE ? text : 0, scoreNumbers(query, prepared, SCORE_PART.all));
 }
 

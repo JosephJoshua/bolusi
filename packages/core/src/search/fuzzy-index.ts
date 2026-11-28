@@ -25,6 +25,7 @@ import {
   queryWordSimilarity,
   SCORE_PART,
   scoreNumbers,
+  synonymSimilarity,
   type CompiledQuery,
   type NumberFields,
   type SearchDocument,
@@ -61,6 +62,18 @@ type Postings = Map<string, SlotList>;
 
 interface IndexedDocument extends NumberFields {
   readonly doc: SearchDocument;
+}
+
+/** Raise each slot's score in `out` to the best `similarity` of any of its terms in `postings`. */
+function raise(postings: Postings, similarity: (term: string) => number, out: Float64Array): void {
+  for (const [term, slots] of postings) {
+    const value = similarity(term);
+    if (value === 0) continue;
+    for (let j = 0; j < slots.length; j += 1) {
+      const slot = slots.data[j]!;
+      if (value > out[slot]!) out[slot] = value;
+    }
+  }
 }
 
 function post(postings: Postings, key: string, slot: number): void {
@@ -214,6 +227,9 @@ export class FuzzyIndex {
       const best = new Float64Array(total);
       for (let i = 0; i < wordCount; i += 1) {
         best.fill(0);
+        const phrases = query.synonyms[i]!.phrases;
+        if (phrases.length > 0)
+          raise(this.#compact, (term) => synonymSimilarity(phrases, term), best);
         for (const [term, slots] of this.#words) {
           const similarity = queryWordSimilarity(query, i, term);
           if (similarity === 0) continue;
@@ -232,6 +248,11 @@ export class FuzzyIndex {
         if (misses[slot]! <= allowed) out[slot] = sums[slot]! / wordCount;
       }
     }
+    const { words: alternatives, phrases } = query.phraseSynonyms;
+    if (alternatives.length > 0) {
+      raise(this.#words, (term) => synonymSimilarity(alternatives, term), out);
+    }
+    if (phrases.length > 0) raise(this.#compact, (term) => synonymSimilarity(phrases, term), out);
     if (query.compactTolerance >= 0) {
       for (const [term, slots] of this.#compact) {
         const similarity = compactSimilarity(query, term);

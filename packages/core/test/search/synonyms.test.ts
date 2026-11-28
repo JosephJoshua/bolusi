@@ -3,6 +3,8 @@
 import { describe, expect, test } from 'vitest';
 
 import type { Synonyms } from '../../src/search/index.js';
+import { normalizeText } from '../../src/search/fuzzy.js';
+import { SHOP_VOCABULARY } from '../../src/search/shop-vocabulary.js';
 import {
   compileQuery,
   DEFAULT_SYNONYMS,
@@ -19,6 +21,9 @@ const items = [
   item('lcd', 'LCD Xiaomi Redmi 9A'),
   item('cable', 'Kabel data type C'),
   item('ip11', 'Kamera belakang iPhone 11'),
+  item('dead', 'Oppo A5s mati total'),
+  item('matot', 'Vivo Y12 matot'),
+  item('fall', 'HP jatuh, layar pecah'),
 ];
 
 const ids = (index: FuzzyIndex, text: string, synonyms?: Synonyms): string[] =>
@@ -49,7 +54,22 @@ describe('synonyms', () => {
 
   test('unrelated words are not pulled in', () => {
     expect(ids(index, 'kabel')).toEqual(['cable']);
-    expect(DEFAULT_SYNONYMS.alternatives('kabel')).toEqual([]);
+    expect(DEFAULT_SYNONYMS.alternatives('kabel')).toEqual({ words: [], phrases: [] });
+  });
+
+  test('a phrase and its one-word synonym find each other', () => {
+    expect(ids(index, 'matot')).toEqual(['matot', 'dead']);
+    expect(ids(index, 'mati total')).toEqual(['dead', 'matot']);
+  });
+
+  test('a complaint in Papuan Malay finds the record written in standard Indonesian', () => {
+    expect(ids(index, 'jato pica')).toEqual(['fall']);
+  });
+
+  test('every vocabulary phrase can be found: two words at most', () => {
+    for (const group of SHOP_VOCABULARY) {
+      for (const entry of group) expect(normalizeText(entry).split(' ').length).toBeLessThan(3);
+    }
   });
 
   test('an owner can add words, joining an existing group', () => {
@@ -60,7 +80,16 @@ describe('synonyms', () => {
   });
 
   test('the index scores exactly as a full scan does', () => {
-    for (const text of ['batre', 'layar redmi', 'ss a12', 'batt', 'camera ip 11']) {
+    for (const text of [
+      'batre',
+      'layar redmi',
+      'ss a12',
+      'batt',
+      'camera ip 11',
+      'matot',
+      'mati total',
+      'jato pica',
+    ]) {
       const query = compileQuery(text, DEFAULT_SYNONYMS)!;
       const scanned = items
         .map((doc) => ({ id: doc.id, score: scoreDocument(query, doc) }))
