@@ -8,7 +8,6 @@ import { formatDateTime, formatMoney, t, translateErrorCode } from '@bolusi/i18n
 import {
   Amount,
   AppShell,
-  border,
   Button,
   Chip,
   color,
@@ -387,6 +386,7 @@ export function RepairBoard({
             : undefined
         }
         renderRow={renderRow}
+        edgeToEdge
         testID={`${testID}.items`}
       />
     </AppShell>
@@ -571,13 +571,11 @@ const styles = StyleSheet.create({
   views: { marginBottom: space.xs },
   row: {
     minHeight: touch.rowMin,
-    // Rows run edge to edge so their dividers and pressed state span the screen, while their text
+    // Rows run edge to edge so their pressed state spans the screen (the list's dividers too), while their text
     // lines up with the search field above.
     marginHorizontal: -space.lg,
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   rowBody: { flex: 1 },
   customer: { ...type.bodyBold, color: color.text },

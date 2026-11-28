@@ -17,6 +17,7 @@ import {
   space,
   type,
   Text,
+  Rows,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -108,7 +109,7 @@ export function SupplierList({
               {tp(archived ? 'purchasing.supplier.noArchived' : 'purchasing.supplier.empty')}
             </Text>
           ) : (
-            <View style={styles.bleed}>
+            <Rows style={styles.bleed}>
               {rows.map((row) => (
                 <ListRow
                   key={row.id}
@@ -121,7 +122,7 @@ export function SupplierList({
                   testID={`${testID}.row.${row.id}`}
                 />
               ))}
-            </View>
+            </Rows>
           )
         }
       </QueryView>

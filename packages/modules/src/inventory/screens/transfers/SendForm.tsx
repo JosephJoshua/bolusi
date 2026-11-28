@@ -8,11 +8,11 @@ import {
   QuantityStepper,
   TextButton,
   TextInput,
-  border,
   color,
   space,
   type,
   Text,
+  Rows,
 } from '@bolusi/ui';
 import { StyleSheet, View } from 'react-native';
 
@@ -99,7 +99,7 @@ export function SendForm({
         {stores.length === 0 ? (
           <Text style={styles.muted}>{ti('inventory.transfer.form.noStores')}</Text>
         ) : (
-          <View style={styles.bleed}>
+          <Rows style={styles.bleed}>
             {stores.map((store) => (
               <ListRow
                 key={store.id}
@@ -109,7 +109,7 @@ export function SendForm({
                 testID={`${testID}.store.${store.id}`}
               />
             ))}
-          </View>
+          </Rows>
         )}
       </Section>
 
@@ -127,31 +127,33 @@ export function SendForm({
         {draft.lines.length === 0 ? (
           <Text style={styles.muted}>{ti('inventory.transfer.form.noParts')}</Text>
         ) : (
-          draft.lines.map((line) => (
-            <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
-              <View style={styles.lineTop}>
-                <Text style={styles.lineName}>{line.name}</Text>
-                <TextButton
-                  label={ti('inventory.transfer.form.remove')}
-                  accessibilityLabel={`${ti('inventory.transfer.form.remove')} ${line.name}`}
-                  tone="danger"
-                  onPress={() => onChange(removeSendLine(draft, line.itemId))}
-                  testID={`${testID}.line.${line.itemId}.remove`}
+          <Rows>
+            {draft.lines.map((line) => (
+              <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
+                <View style={styles.lineTop}>
+                  <Text style={styles.lineName}>{line.name}</Text>
+                  <TextButton
+                    label={ti('inventory.transfer.form.remove')}
+                    accessibilityLabel={`${ti('inventory.transfer.form.remove')} ${line.name}`}
+                    tone="danger"
+                    onPress={() => onChange(removeSendLine(draft, line.itemId))}
+                    testID={`${testID}.line.${line.itemId}.remove`}
+                  />
+                </View>
+                <QuantityStepper
+                  label={ti('inventory.transfer.form.qty')}
+                  value={line.qty}
+                  onChange={(qty) => onChange(setSendQty(draft, line.itemId, qty))}
+                  min={1}
+                  max={MAX_MOVEMENT_QTY}
+                  decreaseLabel={ti('inventory.stepper.decrease')}
+                  increaseLabel={ti('inventory.stepper.increase')}
+                  caption={overStockHint(line, line.qty) ?? undefined}
+                  testID={`${testID}.line.${line.itemId}.qty`}
                 />
               </View>
-              <QuantityStepper
-                label={ti('inventory.transfer.form.qty')}
-                value={line.qty}
-                onChange={(qty) => onChange(setSendQty(draft, line.itemId, qty))}
-                min={1}
-                max={MAX_MOVEMENT_QTY}
-                decreaseLabel={ti('inventory.stepper.decrease')}
-                increaseLabel={ti('inventory.stepper.increase')}
-                caption={overStockHint(line, line.qty) ?? undefined}
-                testID={`${testID}.line.${line.itemId}.qty`}
-              />
-            </View>
-          ))
+            ))}
+          </Rows>
         )}
         {draft.lines.length === 0 ? null : (
           <Text style={[styles.muted, styles.leaves]}>
@@ -182,8 +184,6 @@ const styles = StyleSheet.create({
   line: {
     paddingVertical: space.md,
     gap: space.sm,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   lineTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   lineName: { ...type.bodyBold, color: color.text, flex: 1 },

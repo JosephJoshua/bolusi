@@ -46,7 +46,6 @@ import {
   Sheet,
   SyncChip,
   TextButton,
-  border,
   color,
   radius,
   selectBanner,
@@ -55,6 +54,7 @@ import {
   type,
   type IconName,
   Text,
+  Rows,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -451,7 +451,7 @@ export function SyncStatusScreen({
             {t('sync.rejected.title', { count: input.rejected.length })}
           </Text>
           <Text style={styles.sectionText}>{t('sync.rejected.explain')}</Text>
-          <View style={styles.rows} testID="sync-rejected-list">
+          <Rows style={styles.rows} testID="sync-rejected-list">
             {input.rejected.slice(0, rejectedShown).map((row) => (
               <ListRow
                 key={row.opId}
@@ -479,7 +479,7 @@ export function SyncStatusScreen({
                 testID={`sync-rejected-${row.opId}`}
               />
             ))}
-          </View>
+          </Rows>
           {rejectedHidden > 0 ? (
             <View style={styles.sectionAction}>
               <TextButton
@@ -556,8 +556,6 @@ const styles = StyleSheet.create({
   rows: {
     marginTop: space.md,
     marginHorizontal: -space.lg,
-    borderTopWidth: border.hairline,
-    borderTopColor: color.border,
   },
   rowIcon: {
     width: size.avatarRow,

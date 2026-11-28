@@ -9,7 +9,6 @@
 import { t } from '@bolusi/i18n';
 import {
   AmountRow,
-  border,
   color,
   Icon,
   numeric,
@@ -24,6 +23,7 @@ import {
   type,
   useRevealOnMount,
   ValueText,
+  Rows,
 } from '@bolusi/ui';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
@@ -96,34 +96,36 @@ export function UsedPartsSection({
               <Text style={styles.muted}>{ti('inventory.use.none')}</Text>
             ) : (
               <View>
-                {parts.map((part) => (
-                  <View
-                    key={part.itemId}
-                    style={styles.usedRow}
-                    testID={`${testID}.part.${part.itemId}`}
-                  >
-                    <View style={styles.usedText}>
-                      <Text style={styles.name}>{part.name}</Text>
-                      <Text style={styles.muted}>
-                        {ti('inventory.use.out', { count: part.out })}
-                      </Text>
-                      {flagUnreturned ? (
-                        <View style={styles.flag}>
-                          <Icon name="warning" size={size.iconChip} color={color.warning} />
-                          <Text style={styles.flagText}>{ti('inventory.use.notReturned')}</Text>
-                        </View>
+                <Rows>
+                  {parts.map((part) => (
+                    <View
+                      key={part.itemId}
+                      style={styles.usedRow}
+                      testID={`${testID}.part.${part.itemId}`}
+                    >
+                      <View style={styles.usedText}>
+                        <Text style={styles.name}>{part.name}</Text>
+                        <Text style={styles.muted}>
+                          {ti('inventory.use.out', { count: part.out })}
+                        </Text>
+                        {flagUnreturned ? (
+                          <View style={styles.flag}>
+                            <Icon name="warning" size={size.iconChip} color={color.warning} />
+                            <Text style={styles.flagText}>{ti('inventory.use.notReturned')}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      {editable ? (
+                        <TextButton
+                          label={ti('inventory.use.putBack')}
+                          accessibilityLabel={`${ti('inventory.use.putBack')} ${part.name}`}
+                          onPress={() => onPutBack(part)}
+                          testID={`${testID}.putBack.${part.itemId}`}
+                        />
                       ) : null}
                     </View>
-                    {editable ? (
-                      <TextButton
-                        label={ti('inventory.use.putBack')}
-                        accessibilityLabel={`${ti('inventory.use.putBack')} ${part.name}`}
-                        onPress={() => onPutBack(part)}
-                        testID={`${testID}.putBack.${part.itemId}`}
-                      />
-                    ) : null}
-                  </View>
-                ))}
+                  ))}
+                </Rows>
               </View>
             )
           }
@@ -149,24 +151,26 @@ function UseCostSection({
       <QueryView query={query} onBack={() => undefined} onRetry={retry} testID={testID}>
         {(rows) => (
           <View>
-            {rows.map((row) => (
-              <AmountRow
-                key={row.itemId}
-                label={row.name}
-                detail={ti('inventory.useCost.line', { count: row.out })}
-                value={row.cost ?? ti('inventory.useCost.missing')}
-                tone={row.cost === null ? 'muted' : 'text'}
-                testID={`${testID}.${row.itemId}`}
-              />
-            ))}
-            {rows.length > 1 && unpriced === 0 ? (
-              <AmountRow
-                label={ti('inventory.useCost.total')}
-                value={total}
-                strong
-                testID={`${testID}.total`}
-              />
-            ) : null}
+            <Rows>
+              {rows.map((row) => (
+                <AmountRow
+                  key={row.itemId}
+                  label={row.name}
+                  detail={ti('inventory.useCost.line', { count: row.out })}
+                  value={row.cost ?? ti('inventory.useCost.missing')}
+                  tone={row.cost === null ? 'muted' : 'text'}
+                  testID={`${testID}.${row.itemId}`}
+                />
+              ))}
+              {rows.length > 1 && unpriced === 0 ? (
+                <AmountRow
+                  label={ti('inventory.useCost.total')}
+                  value={total}
+                  strong
+                  testID={`${testID}.total`}
+                />
+              ) : null}
+            </Rows>
             {unpriced === 0 ? null : (
               <Text style={styles.costWarning} testID={`${testID}.unpriced`}>
                 {ti('inventory.useCost.unpriced', { count: unpriced })}
@@ -433,8 +437,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
     paddingVertical: space.sm,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   usedText: { flex: 1 },
   flag: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.xs },
