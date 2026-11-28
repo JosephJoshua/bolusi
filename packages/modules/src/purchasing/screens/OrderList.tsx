@@ -11,7 +11,6 @@ import {
   ChipRow,
   List,
   ToggleChip,
-  border,
   color,
   space,
   touch,
@@ -175,6 +174,7 @@ export function OrderList({
           query.status === 'ready' && query.data.hasMore ? () => setPages((n) => n + 1) : undefined
         }
         renderRow={renderRow}
+        edgeToEdge
         testID={`${testID}.list`}
       />
     </AppShell>
@@ -241,8 +241,6 @@ const styles = StyleSheet.create({
     marginHorizontal: -space.lg,
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
     gap: space.xs,
   },
   rowTop: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },

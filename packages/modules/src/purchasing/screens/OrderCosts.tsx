@@ -5,7 +5,7 @@
  * device holding no costs the order still opens and only this section says it needs internet.
  */
 import { formatMoney } from '@bolusi/i18n';
-import { TextButton, TextInput, border, color, numeric, space, type, Text } from '@bolusi/ui';
+import { TextButton, TextInput, border, color, numeric, space, type, Text, Rows } from '@bolusi/ui';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -69,40 +69,42 @@ function CostLines({
   const unpriced = rows.filter((row) => row.unitCost === null).length;
   return (
     <View>
-      {rows.map((row) => {
-        const priced = row.unitCost !== null;
-        return (
-          <Pressable
-            key={row.movementId}
-            onPress={() => onPrice(row)}
-            accessibilityRole="button"
-            accessibilityLabel={`${tp(priced ? 'purchasing.action.fixPrice' : 'purchasing.action.fillPrice')}: ${row.name}`}
-            style={styles.line}
-            testID={`${testID}.cost.${row.movementId}`}
-          >
-            <View style={styles.lineText}>
-              <Text style={styles.lineName}>{row.name}</Text>
-              <Text style={styles.meta}>
-                {priced
-                  ? tp('purchasing.order.costLine', {
-                      qty: row.qty,
-                      price: formatMoney(row.unitCost!),
-                    })
-                  : tp('purchasing.order.qty', { qty: row.qty })}
-              </Text>
-            </View>
-            {priced ? (
-              <Text style={styles.amount}>{formatMoney(row.qty * row.unitCost!)}</Text>
-            ) : (
-              <TextButton
-                label={tp('purchasing.action.fillPrice')}
-                onPress={() => onPrice(row)}
-                testID={`${testID}.cost.${row.movementId}.fill`}
-              />
-            )}
-          </Pressable>
-        );
-      })}
+      <Rows>
+        {rows.map((row) => {
+          const priced = row.unitCost !== null;
+          return (
+            <Pressable
+              key={row.movementId}
+              onPress={() => onPrice(row)}
+              accessibilityRole="button"
+              accessibilityLabel={`${tp(priced ? 'purchasing.action.fixPrice' : 'purchasing.action.fillPrice')}: ${row.name}`}
+              style={styles.line}
+              testID={`${testID}.cost.${row.movementId}`}
+            >
+              <View style={styles.lineText}>
+                <Text style={styles.lineName}>{row.name}</Text>
+                <Text style={styles.meta}>
+                  {priced
+                    ? tp('purchasing.order.costLine', {
+                        qty: row.qty,
+                        price: formatMoney(row.unitCost!),
+                      })
+                    : tp('purchasing.order.qty', { qty: row.qty })}
+                </Text>
+              </View>
+              {priced ? (
+                <Text style={styles.amount}>{formatMoney(row.qty * row.unitCost!)}</Text>
+              ) : (
+                <TextButton
+                  label={tp('purchasing.action.fillPrice')}
+                  onPress={() => onPrice(row)}
+                  testID={`${testID}.cost.${row.movementId}.fill`}
+                />
+              )}
+            </Pressable>
+          );
+        })}
+      </Rows>
       {total === null ? null : (
         <View style={styles.total} testID={`${testID}.costTotal`}>
           <Text style={styles.totalLabel}>{tp('purchasing.order.costTotal')}</Text>
@@ -195,8 +197,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: space.md,
     paddingVertical: space.md,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   lineText: { flex: 1, gap: space.xs },
   lineName: { ...type.body, color: color.text },

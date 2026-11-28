@@ -17,6 +17,7 @@ import {
   space,
   useViewport,
   type TabBarTab,
+  Rows,
 } from '@bolusi/ui';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -1787,7 +1788,7 @@ export default function App(props: AppProps): React.JSX.Element {
           onClose={() => setAccountMenu(false)}
           testID="account-menu"
         >
-          <View style={styles.menuRows}>
+          <Rows style={styles.menuRows}>
             <ListRow
               leading={<Icon name="switchUser" size={size.iconInline} color={color.text} />}
               primaryText={t('core.account.switchUser')}
@@ -1809,7 +1810,7 @@ export default function App(props: AppProps): React.JSX.Element {
               }}
               testID="shell-open-settings"
             />
-          </View>
+          </Rows>
         </Sheet>
       ) : null}
       {props.onAnswerNotifications != null &&

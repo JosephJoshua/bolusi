@@ -3,7 +3,7 @@
  * and the person sets what actually came. Saving adds it to this store's stock in one go; what did
  * not come stays "Belum sampai" on the transfer.
  */
-import { QuantityStepper, TextInput, border, color, space, type, Text } from '@bolusi/ui';
+import { QuantityStepper, TextInput, color, space, type, Text, Rows } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -64,30 +64,32 @@ export function ReceiveTransferStep({
       testID={testID}
     >
       <Text style={styles.hint}>{ti('inventory.transfer.receive.hint')}</Text>
-      {receivableLines(transfer).map((line) => {
-        const toCome = stillToCome(line);
-        const count = counts[line.itemId] ?? 0;
-        return (
-          <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
-            <Text style={styles.name}>{line.name}</Text>
-            <QuantityStepper
-              label={ti('inventory.transfer.receive.arrived')}
-              value={count}
-              onChange={(qty) => setCounts((now) => ({ ...now, [line.itemId]: qty }))}
-              min={0}
-              max={toCome}
-              decreaseLabel={ti('inventory.stepper.decrease')}
-              increaseLabel={ti('inventory.stepper.increase')}
-              caption={
-                count < toCome
-                  ? ti('inventory.transfer.detail.missing', { count: toCome - count })
-                  : undefined
-              }
-              testID={`${testID}.line.${line.itemId}.qty`}
-            />
-          </View>
-        );
-      })}
+      <Rows>
+        {receivableLines(transfer).map((line) => {
+          const toCome = stillToCome(line);
+          const count = counts[line.itemId] ?? 0;
+          return (
+            <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
+              <Text style={styles.name}>{line.name}</Text>
+              <QuantityStepper
+                label={ti('inventory.transfer.receive.arrived')}
+                value={count}
+                onChange={(qty) => setCounts((now) => ({ ...now, [line.itemId]: qty }))}
+                min={0}
+                max={toCome}
+                decreaseLabel={ti('inventory.stepper.decrease')}
+                increaseLabel={ti('inventory.stepper.increase')}
+                caption={
+                  count < toCome
+                    ? ti('inventory.transfer.detail.missing', { count: toCome - count })
+                    : undefined
+                }
+                testID={`${testID}.line.${line.itemId}.qty`}
+              />
+            </View>
+          );
+        })}
+      </Rows>
       <View style={styles.noteField}>
         <TextInput
           label={ti('inventory.transfer.receive.note')}
@@ -108,8 +110,6 @@ const styles = StyleSheet.create({
   line: {
     paddingVertical: space.md,
     gap: space.sm,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   name: { ...type.bodyBold, color: color.text },
 });

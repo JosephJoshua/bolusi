@@ -11,7 +11,6 @@ import {
   ChipRow,
   List,
   ToggleChip,
-  border,
   color,
   space,
   touch,
@@ -162,6 +161,7 @@ export function TransferList({
         state={listState}
         keyExtractor={(row) => row.id}
         renderRow={renderRow}
+        edgeToEdge
         testID={`${testID}.list`}
       />
     </AppShell>
@@ -217,8 +217,6 @@ const styles = StyleSheet.create({
     marginHorizontal: -space.lg,
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
     gap: space.xs,
   },
   // A stage chip that does not fit beside the store moves under it, never squeezing either.
