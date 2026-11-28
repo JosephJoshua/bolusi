@@ -359,7 +359,7 @@ describe('COLUMN GATING — the mandated adversarial test (02 §9.3; CLAUDE.md �
 });
 
 describe('qctx surface (04 §6)', () => {
-  test('exposes exactly { db, tenantId, storeId, userId, hasPermission } — nothing more', async () => {
+  test('exposes exactly { db, tenantId, storeId, userId, hasPermission, rolesHeld } — nothing more', async () => {
     // The spec's list is exhaustive, so the KEY SET is the assertion (the exact set, not a sample —
     // a `toContain` check would not notice a `clock` or an `op` appearing).
     const harness = await openModuleHarness(331);
@@ -385,6 +385,7 @@ describe('qctx surface (04 §6)', () => {
       expect(Object.keys(captured!).sort()).toEqual([
         'db',
         'hasPermission',
+        'rolesHeld',
         'storeId',
         'tenantId',
         'userId',

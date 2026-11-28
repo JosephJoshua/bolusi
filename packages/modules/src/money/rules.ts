@@ -742,6 +742,9 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
       { tenantId: op.tenantId, storeId: storeOf(op), at: op.timestamp },
       entry,
     );
+    // Cash taken into a drawer is cancelled only by someone who uses that drawer.
+    const account = entry.account ?? CASH_ACCOUNT;
+    if (await isDrawerAccount(db, op, account)) await requireDrawerUse(ctx, op, account);
     await requireWithinLimit(op, ctx, MONEY_PERMISSION.voidPayment, takenOff);
   };
 
@@ -749,7 +752,8 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
    * An owner cancels a cash move typed wrong. Not once a count after it was settled: that owner
    * already put the book right for it, and taking the move away would open the difference again.
    */
-  const cashMoveVoidedRule: Rule = async (op, { db }) => {
+  const cashMoveVoidedRule: Rule = async (op, ctx) => {
+    const { db } = ctx;
     const entry = await db
       .selectFrom('moneyEntries')
       .select(['id', 'kind', 'voidedBy', 'createdAt', 'drawer', 'subKind', 'account'])
@@ -784,6 +788,11 @@ export function createMoneyRules(sources: MoneyDocumentSources) {
         code: 'INVALID_TRANSITION',
         details: { entityType: MONEY_ENTRY_ENTITY, entityId: op.entityId },
       });
+    }
+    // Only someone who uses the drawer, and for a transfer both drawers, takes a move back.
+    await requireDrawerUse(ctx, op, entry.drawer ?? CASH_ACCOUNT);
+    if (entry.subKind === 'transfer' && entry.account !== null) {
+      await requireDrawerUse(ctx, op, entry.account);
     }
   };
 

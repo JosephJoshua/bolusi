@@ -147,6 +147,68 @@ describe('drawers and who uses them', () => {
     expect(main.name).toBe('Laci servis');
   });
 
+  test("a manager cannot cancel a payment taken into a drawer that isn't theirs", async () => {
+    h = await openRepairHarness(908);
+    await h.money(
+      'saveDrawer',
+      { drawer: 'cash', name: 'Laci servis', roleIds: [CASHIER_ROLE] },
+      h.ownerId,
+    );
+    const document = await ticket(h);
+    await h.money(
+      'receivePayments',
+      { document, payments: [{ account: 'cash', amount: 10_000 }] },
+      h.cashierId,
+    );
+    const paid = (await h.moneyQuery('moneyEntries', { from: 0, to: Date.now() + 1 }, h.ownerId))
+      .rows as { id: string; kind: string }[];
+    const payment = paid.find((row) => row.kind === 'payment_received')!;
+    await expectRefused(
+      h.money('voidPayment', { entryId: payment.id, reason: 'Salah' }, h.managerId),
+      'drawerNotYours',
+    );
+  });
+
+  test("records of a drawer someone doesn't use stay out of what they read", async () => {
+    h = await openRepairHarness(909);
+    const accessories = await accessoriesDrawer(h);
+    const { accountId } = (await h.money(
+      'saveAccount',
+      { kind: 'edc', name: 'EDC Mandiri' },
+      h.ownerId,
+    )) as { accountId: string };
+    await h.money(
+      'moveCash',
+      { kind: 'float', amount: 40_000, reason: 'Modal', drawer: accessories },
+      h.managerId,
+    );
+    await h.money('moveCash', { kind: 'float', amount: 30_000, reason: 'Modal' }, h.cashierId);
+    await h.money(
+      'moveCash',
+      {
+        kind: 'transfer',
+        amount: 10_000,
+        reason: 'Kembalian',
+        drawer: accessories,
+        account: 'cash',
+      },
+      h.managerId,
+    );
+    const read = async (userId: string) =>
+      (
+        (await h!.moneyQuery('moneyEntries', { from: 0, to: Date.now() + 1 }, userId)).rows as {
+          reason: string | null;
+          subKind: string | null;
+        }[]
+      ).map((row) => `${row.subKind ?? ''}:${row.reason ?? ''}`);
+    // The cashier sees their own float and the cash that came into their drawer, not the
+    // accessories float.
+    expect((await read(h.cashierId)).sort()).toEqual(['float:Modal', 'transfer:Kembalian']);
+    expect(await read(h.managerId)).toHaveLength(3);
+    // A payment account is not a drawer: its balance is not read as one.
+    expect(await drawer(h, `account:${accountId}`, h.ownerId)).toBeUndefined();
+  });
+
   test('the main drawer stays a drawer and stays on', async () => {
     h = await openRepairHarness(904);
     await expectRefused(

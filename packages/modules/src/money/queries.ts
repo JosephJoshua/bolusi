@@ -20,6 +20,7 @@ import {
   type CashMoveKind,
   type EntryKind,
   drawerRef,
+  paymentAccountIdOf,
   type PaymentAccountKind,
 } from './constants.js';
 import type { MoneyDocumentSources } from './documents.js';
@@ -295,8 +296,22 @@ export const cashDrawerInput = z
   })
   .strict();
 
-/** Whether the caller may use this drawer (rules.ts `drawerOpenTo`). */
+/** Whether `drawer` is one of this store's drawers and the caller may use it (`drawerOpenTo`). */
 async function usesDrawer(qctx: Qctx, drawer: string): Promise<boolean> {
+  if (drawer !== CASH_ACCOUNT) {
+    const id = paymentAccountIdOf(drawer);
+    const row =
+      id === null
+        ? undefined
+        : await qctx.db
+            .selectFrom('moneyAccounts')
+            .select('kind')
+            .where('id', '=', id)
+            .where('storeId', '=', storeOf(qctx))
+            .executeTakeFirst();
+    // A payment account is not a drawer: its balance is not read this way.
+    if (row?.kind !== DRAWER_KIND) return false;
+  }
   const roleIds = await drawerRoles(qctx.db, storeOf(qctx), drawer);
   return drawerOpenTo(
     roleIds,
@@ -460,10 +475,17 @@ export const moneyEntriesInput = z
 
 const ENTRIES_SORT = 'createdAt.desc';
 
+/** The store's drawers the caller may not use: their records are not theirs to read. */
+async function closedDrawers(qctx: Qctx): Promise<string[]> {
+  const { rows } = await drawersHandler({ includeInactive: true }, qctx);
+  return rows.filter((row) => !row.usable).map((row) => row.ref);
+}
+
 async function moneyEntriesHandler(
   input: z.output<typeof moneyEntriesInput>,
   qctx: Qctx,
 ): Promise<QueryPage<MoneyEntryRow>> {
+  const closed = await closedDrawers(qctx);
   let query = qctx.db
     .selectFrom('moneyEntries')
     .selectAll()
@@ -472,6 +494,24 @@ async function moneyEntriesHandler(
     .where('createdAt', '<', input.to)
     .orderBy('createdAt', 'desc')
     .orderBy('id', 'desc');
+  if (closed.length > 0) {
+    // A drawer's moves, counts and settlements, and cash taken into it, stay with whoever uses it.
+    // A transfer shows to the drawer it went to as well as the one it left.
+    query = query.where((eb) =>
+      eb.and([
+        eb.or([
+          eb('drawer', 'is', null),
+          eb('drawer', 'not in', closed),
+          eb.and([eb('subKind', '=', 'transfer'), eb('account', 'not in', closed)]),
+        ]),
+        eb.or([
+          eb('drawer', 'is not', null),
+          eb('account', 'is', null),
+          eb('account', 'not in', closed),
+        ]),
+      ]),
+    );
+  }
   if (input.cursor !== undefined) {
     const position = decodeCursor(input.cursor, ENTRIES_SORT);
     query = query.where((eb) =>
