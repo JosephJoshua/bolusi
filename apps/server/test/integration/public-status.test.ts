@@ -72,6 +72,7 @@ const directory: AuthDirectory = {
   findDeviceByTokenHash: () => Promise.reject(new Error('no tokens in this suite')),
   findControlSessionByTokenHash: () => Promise.reject(new Error('no tokens in this suite')),
   findLoginCredential: () => Promise.reject(new Error('no tokens in this suite')),
+  findUnpaidQrisCharges: () => Promise.resolve([]),
   async findStatusLink(code) {
     const { rows } = await sql<{
       tenantId: string;

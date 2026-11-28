@@ -39,6 +39,7 @@ export { QrCode } from './QrCode.js';
 export { RollingText } from './RollingText.js';
 export { QuantityStepper } from './QuantityStepper.js';
 export { ReorderableList } from './ReorderableList.js';
+export { RowDivider, Rows } from './Rows.js';
 export { SearchField } from './SearchField.js';
 export { SegmentedControl } from './SegmentedControl.js';
 export { Sheet } from './Sheet.js';

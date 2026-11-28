@@ -3,7 +3,7 @@
  * buyer sets what actually came, with the buy price per piece from the supplier's nota when they
  * have it (it can be filled in later). Saving adds it all to this store's stock in one go.
  */
-import { QuantityStepper, TextInput, border, color, space, type, Text } from '@bolusi/ui';
+import { QuantityStepper, TextInput, color, space, type, Text, Rows } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -62,35 +62,37 @@ export function ReceiveStep({
       testID={testID}
     >
       <Text style={styles.hint}>{tp('purchasing.receive.hint')}</Text>
-      {order.lines.map((line) => (
-        <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
-          <Text style={styles.name}>{line.name}</Text>
-          <QuantityStepper
-            label={tp('purchasing.receive.arrived')}
-            value={counts[line.itemId] ?? 0}
-            onChange={(qty) => setCounts((now) => ({ ...now, [line.itemId]: qty }))}
-            min={0}
-            max={MAX_LINE_QTY}
-            decreaseLabel={tp('purchasing.form.decrease')}
-            increaseLabel={tp('purchasing.form.increase')}
-            caption={receiveHint(line, counts[line.itemId] ?? 0)}
-            testID={`${testID}.line.${line.itemId}.qty`}
-          />
-          {(counts[line.itemId] ?? 0) > 0 ? (
-            <TextInput
-              label={tp('purchasing.receive.price')}
-              value={rupiahFieldText(prices[line.itemId] ?? '', MAX_UNIT_COST)}
-              onChangeText={(next) => {
-                if (!acceptsRupiahText(next, MAX_UNIT_COST)) return;
-                setPrices((now) => ({ ...now, [line.itemId]: next.replace(/\D/g, '') }));
-              }}
-              keyboardType="number-pad"
-              selectTextOnFocus
-              testID={`${testID}.line.${line.itemId}.price`}
+      <Rows>
+        {order.lines.map((line) => (
+          <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
+            <Text style={styles.name}>{line.name}</Text>
+            <QuantityStepper
+              label={tp('purchasing.receive.arrived')}
+              value={counts[line.itemId] ?? 0}
+              onChange={(qty) => setCounts((now) => ({ ...now, [line.itemId]: qty }))}
+              min={0}
+              max={MAX_LINE_QTY}
+              decreaseLabel={tp('purchasing.form.decrease')}
+              increaseLabel={tp('purchasing.form.increase')}
+              caption={receiveHint(line, counts[line.itemId] ?? 0)}
+              testID={`${testID}.line.${line.itemId}.qty`}
             />
-          ) : null}
-        </View>
-      ))}
+            {(counts[line.itemId] ?? 0) > 0 ? (
+              <TextInput
+                label={tp('purchasing.receive.price')}
+                value={rupiahFieldText(prices[line.itemId] ?? '', MAX_UNIT_COST)}
+                onChangeText={(next) => {
+                  if (!acceptsRupiahText(next, MAX_UNIT_COST)) return;
+                  setPrices((now) => ({ ...now, [line.itemId]: next.replace(/\D/g, '') }));
+                }}
+                keyboardType="number-pad"
+                selectTextOnFocus
+                testID={`${testID}.line.${line.itemId}.price`}
+              />
+            ) : null}
+          </View>
+        ))}
+      </Rows>
       <View style={styles.noteField}>
         <TextInput
           label={tp('purchasing.receive.note')}
@@ -111,8 +113,6 @@ const styles = StyleSheet.create({
   line: {
     paddingVertical: space.md,
     gap: space.sm,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   name: { ...type.bodyBold, color: color.text },
 });

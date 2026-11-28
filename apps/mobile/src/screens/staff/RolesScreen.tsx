@@ -43,12 +43,12 @@ import {
   SwitchRow,
   TextButton,
   TextInput,
-  border,
   color,
   space,
   type,
   type ListState,
   Text,
+  Rows,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -351,7 +351,7 @@ function AddRole({
         <View>
           <Text style={styles.label}>{t('auth.roles.copyFrom')}</Text>
           <Text style={styles.hint}>{t('auth.roles.copyFromHint')}</Text>
-          <View style={styles.rows}>
+          <Rows style={styles.rows}>
             {sources.map((role) => (
               <ListRow
                 key={role.id}
@@ -364,7 +364,7 @@ function AddRole({
                 testID={`roles-add-from-${role.id}`}
               />
             ))}
-          </View>
+          </Rows>
         </View>
       </View>
     </StaffShell>
@@ -560,8 +560,6 @@ const styles = StyleSheet.create({
   rows: {
     marginHorizontal: -space.lg,
     marginTop: space.sm,
-    borderTopWidth: border.hairline,
-    borderTopColor: color.border,
   },
   switches: { marginTop: space.xs },
   delete: { gap: space.xs },

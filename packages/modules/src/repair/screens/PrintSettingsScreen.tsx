@@ -21,23 +21,13 @@ import { StyleSheet, View } from 'react-native';
 
 import type { MediaRefMime } from '@bolusi/schemas';
 
-import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
+import { type DiscardGuard } from '../../screen-kit/index.js';
 import { tn } from '../i18n.js';
-import {
-  printSettingsForm,
-  printSettingsInput,
-  samePrintSettingsForm,
-  type PrintSettingsForm,
-  type PrintSettingsLogo,
-} from '../print-settings-form.js';
+import { type PrintSettingsLogo } from '../print-settings-form.js';
 import type { PrintSettings } from '../queries.js';
 import { FlowScreen, QueryView, Section, repairStyles, type RepairChrome } from './parts.js';
-import {
-  usePrintSettings,
-  usePrintStoreName,
-  useRepairRuntime,
-  useRepairThumbnail,
-} from '../runtime.js';
+import { usePrintSettings, usePrintStoreName, useRepairThumbnail } from '../runtime.js';
+import { usePrintSettingsForm } from '../settings-forms.js';
 
 export interface PrintSettingsScreenProps {
   readonly chrome: RepairChrome;
@@ -75,7 +65,6 @@ export function PrintSettingsScreen({
 }
 
 type Logo = PrintSettingsLogo;
-type Form = PrintSettingsForm;
 
 function SettingsForm({
   saved,
@@ -90,13 +79,9 @@ function SettingsForm({
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
   readonly testID: string;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const [form, setForm] = useState<Form>(() => printSettingsForm(saved));
-  const [baseline, setBaseline] = useState<Form>(() => printSettingsForm(saved));
-  const [notice, setNotice] = useState<string | null>(null);
+  const settings = usePrintSettingsForm(saved);
+  const { runner, form, edit, dirty } = settings;
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
-  const dirty = !samePrintSettingsForm(form, baseline);
   const storeName = usePrintStoreName();
 
   useEffect(() => {
@@ -104,47 +89,18 @@ function SettingsForm({
     return () => onRegisterDiscardGuard?.(null);
   }, [dirty, onRegisterDiscardGuard]);
 
-  const edit = (patch: Partial<Form>): void => {
-    setNotice(null);
-    setForm((current) => ({ ...current, ...patch }));
-  };
-
-  const pickLogo = (): void => {
-    const pick = runtime.pickPhoto;
-    if (pick === undefined) return;
-    void runner
-      .run(() => pick({ title: tn('repair.printSettings.logoTitle') }))
-      .then((picked) => {
-        if (picked !== undefined && picked !== null) edit({ logo: picked.mediaRef });
-      });
-  };
-
-  const save = (): void => {
-    if (!dirty) {
-      onClose();
-      return;
-    }
-    void runner
-      .run(() => runtime.run('setPrintSettings', printSettingsInput(form)))
-      .then((result) => {
-        if (result === undefined) return;
-        setBaseline(form);
-        setNotice(tn('repair.printSettings.saved'));
-      });
-  };
-
   return (
     <FlowScreen
       chrome={chrome}
       title={tn('repair.printSettings.title')}
       onBack={() => (dirty ? setPendingLeave(() => onClose) : onClose())}
       primaryLabel={tn('repair.printSettings.save')}
-      onPrimary={save}
+      onPrimary={() => settings.save(onClose)}
       busy={runner.busy}
       errorCode={runner.errorCode}
       onClearError={runner.clearError}
-      notice={notice}
-      onClearNotice={() => setNotice(null)}
+      notice={settings.notice}
+      onClearNotice={settings.clearNotice}
       overlay={
         pendingLeave === null ? null : (
           <ConfirmSheet
@@ -165,14 +121,14 @@ function SettingsForm({
       testID={testID}
     >
       <Section first title={tn('repair.printSettings.header')} testID={`${testID}.header`}>
-        {runtime.pickPhoto === undefined && form.logo === null ? null : (
+        {!settings.canPickLogo && form.logo === null ? null : (
           // The logo and whether dot-matrix prints it read as one setting.
           <View style={styles.logoGroup}>
             <LogoRow
               logo={form.logo}
-              canPick={runtime.pickPhoto !== undefined}
+              canPick={settings.canPickLogo}
               disabled={runner.busy}
-              onPick={pickLogo}
+              onPick={settings.pickLogo}
               onRemove={() => edit({ logo: null, logoOnDotMatrix: false })}
               testID={`${testID}.logo`}
             />
@@ -187,11 +143,7 @@ function SettingsForm({
             )}
           </View>
         )}
-        <View
-          style={
-            form.logo === null && runtime.pickPhoto === undefined ? undefined : styles.afterLogo
-          }
-        >
+        <View style={form.logo === null && !settings.canPickLogo ? undefined : styles.afterLogo}>
           <TextInput
             label={tn('repair.printSettings.name')}
             value={form.name}

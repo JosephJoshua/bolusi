@@ -55,6 +55,8 @@ export { createModuleRuntime, type ModuleRuntime, type ModuleRuntimeOptions } fr
 
 export {
   bindModulePort,
+  DECISION_NEEDS_PIN,
+  retryAfterDecision,
   limitOfAllowance,
   type CommandName,
   type ModuleOperations,

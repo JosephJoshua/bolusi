@@ -9,7 +9,6 @@ import { t, translateErrorCode } from '@bolusi/i18n';
 import {
   ActionChip,
   AppShell,
-  border,
   Button,
   ChipRow,
   color,
@@ -43,7 +42,6 @@ export interface PartListProps {
   readonly filter: ListFilter;
   readonly onFilter: (filter: ListFilter) => void;
   readonly onOpenFilters: () => void;
-  readonly onManageCategories: () => void;
   /** The Barang place's title and the switch to its other sections. */
   readonly place: PlaceHeader;
   readonly onOpenPart: (itemId: string) => void;
@@ -67,7 +65,6 @@ export function PartList({
   filter,
   onFilter,
   onOpenFilters,
-  onManageCategories,
   place,
   onOpenPart,
   onAddPart,
@@ -76,7 +73,6 @@ export function PartList({
 }: PartListProps): React.JSX.Element {
   const runtime = useInventoryRuntime();
   const canManage = runtime.hasPermission(INVENTORY_PERMISSION.manageItems);
-  const canSetUp = runtime.hasPermission(INVENTORY_PERMISSION.manageCategories);
   const [text, setText] = useState('');
   const [pages, setPages] = useState(1);
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -281,14 +277,6 @@ export function PartList({
             />
           ) : null}
           {categoryChips.filter((chip) => chip !== pickedChip).map(categoryChip)}
-          {canSetUp ? (
-            <ActionChip
-              label={ti('inventory.list.manageCategories')}
-              icon="settings"
-              onPress={onManageCategories}
-              testID={`${testID}.categories`}
-            />
-          ) : null}
         </ChipRow>
       </View>
       <List
@@ -297,6 +285,7 @@ export function PartList({
         keyExtractor={(row) => row.id}
         onEndReached={loaded?.hasMore === true ? () => setPages((n) => n + 1) : undefined}
         renderRow={renderRow}
+        edgeToEdge
         testID={`${testID}.items`}
       />
     </AppShell>
@@ -380,8 +369,6 @@ const styles = StyleSheet.create({
     marginHorizontal: -space.lg,
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   rowText: { flex: 1 },
   name: { ...type.bodyBold, color: color.text },

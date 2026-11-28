@@ -2,7 +2,7 @@
  * StoreBasicsList — what the store still lacks (store-basics.tsx), each row opening the setting that
  * fills it. Nothing when nothing is missing or it is still loading.
  */
-import { Icon, ListRow, color, size, type IconName } from '@bolusi/ui';
+import { Icon, ListRow, color, size, type IconName, Rows } from '@bolusi/ui';
 
 import { tn } from '../i18n.js';
 import {
@@ -31,17 +31,19 @@ export function StoreBasicsList({
   if (missing === null || missing.length === 0) return null;
   return (
     <Section title={tn('repair.basics.title')} testID={testID}>
-      {missing.map((basic) => (
-        <ListRow
-          key={basic}
-          leading={<Icon name={ICON[basic]} size={size.iconInline} color={color.textMuted} />}
-          primaryText={tn(STORE_BASIC_KEY[basic].title)}
-          secondaryText={tn(STORE_BASIC_KEY[basic].summary)}
-          onPress={() => onOpen(STORE_BASIC_SETTING[basic])}
-          showChevron
-          testID={`${testID}.${basic}`}
-        />
-      ))}
+      <Rows>
+        {missing.map((basic) => (
+          <ListRow
+            key={basic}
+            leading={<Icon name={ICON[basic]} size={size.iconInline} color={color.textMuted} />}
+            primaryText={tn(STORE_BASIC_KEY[basic].title)}
+            secondaryText={tn(STORE_BASIC_KEY[basic].summary)}
+            onPress={() => onOpen(STORE_BASIC_SETTING[basic])}
+            showChevron
+            testID={`${testID}.${basic}`}
+          />
+        ))}
+      </Rows>
     </Section>
   );
 }

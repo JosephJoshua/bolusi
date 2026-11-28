@@ -2,6 +2,7 @@
  * Money on screen. `Amount` is a sum on its own (a total under its label, a row's price);
  * `AmountRow` is a label left and its amount right, as on the Kas summary and a payment list.
  * Both use tabular figures so amounts line up, and `formatMoney` keeps "Rp" with its figure.
+ * Rows draw no divider: put several in `Rows`, which draws one between rows only.
  */
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -9,7 +10,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { formatMoney, formatSignedMoney } from '@bolusi/i18n';
 
 import { Text } from '../text.js';
-import { border, color, numeric, space, touch, type } from '../tokens.js';
+import { color, numeric, space, touch, type } from '../tokens.js';
 import { FreshGlow } from './FreshGlow.js';
 import { Icon } from './Icon.js';
 
@@ -89,7 +90,7 @@ export function AmountRow({
     </>
   );
   return onPress === undefined ? (
-    <View style={[styles.row, strong && styles.totalRow]} testID={testID}>
+    <View style={styles.row} testID={testID}>
       {body}
     </View>
   ) : (
@@ -121,10 +122,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
-  totalRow: { borderBottomWidth: 0 },
   pressed: { backgroundColor: color.surfaceAlt },
   rowText: { flex: 1 },
   rowLabel: { ...type.bodySm, color: color.text },

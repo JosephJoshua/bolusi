@@ -14,8 +14,11 @@ export type QrisEnvironment = z.infer<typeof zQrisEnvironment>;
 
 /** The smallest QRIS payment Xendit takes, in rupiah. */
 export const QRIS_MIN_AMOUNT = 1_500;
-/** How long a QR stays payable: long enough for a customer at the counter, short enough to forget. */
-export const QRIS_TTL_MS = 15 * 60 * 1000;
+/**
+ * How long a QR stays payable: long enough for a customer at the counter, short enough that a QR
+ * cancelled at the counter (Xendit cannot withdraw one) is not payable for long (Joseph, 2026-11-25).
+ */
+export const QRIS_TTL_MS = 10 * 60 * 1000;
 
 /** `PUT /v1/money/qris/accounts/:accountId`: connect a QRIS account with its Xendit secret key. */
 export const zQrisConnectBody = z
@@ -55,7 +58,12 @@ export const zQrisChargeBody = z
   .strict();
 export type QrisChargeBody = z.infer<typeof zQrisChargeBody>;
 
-export const QRIS_CHARGE_STATUSES = ['waiting', 'paid', 'expired'] as const;
+/**
+ * `cancelled`: the counter gave up on the QR to take the bill another way. Xendit cannot withdraw a
+ * QR, so a customer can still pay it until `expiresAt`; such a payment turns it `paid` (with
+ * `cancelledAt` still set) and is money to give back.
+ */
+export const QRIS_CHARGE_STATUSES = ['waiting', 'paid', 'expired', 'cancelled'] as const;
 export type QrisChargeStatus = (typeof QRIS_CHARGE_STATUSES)[number];
 
 export const zQrisCharge = z.object({
@@ -67,5 +75,14 @@ export const zQrisCharge = z.object({
   environment: zQrisEnvironment,
   expiresAt: z.number().int(),
   paidAt: z.number().int().nullable(),
+  cancelledAt: z.number().int().nullable(),
 });
 export type QrisCharge = z.infer<typeof zQrisCharge>;
+
+/**
+ * `GET /v1/money/qris/charges?documentId=`: the bill's QRs that can still be paid and were not
+ * cancelled, so any device of the store sees a QR another one showed before taking another method.
+ */
+export const zQrisOpenChargesQuery = z.object({ documentId: zUuid }).strict();
+export const zQrisOpenChargesResponse = z.object({ charges: z.array(zQrisCharge) });
+export type QrisOpenChargesResponse = z.infer<typeof zQrisOpenChargesResponse>;

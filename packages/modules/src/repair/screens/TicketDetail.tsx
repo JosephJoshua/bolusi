@@ -28,6 +28,7 @@ import {
   Timeline,
   touch,
   type,
+  Rows,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -152,6 +153,8 @@ export interface TicketDetailProps {
    * counter. Read once, when the screen opens.
    */
   readonly printFirst?: boolean | undefined;
+  /** Opened from Perlu dicek on one of its requests: opens on that request's answer. Read once. */
+  readonly answerRequestId?: string | undefined;
   readonly chrome: RepairChrome;
   /** The clock a phone's wait is counted against (phones not collected). */
   readonly now: () => number;
@@ -176,6 +179,7 @@ export interface TicketDetailProps {
 export function TicketDetail({
   ticketId,
   printFirst = false,
+  answerRequestId,
   chrome,
   now,
   onBack,
@@ -192,7 +196,11 @@ export function TicketDetail({
   const { runtime, can, money, runner, query, ticket, reload, done, setDone, runInPlace } =
     useTicketPage(ticketId, 'ticket');
   const [step, setStep] = useState<Step>(() =>
-    printFirst && runtime.printing !== undefined ? { kind: 'print' } : { kind: 'none' },
+    answerRequestId !== undefined
+      ? { kind: 'approval', requestId: answerRequestId }
+      : printFirst && runtime.printing !== undefined
+        ? { kind: 'print' }
+        : { kind: 'none' },
   );
   const [passcodeShown, setPasscodeShown] = useState(false);
   const [messageFailed, setMessageFailed] = useState(false);
@@ -579,30 +587,32 @@ export function TicketDetail({
             onClose={() => setMoreOpen(false)}
             testID={`${testID}.more`}
           >
-            {moreActions(ticket).map((item) => (
-              <ListRow
-                key={item.key}
-                primaryText={item.label}
-                onPress={() => {
-                  setMoreOpen(false);
-                  item.onPress();
-                }}
-                testID={`${testID}.action.${item.key}`}
-              />
-            ))}
-            {/* Cancelling and taking a handover back are looked for here too; they also stay at
+            <Rows>
+              {moreActions(ticket).map((item) => (
+                <ListRow
+                  key={item.key}
+                  primaryText={item.label}
+                  onPress={() => {
+                    setMoreOpen(false);
+                    item.onPress();
+                  }}
+                  testID={`${testID}.action.${item.key}`}
+                />
+              ))}
+              {/* Cancelling and taking a handover back are looked for here too; they also stay at
                 the end of the page, apart from the next step. */}
-            {finals.map((action) => (
-              <ListRow
-                key={action}
-                primaryText={tn(actionKey(action, ticket.technicianId))}
-                onPress={() => {
-                  setMoreOpen(false);
-                  perform(action, ticket);
-                }}
-                testID={`${testID}.more.${action}`}
-              />
-            ))}
+              {finals.map((action) => (
+                <ListRow
+                  key={action}
+                  primaryText={tn(actionKey(action, ticket.technicianId))}
+                  onPress={() => {
+                    setMoreOpen(false);
+                    perform(action, ticket);
+                  }}
+                  testID={`${testID}.more.${action}`}
+                />
+              ))}
+            </Rows>
           </Sheet>
         ) : (
           photos.overlay

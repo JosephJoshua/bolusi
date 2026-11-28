@@ -47,6 +47,7 @@ import { MediaSettings } from '../media-choice.js';
 import { StartWithWindows } from '../startup.js';
 import { useAppVersion } from '../updates.js';
 import type { SettingsAccess } from './access.js';
+import { ApprovalPinCard } from '../approval-pin.js';
 import { AccountPanel } from './AccountPanel.js';
 import { DevicesPanel } from './DevicesPanel.js';
 import { LimitsPanel } from './LimitsPanel.js';
@@ -260,7 +261,17 @@ function Page({
 }): React.JSX.Element {
   switch (page) {
     case 'account':
-      return <AccountPanel person={person} changePin={access.changePin} />;
+      return (
+        <AccountPanel
+          person={person}
+          changePin={access.changePin}
+          approvalPin={
+            access.approvalPin === undefined ? undefined : (
+              <ApprovalPinCard person={person} {...access.approvalPin} />
+            )
+          }
+        />
+      );
     case 'staff':
       return (
         <StaffPanel

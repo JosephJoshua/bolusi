@@ -73,7 +73,6 @@
     "searchHint": "Name, phone, ticket, IMEI, model",
     "title": "Repairs",
     "view": {
-      "approvals": "Approvals ({count})",
       "active": "In progress",
       "mine": "Mine",
       "pickup": "Ready for pickup",
@@ -91,7 +90,6 @@
     "waited": "Not collected for {days} days",
     "pickupWaiting": "{count} ready for pickup",
     "empty": {
-      "approvals": "Nothing is waiting for approval.",
       "active": "No active repairs yet.",
       "mine": "Your queue is empty.",
       "unassigned": "Every repair has a technician.",
@@ -376,7 +374,8 @@
     "downPaymentLimit": "You can take up to {amount} off the money taken in.",
     "cancelLimit": "You can cut the fee by up to {amount}.",
     "downPaymentWithEarlier": "With earlier DP changes, that’s {amount} in total.",
-    "handoverQris": "Waiting for the QRIS payment. Check the internet is on."
+    "handoverQris": "Waiting for the QRIS payment. Check the internet is on.",
+    "handoverQrOpen": "Cancel the unpaid QR first."
   },
   "discardPhotos": {
     "title": "Leave without saving?",
@@ -998,5 +997,21 @@
     "original": "Original",
     "oem": "OEM",
     "kw": "KW"
+  },
+  "attention": {
+    "title": "To check",
+    "requests": "Approvals ({count})",
+    "elsewhere": "Elsewhere",
+    "uncollected": "Phones not collected",
+    "belowZero": "Stock below zero",
+    "partlyReceived": "Orders partly received",
+    "refused": "Your changes refused",
+    "empty": "Nothing to check.",
+    "emptyHint": "Requests for approval and anything else you need to handle show up here.",
+    "col": {
+      "request": "Request",
+      "ticket": "Repair",
+      "asked": "Asked"
+    }
   }
 }

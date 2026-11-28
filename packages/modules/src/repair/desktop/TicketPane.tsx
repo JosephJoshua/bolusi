@@ -154,6 +154,8 @@ export interface TicketPaneProps {
   readonly printFirst?: boolean | undefined;
   /** The slip was offered, so coming back to this servisan later does not offer it again. */
   readonly onPrintOffered?: (() => void) | undefined;
+  /** Opened from Perlu dicek on one of its requests: the answer opens with it. Read once. */
+  readonly answerRequestId?: string | undefined;
 }
 
 export function TicketPane({
@@ -166,11 +168,16 @@ export function TicketPane({
   onOpenSyncStatus,
   onStartClaim,
   onOpenTicket,
+  answerRequestId,
 }: TicketPaneProps): React.JSX.Element {
   const { runtime, can, money, runner, query, ticket, reload, done, setDone, runInPlace } =
     useTicketPage(ticketId, 'desk.ticket');
   const printing = runtime.printing;
-  const [step, setStep] = useState<Step>({ kind: 'none' });
+  const [step, setStep] = useState<Step>(() =>
+    answerRequestId === undefined
+      ? { kind: 'none' }
+      : { kind: 'approval', requestId: answerRequestId },
+  );
   const say = (key: RepairKey | undefined): void => setDone(key === undefined ? null : tn(key));
   // An open step outlives a failed re-read: it keeps the last good ticket, so photos taken and
   // text typed in a dialog are not thrown away by a hiccup in the background.

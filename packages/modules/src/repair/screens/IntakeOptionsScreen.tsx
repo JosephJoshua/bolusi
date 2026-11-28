@@ -15,18 +15,18 @@ import {
   TextButton,
   TextInput,
   ToggleChip,
-  border,
   color,
   space,
   touch,
   type,
   Text,
   ValueText,
+  Rows,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { useActionRunner, type DiscardGuard, type StepBack } from '../../screen-kit/index.js';
+import { type DiscardGuard, type StepBack } from '../../screen-kit/index.js';
 
 import { repairAbilities, type RepairAbilities } from '../flows.js';
 import {
@@ -38,18 +38,12 @@ import {
 } from '../intake-options.js';
 import {
   addRow,
-  changedHidden,
-  changedItems,
-  editorFor,
-  editorProblems,
-  hasProblems,
   moveRow,
   gradeWarrantyOk,
   removeRow,
   setGradeWarranty,
   toggleGrade,
   updateRow,
-  type BuiltInName,
   type EditorGrade,
   type EditorRow,
   type ListProblem,
@@ -57,7 +51,8 @@ import {
 } from '../options-editor.js';
 
 import { tn, type RepairKey } from '../i18n.js';
-import { INTAKE_HINT_KEY, INTAKE_LIST_KEY, builtInLabel, optionLabel } from '../labels.js';
+import { INTAKE_HINT_KEY, INTAKE_LIST_KEY, optionLabel } from '../labels.js';
+import { useOptionsEditor } from '../options-editor-form.js';
 import { FlowScreen, QueryView, repairStyles, type RepairChrome } from './parts.js';
 import { useIntakeOptionSettings, useRepairRuntime } from '../runtime.js';
 
@@ -145,7 +140,7 @@ export function IntakeOptionsScreen({
             <Text style={repairStyles.muted}>
               {tn(can.manageIntakeOptions ? 'repair.options.intro' : 'repair.options.introStore')}
             </Text>
-            <View style={styles.overview}>
+            <Rows style={styles.overview}>
               {INTAKE_OPTION_LISTS.map((list) => (
                 <ListRow
                   key={list}
@@ -156,7 +151,7 @@ export function IntakeOptionsScreen({
                   testID={`${testID}.open.${list}`}
                 />
               ))}
-            </View>
+            </Rows>
           </View>
         )}
       </QueryView>
@@ -189,22 +184,10 @@ function ListEditor({
   readonly onRegisterGuard: (guard: DiscardGuard | null) => void;
   readonly testID: string;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const builtInName: BuiltInName = (option) => builtInLabel(list, option.id);
-  // Started from the lists as they were on opening; a change that syncs in meanwhile is compared
-  // against on save, so saving never silently undoes it unless this list was edited too.
-  const [state, setState] = useState(() => editorFor(list, settings, builtInName));
+  const editor = useOptionsEditor(list, settings, can);
+  const { runner, state, setState, showProblems, problems, dirty, manage, hide } = editor;
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [showProblems, setShowProblems] = useState(false);
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
-
-  const manage = can.manageIntakeOptions;
-  const hide = can.hideIntakeOptions;
-  const items = manage ? changedItems(state, settings.lists[list], builtInName) : null;
-  const hidden = hide ? changedHidden(state, settings.hidden[list]) : null;
-  const dirty = items !== null || hidden !== null;
-  const problems = editorProblems(state, builtInName, (option) => optionLabel(list, option));
 
   useEffect(() => {
     onRegisterGuard(dirty ? (proceed) => setPendingLeave(() => proceed) : null);
@@ -213,28 +196,14 @@ function ListEditor({
 
   const leave = (): void => (dirty ? setPendingLeave(() => onDone) : onDone());
 
-  const save = (): void => {
-    if (hasProblems(problems)) {
-      setShowProblems(true);
-      const first = state.rows.find((row) => problems.rows.has(row.key));
-      if (first !== undefined) setExpanded(first.key);
-      return;
-    }
-    if (!dirty) {
-      onDone();
-      return;
-    }
-    void runner
-      .run(async () => {
-        // The list first: hiding then applies to the list as saved.
-        if (items !== null) await runtime.run('changeIntakeOptions', { list, items });
-        if (hidden !== null) await runtime.run('hideIntakeOptions', { list, hidden });
-        return true;
-      })
-      .then((saved) => {
-        if (saved === true) onDone();
-      });
-  };
+  const save = (): void =>
+    editor.save({
+      onSaved: onDone,
+      onProblems: () => {
+        const first = state.rows.find((row) => problems.rows.has(row.key));
+        if (first !== undefined) setExpanded(first.key);
+      },
+    });
 
   const add = (): void => {
     const added = addRow(state);
@@ -616,13 +585,9 @@ const styles = StyleSheet.create({
     marginTop: space.lg,
     // Rows run edge to edge so their dividers and pressed state span the screen, like the board.
     marginHorizontal: -space.lg,
-    borderTopWidth: border.hairline,
-    borderTopColor: color.border,
   },
   row: {
     paddingHorizontal: space.lg,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
     backgroundColor: color.surface,
   },
   collapsed: {

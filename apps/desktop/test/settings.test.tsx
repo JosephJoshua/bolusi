@@ -2,8 +2,10 @@
 // to the core as the person signed in (their own PIN, a colleague's PIN, "Karyawan") or through the
 // repair commands (intake lists, cancellation fees, slips), asking before unsaved changes are lost.
 import {
+  ApprovalPinError,
   DomainError,
   PIN_HARD_LOCK_THRESHOLD,
+  RuleRefusal,
   StaffAdminError,
   type StaffDirectory,
 } from '@bolusi/core';
@@ -22,6 +24,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CoreView } from '../src/renderer/use-core.js';
 
 import { ALL, FakeCore, OWNER, ready, session, signedIn, TECH } from './fake-core.js';
+import { onBoard } from './desk.js';
 
 let core: FakeCore;
 
@@ -584,6 +587,145 @@ describe('Settings on the PC', () => {
   });
 });
 
+describe('the approval PIN on the PC', () => {
+  it('asks for it when a decision needs it, and saves once the server opened a session', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    let tries = 0;
+    core.answers['repair.run'] = (_userId, name, input) => {
+      if (name !== 'setCancelFees') return core.demo.run(name as never, input as never);
+      tries += 1;
+      return tries === 1
+        ? Promise.reject(
+            new RuleRefusal('PERMISSION_DENIED', 'platform.refusal.decisionNeedsPin', undefined),
+          )
+        : Promise.resolve({ ok: true });
+    };
+    const opened: string[] = [];
+    core.answers['session.openDecision'] = (_userId, pin) => {
+      opened.push(pin as string);
+      return opened.length === 1 ? 'wrong' : 'opened';
+    };
+    renderApp();
+    await openSettings('fees');
+    const before = (await screen.findByTestId('repair.desk.fees.beforeWork')) as HTMLInputElement;
+    fireEvent.change(before, { target: { value: '35.000' } });
+    fireEvent.click(byTestId('repair.desk.fees.save'));
+    await screen.findByTestId('desktop.approvalAsk');
+    typePin('730264');
+    await waitFor(() =>
+      expect(byTestId('desktop.approvalAsk.message').textContent).toBe('PIN persetujuan salah.'),
+    );
+    typePin('730265');
+    await screen.findByTestId('repair.desk.fees.saved');
+    expect(opened).toEqual(['730264', '730265']);
+    expect(tries).toBe(2);
+    expect(screen.queryByTestId('desktop.approvalAsk')).toBeNull();
+  });
+
+  it('closed without the PIN, the change stays unsaved and says why', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    core.answers['repair.run'] = () =>
+      Promise.reject(
+        new RuleRefusal('PERMISSION_DENIED', 'platform.refusal.decisionNeedsPin', undefined),
+      );
+    renderApp();
+    await openSettings('fees');
+    const before = (await screen.findByTestId('repair.desk.fees.beforeWork')) as HTMLInputElement;
+    fireEvent.change(before, { target: { value: '35.000' } });
+    fireEvent.click(byTestId('repair.desk.fees.save'));
+    await screen.findByTestId('desktop.approvalAsk');
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('desktop.approvalAsk')).toBeNull());
+    expect(callsTo('session.openDecision')).toEqual([]);
+    expect(screen.queryByTestId('repair.desk.fees.saved')).toBeNull();
+  });
+
+  it('with none set yet, makes one in the same place and goes on', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    let tries = 0;
+    core.answers['repair.run'] = (_userId, name, input) => {
+      if (name !== 'setCancelFees') return core.demo.run(name as never, input as never);
+      tries += 1;
+      return tries === 1
+        ? Promise.reject(
+            new RuleRefusal('PERMISSION_DENIED', 'platform.refusal.decisionNeedsPin', undefined),
+          )
+        : Promise.resolve({ ok: true });
+    };
+    let set = false;
+    core.answers['session.openDecision'] = () => (set ? 'opened' : 'notSet');
+    core.answers['approvalPin.set'] = () => {
+      set = true;
+      return Promise.resolve();
+    };
+    renderApp();
+    await openSettings('fees');
+    const before = (await screen.findByTestId('repair.desk.fees.beforeWork')) as HTMLInputElement;
+    fireEvent.change(before, { target: { value: '35.000' } });
+    fireEvent.click(byTestId('repair.desk.fees.save'));
+    await screen.findByTestId('desktop.approvalAsk');
+    typePin('730264');
+    fireEvent.click(await screen.findByTestId('desktop.approvalAsk.create'));
+    // The main owner proves it with their account password, then types the new PIN twice.
+    fireEvent.change(await screen.findByTestId('desktop.approvalSetup.password'), {
+      target: { value: 'rahasia' },
+    });
+    fireEvent.click(byTestId('desktop.approvalSetup.passwordNext'));
+    await screen.findByTestId('desktop.approvalSetup.pad');
+    typePin('418273');
+    typePin('418273');
+    fireEvent.click(await screen.findByTestId('desktop.approvalSetup.finish'));
+    await screen.findByTestId('repair.desk.fees.saved');
+    expect(callsTo('approvalPin.set')).toEqual([
+      [OWNER.id, '418273', { kind: 'password', password: 'rahasia' }],
+    ]);
+    expect(callsTo('session.openDecision').at(-1)).toEqual([OWNER.id, '418273']);
+    expect(tries).toBe(2);
+  });
+
+  it('sets or changes it from Akun; a wrong password goes back to it', async () => {
+    core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
+    let calls = 0;
+    core.answers['approvalPin.set'] = () => {
+      calls += 1;
+      return calls === 1
+        ? Promise.reject(new ApprovalPinError('wrongProof'))
+        : Promise.resolve(undefined);
+    };
+    renderApp();
+    await openSettings();
+    fireEvent.click(await screen.findByTestId('desktop.settings.approvalPin'));
+    const proofs = await screen.findByTestId('desktop.approvalSetup.proofs');
+    fireEvent.click(within(proofs).getByText('Kata sandi akun'));
+    fireEvent.change(await screen.findByTestId('desktop.approvalSetup.password'), {
+      target: { value: 'salah' },
+    });
+    fireEvent.click(byTestId('desktop.approvalSetup.passwordNext'));
+    typePin('418273');
+    typePin('418273');
+    await screen.findByText('Kata sandi salah.');
+    fireEvent.change(byTestId('desktop.approvalSetup.password'), { target: { value: 'benar' } });
+    fireEvent.click(byTestId('desktop.approvalSetup.passwordNext'));
+    typePin('418273');
+    typePin('418273');
+    await screen.findByTestId('desktop.approvalSetup.done');
+    expect(callsTo('approvalPin.set').map((args) => args[2])).toEqual([
+      { kind: 'password', password: 'salah' },
+      { kind: 'password', password: 'benar' },
+    ]);
+  });
+
+  it('is not offered to someone who makes no decisions', async () => {
+    core = new FakeCore(
+      ready({ session: session({ ...signedIn(TECH, CASHIER_GRANTS), makesDecisions: false }) }),
+    );
+    renderApp();
+    await openSettings();
+    await screen.findByTestId('desktop.settings.account');
+    expect(screen.queryByTestId('desktop.settings.approvalPin')).toBeNull();
+  });
+});
+
 describe('repair settings on the PC', () => {
   it('saves the cancellation fees through the command', async () => {
     core = new FakeCore(ready({ session: session(signedIn(OWNER, ALL)) }));
@@ -743,6 +885,6 @@ describe('repair settings on the PC', () => {
     // Leaving Settings for the board asks too.
     fireEvent.click(byTestId('nav.repair'));
     fireEvent.click(await screen.findByTestId('desktop.settings.discard.confirm'));
-    await screen.findByTestId('repair.desk.board');
+    await onBoard();
   });
 });

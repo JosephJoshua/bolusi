@@ -40,8 +40,11 @@ const CODE_STATUS: Record<HttpErrorCode, ContentfulStatusCode> = {
   QRIS_NOT_CONNECTED: 409,
   QRIS_KEY_REFUSED: 422,
   QRIS_AMOUNT_REFUSED: 422,
+  QRIS_CHARGE_OPEN: 409,
   CHANGE_REFUSED: 409,
   PERSON_SESSION_INVALID: 401,
+  APPROVAL_PIN_NOT_SET: 409,
+  APPROVAL_PIN_WEAK: 422,
 };
 
 /** Static English developer messages (api/00 §6). Not localized, not user-facing. */
@@ -70,8 +73,11 @@ const CODE_MESSAGE: Record<HttpErrorCode, string> = {
   QRIS_NOT_CONNECTED: 'This payment account is not connected to Xendit',
   QRIS_KEY_REFUSED: 'Xendit refused this key',
   QRIS_AMOUNT_REFUSED: 'Xendit refused this amount',
+  QRIS_CHARGE_OPEN: 'This bill already has a QR that is not paid yet',
   CHANGE_REFUSED: 'The records do not allow this change',
   PERSON_SESSION_INVALID: 'Person session missing, ended, or not for this device',
+  APPROVAL_PIN_NOT_SET: 'This person has no approval PIN yet',
+  APPROVAL_PIN_WEAK: 'This approval PIN is easy to guess or is the sign-in PIN',
 };
 
 export type ErrorDetails = Record<string, unknown>;

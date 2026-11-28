@@ -73,7 +73,6 @@
     "searchHint": "Cari nama, no. HP, no. servisan",
     "title": "Servisan",
     "view": {
-      "approvals": "Persetujuan ({count})",
       "active": "Aktif",
       "mine": "Tugas saya",
       "pickup": "Siap diambil",
@@ -91,7 +90,6 @@
     "waited": "{days} hari belum diambil",
     "pickupWaiting": "{count} HP siap diambil",
     "empty": {
-      "approvals": "Tidak ada yang menunggu persetujuan.",
       "active": "Belum ada servisan aktif.",
       "mine": "Belum ada tugas untuk Anda.",
       "unassigned": "Semua servisan sudah ada teknisinya.",
@@ -376,7 +374,8 @@
     "downPaymentLimit": "Anda dapat mengurangi uang masuk sampai {amount}.",
     "cancelLimit": "Anda dapat memotong biaya sampai {amount}.",
     "downPaymentWithEarlier": "Bersama perubahan DP sebelumnya, totalnya {amount}.",
-    "handoverQris": "Tunggu pembayaran QRIS masuk. Pastikan internet aktif."
+    "handoverQris": "Tunggu pembayaran QRIS masuk. Pastikan internet aktif.",
+    "handoverQrOpen": "Batalkan QR yang belum dibayar terlebih dahulu."
   },
   "discardPhotos": {
     "title": "Keluar tanpa menyimpan?",
@@ -998,5 +997,21 @@
     "original": "Original",
     "oem": "OEM",
     "kw": "KW"
+  },
+  "attention": {
+    "title": "Perlu dicek",
+    "requests": "Persetujuan ({count})",
+    "elsewhere": "Lainnya",
+    "uncollected": "HP belum diambil",
+    "belowZero": "Stok minus",
+    "partlyReceived": "Belanja diterima sebagian",
+    "refused": "Perubahan Anda ditolak",
+    "empty": "Tidak ada yang perlu dicek.",
+    "emptyHint": "Permintaan persetujuan dan hal lain yang perlu Anda tangani muncul di sini.",
+    "col": {
+      "request": "Permintaan",
+      "ticket": "Servisan",
+      "asked": "Diminta"
+    }
   }
 }

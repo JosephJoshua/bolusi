@@ -137,7 +137,7 @@ repair cancelled, so cancelling is an owner decision, as in the old system.
 
 - **Owners only:** the store owner or main owner cancels, always with a reason.
   Cashiers no longer can; a cashier who needs a cancel asks the owner, who does
-  it on their phone or with their PIN on the counter device.
+  it on their phone or with their approval PIN on the counter device.
 - **Any time before handover:** a repaired phone can still be cancelled (the
   customer won't pay or collect), since only owners can do it.
 - **Cancellation fee:** each store has two fees set by its owner in Settings →
@@ -325,6 +325,25 @@ Agreed with the owner after reviewing what the repair release still lacks.
   person checks it and presses send; there is no WhatsApp API. The counter PC opens
   `wa.me` links outside the app and no other link.
 
+## Approval PIN (2026-11-25)
+
+Agreed with the owner. A sign-in PIN's verifier sits on every shared device so
+people sign in offline, and a copied counter PC lets someone guess a 6-digit PIN
+in hours. So owners' and managers' decisions (cancel, refund, discounts and the
+other permissions marked `decision`) on a shared phone or PC need a separate
+approval PIN that only the server checks and no device stores.
+
+- **Asked at the decision.** One approval PIN proves the person's decisions on
+  that device for 10 minutes, or until they lock or switch. Offline, the
+  decision waits or is made on the person's own phone, which never asks.
+- **Set up:** on one's own phone with nothing more; elsewhere with the current
+  approval PIN, the main owner's account password, or an owner confirming with
+  their own approval PIN. Easy PINs and the sign-in PIN are refused.
+- **Forgotten:** set a new one the same way (password or an owner confirming).
+  Five wrong tries lock it for 15 minutes on every device.
+- PIN resets and unlocks stay ordinary owner actions: a reset sign-in PIN
+  approves nothing.
+
 ## Who makes a first PIN (2026-10-26)
 
 A phone that is offline or behind can show "no PIN yet" for someone who made one
@@ -361,6 +380,8 @@ book for repairs and starts the store's money ledger.
 - **Integrated QRIS:** Xendit (Bolusi shows a QR for the exact amount and Xendit
   confirms it). Built after manual payments; each settlement owner (a store or
   the franchise) opens its own Xendit account. Manual QRIS stays available.
+  Connected QRIS is the default method; while its QR is unpaid nothing else is
+  taken until the counter cancels it (agreed 2026-11-25).
 - **Refunds are owners':** the counter gives back only what a customer paid
   beyond their bill, through the method they paid with (a cancelled servisan's
   DP less its fee, an overpayment). Anything more, a lower bill or a cancelled

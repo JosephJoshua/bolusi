@@ -1,6 +1,13 @@
 // Demo data for the desktop build, which runs the counter screens over the in-memory repair demo
 // before the offline core is wired in. Names here are seeded data, not interface copy.
-import { StaffAdminError, type RegisteredDevice, type StaffDirectory } from '@bolusi/core';
+import {
+  DECISION_NEEDS_PIN,
+  RuleRefusal,
+  StaffAdminError,
+  type RegisteredDevice,
+  type StaffDirectory,
+} from '@bolusi/core';
+import type { ProofKind } from '@bolusi/device/models/approval-pin/model';
 import type { DeviceControls } from '@bolusi/device/bootstrap/devices';
 import { deviceList } from '@bolusi/device/models/devices/model';
 import type { StaffControls } from '@bolusi/device/bootstrap/staff';
@@ -10,6 +17,7 @@ import type { RepairRuntime } from '@bolusi/modules/repair/desktop';
 import type { CapturedMedia } from '@bolusi/modules/screen-kit';
 import { SIGNATURE_PX, type DrawnSignature } from '@bolusi/ui-web';
 
+import type { ApprovalPinPort, ConfirmingOwner } from './approval-pin.js';
 import { compressPhoto, type PcCapture } from './capture.js';
 import { desktopPrinting } from './print.js';
 import { PRESET_ROLE_ABILITIES, permissionsFor } from '@bolusi/modules/roles';
@@ -377,4 +385,45 @@ export function demoDevicesFor(person: DemoPerson): DeviceControls | undefined {
       );
     },
   };
+}
+
+/** The decisions the demo PC asks the approval PIN for, as the real core does for every one. */
+const DEMO_DECISIONS: ReadonlySet<string> = new Set(['cancelTicket']);
+
+/**
+ * The demo's approval PIN: any PIN but 000000 is the right one, and it proves the person's
+ * decisions for ten minutes, as a decision session does. Owners and managers only.
+ */
+export function demoApprovalPinFor(person: DemoPerson): DemoApproval | undefined {
+  if (person.role !== 'owner' && person.role !== 'storeOwner' && person.role !== 'manager') {
+    return undefined;
+  }
+  let until = 0;
+  return {
+    port: {
+      open: (pin) => {
+        if (pin === '000000') return Promise.resolve('wrong');
+        until = Date.now() + 10 * 60 * 1000;
+        return Promise.resolve('opened');
+      },
+      set: () => Promise.resolve(),
+    },
+    proofKinds: person.role === 'owner' ? ['current', 'password'] : ['current', 'owner'],
+    owners: DEMO_PEOPLE.filter(
+      (other) => other.userId !== person.userId && other.roleKey.endsWith('owner'),
+    ).map((other) => ({ userId: other.userId, name: other.name })),
+    guard: (name) => {
+      if (DEMO_DECISIONS.has(name) && Date.now() >= until) {
+        throw new RuleRefusal('PERMISSION_DENIED', DECISION_NEEDS_PIN);
+      }
+    },
+  };
+}
+
+export interface DemoApproval {
+  readonly port: ApprovalPinPort;
+  readonly proofKinds: readonly ProofKind[];
+  readonly owners: readonly ConfirmingOwner[];
+  /** Refuses a decision while no approval PIN proves the person. */
+  readonly guard: (command: string) => void;
 }

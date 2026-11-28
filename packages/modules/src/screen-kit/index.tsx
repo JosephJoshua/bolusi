@@ -5,8 +5,10 @@
 export {
   useActionRunner,
   useCapture,
+  usePlaceOpen,
   type ActionRunner,
   type DiscardGuard,
+  type PlaceOpen,
   type PlaceStep,
   type StepBack,
 } from './action.js';

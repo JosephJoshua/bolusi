@@ -8,6 +8,7 @@ import { useDataArriving } from '../arrival.js';
 import { EmptyState, type EmptyStateProps } from './EmptyState.js';
 import { ErrorState, type ErrorStateProps } from './ErrorState.js';
 import { LoadingState } from './LoadingState.js';
+import { RowDivider } from './Rows.js';
 import { UnauthorizedState, type UnauthorizedStateProps } from './UnauthorizedState.js';
 
 /**
@@ -28,12 +29,21 @@ export interface ListProps<TItem> {
   readonly keyExtractor: (item: TItem) => string;
   /** Cursor pagination (04 §6 `nextCursor`). Omit when there is no further page. */
   readonly onEndReached?: (() => void) | undefined;
+  /**
+   * The rows reach through the screen gutter (edge to edge, text on the column's edge), so the
+   * dividers between them do too.
+   */
+  readonly edgeToEdge?: boolean | undefined;
   readonly testID?: string | undefined;
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
 });
+
+function EdgeDivider(): React.JSX.Element {
+  return <RowDivider edgeToEdge />;
+}
 
 /** §7 windowing config for the 2 GB target — written once, here, so no screen has to know it. */
 const WINDOW_SIZE = 7;
@@ -44,6 +54,7 @@ export function List<TItem>({
   renderRow,
   keyExtractor,
   onEndReached,
+  edgeToEdge = false,
   testID = 'ui.list',
 }: ListProps<TItem>): React.JSX.Element {
   // Stable while `renderRow` is, so a screen re-render with the same items re-renders no rows.
@@ -84,6 +95,7 @@ export function List<TItem>({
           data={shown.items as TItem[]}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
+          ItemSeparatorComponent={edgeToEdge ? EdgeDivider : RowDivider}
           windowSize={WINDOW_SIZE}
           initialNumToRender={INITIAL_NUM_TO_RENDER}
           // Android-only win on the §0 target: detaches offscreen views from the native hierarchy.

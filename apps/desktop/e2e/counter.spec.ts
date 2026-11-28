@@ -179,6 +179,9 @@ test('an owner sees every queue beside an open servisan on a 1366×768 screen', 
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.getByTestId('desktop.person').click();
   await page.getByRole('menuitem', { name: 'Yosua Wonda' }).click();
+  // An owner opens on Perlu dicek; the board is a sidebar item away.
+  await expect(page.getByTestId('repair.desk.attention')).toBeVisible();
+  await page.getByTestId('nav.repair').click();
   await page.getByTestId('repair.desk.board.views.cancelled').click();
   await page.getByText('Lince Wakerkwa').click();
   await expect(page.getByTestId('repair.desk.ticket.customer')).toBeVisible();

@@ -3,7 +3,7 @@
 // holds the one action that opens the ticket (Ctrl+Enter). The draft is the phone's (flows.ts): the
 // same checks, the same `openTicket` input, kept across an idle lock and released only on save or
 // discard.
-import { useIntakeDraft } from '../intake-draft.js';
+import { useIntakeDraft, useOpenTicket } from '../intake-draft.js';
 import { formatMoney, formatPhone, t } from '@bolusi/i18n';
 import {
   Button,
@@ -45,7 +45,6 @@ import {
   restOfChecksOk,
   toggled,
   stepProblems,
-  toOpenTicketInput,
   claimWarrantyEnded,
   gradeQuestions,
   acceptsRupiahText,
@@ -222,6 +221,10 @@ export function IntakePage({
     control?.focus({ preventScroll: true });
   };
 
+  const openTicket = useOpenTicket(runner, now, (ticketId) => {
+    onDraftChange?.(null);
+    onOpened(ticketId);
+  });
   const save = (): void => {
     if (settings.status === 'loading' || loadedAccounts === null) return;
     if (problems.length > 0) {
@@ -229,13 +232,7 @@ export function IntakePage({
       focusProblem(problems[0]!);
       return;
     }
-    void runner
-      .run(() => runtime.run('openTicket', toOpenTicketInput(draft, options, now(), accounts)))
-      .then((opened) => {
-        if (opened === undefined) return;
-        onDraftChange?.(null);
-        onOpened(opened.ticketId);
-      });
+    openTicket(draft, options, accounts);
   };
   const saveRef = useRef(save);
   saveRef.current = save;

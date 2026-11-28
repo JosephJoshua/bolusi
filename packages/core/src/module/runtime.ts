@@ -36,12 +36,19 @@ export type ModuleRuntimeOptions = Omit<
   readonly dataHere?: DataHerePort;
   /**
    * Whether `userId` can prove an owner's or manager's decision from this device now: always on
-   * their own phone; on a shared device only with a person session the server opened after
-   * checking their PIN (device person-access.ts). The server refuses a decision from a shared device
-   * without one (server oplog/steps/decision.ts), so the device says so before saving it. Absent:
-   * no check here (tests, tools).
+   * their own phone; on a shared device only with a decision session the server opened after
+   * checking their approval PIN (device person-access.ts). The server refuses a decision from a
+   * shared device without one (server oplog/steps/decision.ts), so the device refuses it before
+   * saving, and `askDecision` asks for the approval PIN. Absent: no check here (tests, tools).
    */
-  readonly decisionProven?: (userId: string) => boolean | Promise<boolean>;
+  readonly decisionProven?: (userId: string) => boolean;
+  /**
+   * Asks `userId` for their approval PIN when a decision was refused for want of one, and resolves
+   * whether a decision session opened: the command then runs once more (`bindModulePort`). Read at
+   * call time, since the app's prompt mounts after the runtime is built. Absent or null: the
+   * refusal reaches the caller.
+   */
+  readonly askDecision?: () => ((userId: string) => Promise<boolean>) | null;
 };
 
 /** A wired build: the registries plus the two runtimes, sharing one enforcement point. */
@@ -49,6 +56,8 @@ export interface ModuleRuntime<DB> {
   readonly registry: ModuleRegistry<DB>;
   readonly commands: CommandRuntime;
   readonly queries: QueryRuntime<DB>;
+  /** `ModuleRuntimeOptions.askDecision`, for the ports bound over this runtime. */
+  readonly askDecision?: () => ((userId: string) => Promise<boolean>) | null;
 }
 
 /**
@@ -93,7 +102,7 @@ export function createModuleRuntime<DB>(
     },
   };
 
-  const { search, dataHere, decisionProven, ...commandOptions } = options;
+  const { search, dataHere, decisionProven, askDecision, ...commandOptions } = options;
   const isDecision = (permissionId: string | null | undefined): boolean =>
     permissionId != null && registry.permissions.get(permissionId)?.decision === true;
   const commands = new CommandRuntime({
@@ -143,7 +152,7 @@ export function createModuleRuntime<DB>(
             ),
           ),
       });
-      if (usedDecision && decisionProven !== undefined && !(await decisionProven(op.userId))) {
+      if (usedDecision && decisionProven !== undefined && !decisionProven(op.userId)) {
         throw PLATFORM_REFUSALS.refuse('decisionNeedsPin', { code: 'PERMISSION_DENIED' });
       }
     },
@@ -157,5 +166,10 @@ export function createModuleRuntime<DB>(
     tableReads: projectionTableReads(registry.projections, registry.operations),
   });
 
-  return { registry, commands, queries: queryRuntime };
+  return {
+    registry,
+    commands,
+    queries: queryRuntime,
+    ...(askDecision !== undefined ? { askDecision } : {}),
+  };
 }

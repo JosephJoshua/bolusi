@@ -46,6 +46,7 @@
 import {
   AUTH_PERMISSION,
   PLATFORM_PERMISSION,
+  readPersonalUserId,
   changePin as changePinFlow,
   firstPinUserOnThisDevice,
   listSignInUsers,
@@ -61,7 +62,6 @@ import {
   mayManageOwnerPin,
   resolveDisplayRoleKeys,
   readIdleLockSeconds,
-  readPersonalUserId,
   readPinAttempt,
   readStaffDirectory,
   readVerifier,
@@ -91,6 +91,7 @@ import { parseUserWorkspace, type UserWorkspace } from '../state/user-workspaces
 import type { Bootstrapped } from './bootstrap.js';
 import { readDeviceIdentity } from './notes.js';
 import type { AppRuntime } from './runtime.js';
+import type { DecisionOpening } from './person-access.js';
 
 /** What a PIN submission produced. Every arm is a state the shell already knows how to render. */
 export type PinOutcome =
@@ -166,6 +167,13 @@ export interface AppSessionSnapshot {
    * offered owner roles and other owners to manage; the server enforces the same rule.
    */
   readonly tenantAdmin: boolean;
+  /**
+   * Does the ACTIVE user make owner's or manager's decisions here (any `decision` permission)? Gates
+   * "PIN persetujuan" in Settings: the server takes their decisions from a shared device only with it.
+   */
+  readonly makesDecisions: boolean;
+  /** Is this device someone's own phone (null until read)? There it proves its person by itself. */
+  readonly personalDevice: boolean | null;
 }
 
 export interface AppSessionController {
@@ -262,6 +270,11 @@ export interface AppSessionController {
    * the timeout would reach the device's database and never reach its session.
    */
   refreshSettings(): Promise<void>;
+  /**
+   * Open a decision session for the signed-in person with their approval PIN, which only the
+   * server checks (person-access.ts `openDecision`). Without one signed in, `failed`.
+   */
+  openDecision(approvalPin: string): Promise<DecisionOpening>;
 }
 
 export interface AppSessionDeps {
@@ -336,10 +349,6 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   // session here: a lock, a switch or a sign-out ends them. If the server ends them first (expired,
   // or the person left the store), the session locks, and their PIN opens it all again.
   const person = deps.app.person;
-  const DECISION_PERMISSIONS = deps.app.registry.permissions
-    .all()
-    .filter((entry) => entry.decision === true)
-    .map((entry) => entry.id);
   shell.subscribe(() => {
     const active = shell.snapshot().locked ? null : (manager.current?.userId ?? null);
     if (person.userId() !== null && person.userId() !== active) void person.end();
@@ -352,13 +361,7 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
   const beginPerson = async (userId: string, pin: string): Promise<void> => {
     const holds = (permissionId: string) =>
       commands.enforcementPoint.hasPermission({ ...device, userId }, permissionId);
-    const shared = (await readPersonalUserId(db).catch(() => null)) === null;
-    await person.begin({
-      userId,
-      pin,
-      mayRead: holds,
-      mayDecide: shared && DECISION_PERMISSIONS.some(holds),
-    });
+    await person.begin({ userId, pin, mayRead: holds });
     // A lock or switch while the last person's store was closing found nobody to end.
     if (
       person.userId() === userId &&
@@ -380,6 +383,19 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
    * session. These only show/hide an entry; core re-checks in the flow, so a wrongly-shown entry fails
    * closed. One helper for both owner gates (unlock / reset) — CLAUDE.md §2.8.
    */
+  const decisionPermissions = deps.app.registry.permissions
+    .all()
+    .filter((entry) => entry.decision === true)
+    .map((entry) => entry.id);
+  // Whose own phone this is (null: shared). Read once; nothing about it changes while running.
+  let personalUserId: string | null | undefined;
+  void readPersonalUserId(db)
+    .then((userId) => {
+      personalUserId = userId;
+      emit();
+    })
+    .catch(() => undefined);
+
   const actingUserHolds = (permissionId: string): boolean => {
     const active = manager.current;
     if (active === null) return false;
@@ -443,6 +459,8 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
         canRenameDevice: actingUserHolds(AUTH_PERMISSION.deviceEnroll),
         canBlockDevices: actingUserHolds(AUTH_PERMISSION.deviceRevoke),
         tenantAdmin: actingUserHolds(AUTH_PERMISSION.roleManage),
+        makesDecisions: decisionPermissions.some(actingUserHolds),
+        personalDevice: personalUserId === undefined ? null : personalUserId !== null,
       };
     },
 
@@ -654,6 +672,12 @@ export async function createAppSession(deps: AppSessionDeps): Promise<AppSession
           };
         }),
       );
+    },
+
+    openDecision(approvalPin): Promise<DecisionOpening> {
+      const userId = shell.snapshot().locked ? undefined : manager.current?.userId;
+      if (userId === undefined) return Promise.resolve('failed');
+      return person.openDecision(userId, approvalPin);
     },
 
     async drainVerifiers(port): Promise<void> {

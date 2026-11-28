@@ -4,17 +4,16 @@
  * count; takes another phone has not synced yet still come off once they arrive.
  */
 import { QuantityStepper, TextInput, color, space, type, Text } from '@bolusi/ui';
-import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { useActionRunner, type DiscardGuard } from '../../screen-kit/index.js';
+import { type DiscardGuard } from '../../screen-kit/index.js';
 import { useDiscardConfirm } from '../../screen-kit/screens/discard.js';
 import { FlowScreen, type ScreenChrome } from '../../screen-kit/screens/views.js';
 import { MAX_COUNTED_QTY } from '../constants.js';
+import { useCountStock } from '../item-actions.js';
 import { ti } from '../i18n.js';
 import { MAX_NOTE } from '../operations.js';
 import type { ItemRow } from '../queries.js';
-import { useInventoryRuntime } from '../runtime.js';
 
 export interface CountStepProps {
   readonly chrome: ScreenChrome;
@@ -33,13 +32,20 @@ export function CountStep({
   onRegisterDiscardGuard,
   testID = 'inventory.countStep',
 }: CountStepProps): React.JSX.Element {
-  const runtime = useInventoryRuntime();
-  const runner = useActionRunner();
-  const recorded = part.onHand;
-  const [counted, setCounted] = useState(Math.max(0, recorded));
-  const [note, setNote] = useState('');
+  const {
+    runner,
+    counted,
+    setCounted,
+    note,
+    setNote,
+    caption,
+    dirty,
+    needsReason,
+    reasonMissing,
+    save,
+  } = useCountStock(part, onDone);
   const discard = useDiscardConfirm({
-    dirty: counted !== Math.max(0, recorded) || note !== '',
+    dirty,
     copy: {
       title: ti('inventory.discard.title'),
       message: ti('inventory.discard.message'),
@@ -49,21 +55,6 @@ export function CountStep({
     onRegisterDiscardGuard,
     testID,
   });
-  const difference = counted - recorded;
-
-  const save = (): void => {
-    void runner
-      .run(() =>
-        runtime.run('countStock', {
-          counts: [{ itemId: part.id, counted }],
-          note: note.trim() === '' ? null : note,
-        }),
-      )
-      .then((result) => {
-        if (result !== undefined) onDone();
-      });
-  };
-
   return (
     <FlowScreen
       chrome={chrome}
@@ -88,19 +79,14 @@ export function CountStep({
           max={MAX_COUNTED_QTY}
           decreaseLabel={ti('inventory.stepper.decrease')}
           increaseLabel={ti('inventory.stepper.increase')}
-          caption={`${ti('inventory.count.recorded', { count: recorded })} · ${
-            difference === 0
-              ? ti('inventory.count.same')
-              : difference > 0
-                ? ti('inventory.count.more', { count: difference })
-                : ti('inventory.count.less', { count: -difference })
-          }`}
+          caption={caption}
           testID={`${testID}.counted`}
         />
         <TextInput
-          label={ti('inventory.count.note')}
+          label={ti(needsReason ? 'inventory.count.reason' : 'inventory.count.note')}
           value={note}
           onChangeText={setNote}
+          errorMessage={reasonMissing ? ti('inventory.count.reasonMissing') : undefined}
           maxLength={MAX_NOTE}
           multiline
           testID={`${testID}.note`}

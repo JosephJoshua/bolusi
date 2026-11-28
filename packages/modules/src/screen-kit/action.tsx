@@ -1,7 +1,7 @@
 // Running a command from a screen: one at a time, with its failure kept as an error code the screen
 // can show. A local command appends and projects in milliseconds, so screens await it and stay put
 // on failure instead of navigating away from a change that never happened.
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { errorCodeOrUnexpected, refusalKeyOf } from '@bolusi/core';
 
@@ -89,4 +89,29 @@ export interface PlaceStep {
   readonly back: () => void;
   /** The place's list is still on screen beside the step (a wide tablet), so its tabs stay. */
   readonly listBeside: boolean;
+}
+
+/**
+ * Another place asking this one to show something: Perlu dicek opening a servisan's request, or
+ * Barang's stock below zero. Each ask carries a new `nonce`, so asking for the same thing twice
+ * opens it twice.
+ */
+export interface PlaceOpen<Target> {
+  readonly nonce: number;
+  readonly target: Target;
+}
+
+/** Runs `apply` once for each new ask, however often the place re-renders. */
+export function usePlaceOpen<Target>(
+  open: PlaceOpen<Target> | null | undefined,
+  apply: (target: Target) => void,
+): void {
+  const seen = useRef<number | null>(null);
+  const applyRef = useRef(apply);
+  applyRef.current = apply;
+  useEffect(() => {
+    if (open === null || open === undefined || seen.current === open.nonce) return;
+    seen.current = open.nonce;
+    applyRef.current(open.target);
+  }, [open]);
 }

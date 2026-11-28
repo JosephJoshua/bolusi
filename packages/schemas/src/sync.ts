@@ -103,6 +103,49 @@ export const zPersonSessionResponse = z.object({
 });
 export type PersonSessionResponse = z.infer<typeof zPersonSessionResponse>;
 
+/**
+ * A decision session: the proof a push needs for an owner's or manager's decision on a shared
+ * device, opened after the server checks the person's approval PIN (server auth/approval-pins.ts).
+ */
+export const zDecisionSessionRequest = z.strictObject({
+  userId: z.string().uuid(),
+  approvalPin: z.string().regex(/^[0-9]{6}$/),
+});
+export type DecisionSessionRequest = z.infer<typeof zDecisionSessionRequest>;
+
+export const zDecisionSessionResponse = z.object({
+  token: z.string().min(1),
+  expiresAt: z.number().int(),
+});
+export type DecisionSessionResponse = z.infer<typeof zDecisionSessionResponse>;
+
+/**
+ * Setting one's own approval PIN, with the proof it takes (server auth/approval-pins.ts): the current
+ * approval PIN, the account password, or an owner's approval PIN confirming it. On the person's own
+ * phone the phone is the proof, and `proof` may be left out.
+ */
+export const zSetApprovalPinRequest = z.strictObject({
+  pin: z.string().regex(/^[0-9]{6}$/),
+  proof: z
+    .discriminatedUnion('kind', [
+      z.strictObject({ kind: z.literal('current'), pin: z.string().regex(/^[0-9]{6}$/) }),
+      z.strictObject({ kind: z.literal('password'), password: z.string().min(1).max(256) }),
+      z.strictObject({
+        kind: z.literal('owner'),
+        userId: z.string().uuid(),
+        pin: z.string().regex(/^[0-9]{6}$/),
+      }),
+    ])
+    .optional(),
+});
+export type SetApprovalPinRequest = z.infer<typeof zSetApprovalPinRequest>;
+
+/** Clearing someone else's forgotten approval PIN: an owner's decision, proven by their own. */
+export const zClearApprovalPinRequest = z.strictObject({
+  pin: z.string().regex(/^[0-9]{6}$/),
+});
+export type ClearApprovalPinRequest = z.infer<typeof zClearApprovalPinRequest>;
+
 export const DEVICE_KINDS = ['member', 'system'] as const;
 export const zDeviceKind = z.enum(DEVICE_KINDS);
 export type DeviceKind = z.infer<typeof zDeviceKind>;

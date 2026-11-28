@@ -6,7 +6,6 @@
  * Drives the real `Root` with the real repair runtime over the live shell's database.
  */
 import { MONEY_PERMISSION } from '@bolusi/modules/money';
-import { REPAIR_PERMISSION } from '@bolusi/modules/repair';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('expo-secure-store', () => ({
@@ -42,6 +41,7 @@ import {
 import {
   bootFixture,
   closeClientDb,
+  COUNTER_REPAIR_PERMISSIONS,
   enrolledDevice,
   fireOn,
   homeShown,
@@ -55,7 +55,7 @@ import {
   type Fixture,
 } from './live-shell-support.js';
 
-const REPAIR_ONLY = [...NOTES_PERMISSIONS, ...Object.values(REPAIR_PERMISSION)];
+const REPAIR_ONLY = [...NOTES_PERMISSIONS, ...COUNTER_REPAIR_PERMISSIONS];
 const COUNTER = [
   ...REPAIR_ONLY,
   MONEY_PERMISSION.read,

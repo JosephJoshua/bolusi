@@ -5,7 +5,8 @@
 import { ed25519 } from '@noble/curves/ed25519.js';
 
 import { createApp } from '../../src/app.js';
-import type { ServerDeps } from '../../src/deps.js';
+import { resolveDeps, type ServerDeps } from '../../src/deps.js';
+import { sweepUnpaidCharges } from '../../src/qris/service.js';
 import { noblePasswordKdf, sha256Hex, type PasswordKdf } from '../../src/crypto/index.js';
 import { uuidv7 } from '../../src/uuidv7.js';
 import {
@@ -32,6 +33,8 @@ export interface IdentityHarness {
   readonly dummyCalls: () => number;
   /** Every `sync.poke` scope the app published, in order. */
   readonly pokes: PokeScope[];
+  /** One run of the server's own check of unpaid QRIS charges (qris/service.ts), over the same deps. */
+  sweepQris(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -53,7 +56,7 @@ export async function makeIdentityHarness(
   const pokeHub = new InProcessPokeHub();
   const pokes: PokeScope[] = [];
   pokeHub.subscribe((scope) => pokes.push(scope));
-  const app = createApp({
+  const overrides: Partial<ServerDeps> = {
     pokeHub,
     now: () => clock.now(),
     forTenant: idb.forTenant,
@@ -63,7 +66,10 @@ export async function makeIdentityHarness(
     revocationHooks: hooks,
     deliveryDispatcher: deliveries,
     ...opts.deps?.(clock),
-  });
+  };
+  const app = createApp(overrides);
+  // The sweep's own deps: the same database, clock, Xendit and poke hub as the app's.
+  const sweepDeps = resolveDeps(overrides);
   return {
     app,
     idb,
@@ -74,6 +80,7 @@ export async function makeIdentityHarness(
     kdf,
     dummyCalls,
     pokes,
+    sweepQris: () => sweepUnpaidCharges(sweepDeps),
     close: async () => {
       await deliveries.flush();
       await idb.close();

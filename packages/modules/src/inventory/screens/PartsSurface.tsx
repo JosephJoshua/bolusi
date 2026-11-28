@@ -8,10 +8,23 @@
 import { EmptyState, ListDetail, useListDetailSplit } from '@bolusi/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { DiscardGuard, PlaceStep } from '../../screen-kit/index.js';
+import {
+  usePlaceOpen,
+  type DiscardGuard,
+  type PlaceOpen,
+  type PlaceStep,
+} from '../../screen-kit/index.js';
 import type { PlaceHeader, ScreenChrome } from '../../screen-kit/screens/views.js';
+import { INVENTORY_PERMISSION } from '../constants.js';
 import { ti, type InventoryKey } from '../i18n.js';
-import { NO_CATEGORY, type CategoryRow, type ItemDetailRow, type ItemRow } from '../queries.js';
+import {
+  NO_CATEGORY,
+  type CategoryRow,
+  type ItemDetailRow,
+  type ItemRow,
+  type PartFilter,
+} from '../queries.js';
+import { useInventoryRuntime } from '../runtime.js';
 import { CategoryForm, CategoryList } from './CategoryScreens.js';
 import { CountStep } from './CountStep.js';
 import { FilterStep } from './FilterStep.js';
@@ -35,6 +48,8 @@ export interface PartsSurfaceProps {
   readonly place: PlaceHeader;
   readonly onRegisterPlaceStep?: ((step: PlaceStep | null) => void) | undefined;
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
+  /** Another place asks for one stock view (Perlu dicek: stock below zero), from the list. */
+  readonly showStock?: PlaceOpen<PartFilter> | null | undefined;
 }
 
 export function PartsSurface({
@@ -42,7 +57,9 @@ export function PartsSurface({
   place,
   onRegisterPlaceStep,
   onRegisterDiscardGuard,
+  showStock,
 }: PartsSurfaceProps): React.JSX.Element {
+  const runtime = useInventoryRuntime();
   const [view, setView] = useState<View>({ kind: 'list' });
   const [notice, setNotice] = useState<InventoryKey | null>(null);
   const [filter, setFilter] = useState<ListFilter>(NO_FILTER);
@@ -55,6 +72,17 @@ export function PartsSurface({
     },
     [onRegisterDiscardGuard],
   );
+
+  // Asked for one view: the list, narrowed to it alone, after anything half-typed is answered for.
+  usePlaceOpen(showStock, (stock) => {
+    const show = (): void => {
+      setFilter({ ...NO_FILTER, stock });
+      setView({ kind: 'list' });
+    };
+    const guard = guardRef.current;
+    if (guard === null) show();
+    else guard(show);
+  });
 
   // On a wide screen the list stays beside the open part. Changing a part (adding, editing, counting)
   // and the filters and categories are tasks of their own and keep the whole screen, so a tap on
@@ -77,8 +105,11 @@ export function PartsSurface({
         case 'part':
         case 'add':
         case 'filter':
-        case 'categories':
           leave({ kind: 'list' });
+          return;
+        case 'categories':
+          // Category setup is reached from the filters.
+          leave({ kind: 'filter' });
           return;
         case 'category':
           leave({ kind: 'categories' });
@@ -108,10 +139,6 @@ export function PartsSurface({
       filter={filter}
       onFilter={setFilter}
       onOpenFilters={() => setView({ kind: 'filter' })}
-      onManageCategories={() => {
-        setCategoryNotice(null);
-        setView({ kind: 'categories' });
-      }}
       place={place}
       onOpenPart={(itemId) => {
         if (itemId !== openId) openPart(itemId);
@@ -195,13 +222,21 @@ export function PartsSurface({
               setView({ kind: 'list' });
             }}
             onCancel={() => setView({ kind: 'list' })}
+            onManageCategories={
+              runtime.hasPermission(INVENTORY_PERMISSION.manageCategories)
+                ? () => {
+                    setCategoryNotice(null);
+                    setView({ kind: 'categories' });
+                  }
+                : undefined
+            }
           />
         );
       case 'categories':
         return (
           <CategoryList
             chrome={chrome}
-            onBack={() => setView({ kind: 'list' })}
+            onBack={() => setView({ kind: 'filter' })}
             onOpen={(category) => setView({ kind: 'category', category })}
             onAdd={() => setView({ kind: 'category' })}
             notice={categoryNotice}
