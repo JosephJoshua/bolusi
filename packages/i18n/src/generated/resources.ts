@@ -112,7 +112,12 @@ const source = {
         UNKNOWN_TYPE: 'Perbarui aplikasi supaya bisa dikirim.',
       },
       account: { menu: 'Menu akun', switchUser: 'Ganti pengguna' },
-      nav: { main: 'Menu utama', collapse: 'Ciutkan menu', expand: 'Lebarkan menu' },
+      nav: {
+        main: 'Menu utama',
+        collapse: 'Ciutkan menu',
+        expand: 'Lebarkan menu',
+        trail: 'Lokasi halaman',
+      },
       update: {
         ready: 'Versi baru siap',
         later: 'Terpasang sendiri saat aplikasi ditutup.',
@@ -624,6 +629,8 @@ const source = {
           stockBuyHint: 'Pesan ke supplier dan terima barangnya',
           stockTransfer: 'Kirim sparepart antar toko',
           stockTransferHint: 'Kirim ke toko lain dan terima kiriman',
+          stockCost: 'Lihat harga beli',
+          stockCostHint: 'Harga beli dan modal rata-rata part',
           notes: 'Catatan',
           notesHint: 'Tulis dan arsipkan catatan toko',
           syncProblems: 'Masalah sinkron',
@@ -645,6 +652,7 @@ const source = {
         blockedSection: 'Diblokir',
         block: 'Blokir',
         blockTitle: 'Blokir {name}?',
+        blockLabel: 'Blokir {name}',
         blockBody:
           'Terakhir disinkronkan {time}. Saat terhubung lagi, semua datanya dihapus, termasuk perubahan yang belum terkirim.',
         blockBodyNever: 'Belum pernah disinkronkan. Saat terhubung, semua datanya dihapus.',
@@ -695,7 +703,8 @@ const source = {
         explain: 'Perubahan ini tidak berlaku. Cek keterangan di tiap perubahan.',
         opMeta: '{opType} · {time}',
         opMetaSubject: '{opType} · {subject} · {time}',
-        technicalDetails: 'Detail teknis',
+        technicalDetails: 'Lihat detail untuk laporan',
+        technicalHide: 'Tutup detail',
         noReason: 'Server tidak mengirim keterangan.',
         more: 'Tampilkan {count} lainnya',
         handled: 'Tandai sudah dicek',
@@ -803,6 +812,8 @@ const source = {
         conflictNotFound: 'Data bentrok ini tidak ditemukan.',
         notYourPreference: 'Bahasa hanya bisa diubah oleh pemilik akunnya.',
         idTaken: 'Data ini belum bisa disimpan. Buat ulang, ya.',
+        decisionNeedsPin:
+          'Ini perlu PIN yang dicek saat online. Coba lagi saat ada internet, atau minta persetujuan lewat HP pemilik.',
       },
     },
     push: {
@@ -950,7 +961,12 @@ export const resources = {
           UNKNOWN_TYPE: 'Update the app so this can be sent.',
         },
         account: { menu: 'Account menu', switchUser: 'Switch user' },
-        nav: { main: 'Main menu', collapse: 'Collapse menu', expand: 'Expand menu' },
+        nav: {
+          main: 'Main menu',
+          collapse: 'Collapse menu',
+          expand: 'Expand menu',
+          trail: 'You are here',
+        },
         update: {
           ready: 'New version ready',
           later: 'Installs by itself when the app closes.',
@@ -1465,6 +1481,8 @@ export const resources = {
             stockBuyHint: 'Order from suppliers and receive the parts',
             stockTransfer: 'Send parts between stores',
             stockTransferHint: 'Send to another store and receive transfers',
+            stockCost: 'See buy prices',
+            stockCostHint: 'Buy prices and the average cost of parts',
             notes: 'Notes',
             notesHint: 'Write and archive store notes',
             syncProblems: 'Sync problems',
@@ -1486,6 +1504,7 @@ export const resources = {
           blockedSection: 'Blocked',
           block: 'Block',
           blockTitle: 'Block {name}?',
+          blockLabel: 'Block {name}',
           blockBody:
             'Last synced {time}. When it connects again, all its data is erased, including changes not yet sent.',
           blockBodyNever: 'Never synced. When it connects, all its data is erased.',
@@ -1539,7 +1558,8 @@ export const resources = {
           explain: 'These changes didn’t count. Each one says why.',
           opMeta: '{opType} · {time}',
           opMetaSubject: '{opType} · {subject} · {time}',
-          technicalDetails: 'Technical details',
+          technicalDetails: 'Show details for support',
+          technicalHide: 'Hide details',
           noReason: 'The server sent no details.',
           more: 'Show {count} more',
           handled: 'Mark as checked',
@@ -1662,6 +1682,8 @@ export const resources = {
           conflictNotFound: 'This conflict wasn’t found.',
           notYourPreference: 'Only the account’s owner can change its language.',
           idTaken: 'This couldn’t be saved. Create it again.',
+          decisionNeedsPin:
+            'This needs your PIN checked online. Try again when you have internet, or ask for approval on the owner’s phone.',
         },
       },
       push: {

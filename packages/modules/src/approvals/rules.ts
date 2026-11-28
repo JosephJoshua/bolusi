@@ -155,9 +155,10 @@ export function createApprovalRules(kinds: ApprovalKinds) {
         details: { field: 'target', issue: 'not what the input is about' },
       });
     }
+    // Asking is not deciding, so neither check needs a PIN: a manager asks offline at the counter.
     const mayAsk =
-      (await ctx.holdsPermission(op.userId, kind.askPermission)) ||
-      (await ctx.holdsPermission(op.userId, kind.permission));
+      (await ctx.holdsPermission(op.userId, kind.askPermission, { uses: false })) ||
+      (await ctx.holdsPermission(op.userId, kind.permission, { uses: false }));
     if (!mayAsk) {
       throw refuse('cannotAsk', {
         code: 'PERMISSION_DENIED',

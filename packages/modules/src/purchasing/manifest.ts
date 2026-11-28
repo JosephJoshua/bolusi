@@ -29,6 +29,7 @@ import {
   listOrdersQuery,
   listSuppliersQuery,
   nextOrderNumberQuery,
+  orderCostsQuery,
   orderItemsQuery,
 } from './queries.js';
 import { PURCHASING_REFUSALS } from './rules.js';
@@ -77,6 +78,7 @@ export const purchasingModuleManifest = {
     listSuppliers: listSuppliersQuery,
     listOrders: listOrdersQuery,
     getOrder: getOrderQuery,
+    orderCosts: orderCostsQuery,
     orderItems: orderItemsQuery,
     nextOrderNumber: nextOrderNumberQuery,
   },

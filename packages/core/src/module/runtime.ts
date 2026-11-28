@@ -18,6 +18,7 @@ import { QueryRuntime, type DataHerePort } from '../query/execute.js';
 import { projectionTableReads } from '../sync/person-store.js';
 import type { ProjectionDb } from '../projection/manifest.js';
 import type { SearchIndexCache } from '../search/live-index.js';
+import { PLATFORM_REFUSALS } from '../platform/rules.js';
 import type { ModuleRegistry } from './registry.js';
 
 /**
@@ -33,6 +34,14 @@ export type ModuleRuntimeOptions = Omit<
   readonly search?: SearchIndexCache;
   /** Which reads' data is on this device (`QueryRuntimeOptions.dataHere`). Devices pass one. */
   readonly dataHere?: DataHerePort;
+  /**
+   * Whether `userId` can prove an owner's or manager's decision from this device now: always on
+   * their own phone; on a shared device only with a person session the server opened after
+   * checking their PIN (device person-access.ts). The server refuses a decision from a shared device
+   * without one (server oplog/steps/decision.ts), so the device says so before saving it. Absent:
+   * no check here (tests, tools).
+   */
+  readonly decisionProven?: (userId: string) => boolean | Promise<boolean>;
 };
 
 /** A wired build: the registries plus the two runtimes, sharing one enforcement point. */
@@ -84,39 +93,60 @@ export function createModuleRuntime<DB>(
     },
   };
 
-  const { search, dataHere, ...commandOptions } = options;
+  const { search, dataHere, decisionProven, ...commandOptions } = options;
+  const isDecision = (permissionId: string | null | undefined): boolean =>
+    permissionId != null && registry.permissions.get(permissionId)?.decision === true;
   const commands = new CommandRuntime({
     ...commandOptions,
     operations: registry.operations,
     queryExecutor,
     // Every op a command produces passes its type's rule before it is saved, judged against this
     // device's projection and directory: the same rule the server runs on push (op-rules.ts).
-    checkOp: (op) =>
-      registry.checkOpRule(op, {
+    // A decision (a permission declared `decision`) the author uses, as the op's own permission or
+    // through its rule, needs their proof on a shared device: the same test the server makes.
+    checkOp: async (op) => {
+      let usedDecision = isDecision(registry.operations.permissionFor(op.type));
+      const used = (userId: string, permissionId: string | null, held: boolean): boolean => {
+        if (held && userId === op.userId && isDecision(permissionId)) usedDecision = true;
+        return held;
+      };
+      await registry.checkOpRule(op, {
         db,
-        holdsPermission: (userId, permissionId) =>
+        holdsPermission: (userId, permissionId, check) =>
           Promise.resolve(
-            options.evaluator.hasPermission({
+            used(
               userId,
-              tenantId: op.tenantId,
-              storeId: op.storeId,
-              permissionId,
-            }).allowed,
-          ),
-        sha256: (data) => options.crypto.sha256(data),
-        withinLimit: (userId, permissionId, amount) =>
-          Promise.resolve(
-            allowanceCovers(
-              options.evaluator.allowance({
+              check?.uses === false ? null : permissionId,
+              options.evaluator.hasPermission({
                 userId,
                 tenantId: op.tenantId,
                 storeId: op.storeId,
                 permissionId,
-              }),
-              amount,
+              }).allowed,
             ),
           ),
-      }),
+        sha256: (data) => options.crypto.sha256(data),
+        withinLimit: (userId, permissionId, amount) =>
+          Promise.resolve(
+            used(
+              userId,
+              permissionId,
+              allowanceCovers(
+                options.evaluator.allowance({
+                  userId,
+                  tenantId: op.tenantId,
+                  storeId: op.storeId,
+                  permissionId,
+                }),
+                amount,
+              ),
+            ),
+          ),
+      });
+      if (usedDecision && decisionProven !== undefined && !(await decisionProven(op.userId))) {
+        throw PLATFORM_REFUSALS.refuse('decisionNeedsPin', { code: 'PERMISSION_DENIED' });
+      }
+    },
   });
 
   queryRuntime = new QueryRuntime<DB>({

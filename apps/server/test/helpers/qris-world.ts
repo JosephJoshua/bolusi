@@ -12,6 +12,7 @@ import type { XenditPort, XenditQrPayment } from '../../src/qris/xendit.js';
 import { XenditRefusal } from '../../src/qris/xendit.js';
 import { uuidv7 } from '../../src/uuidv7.js';
 import {
+  asPerson,
   makeIdentityHarness,
   provision,
   seedDevice,
@@ -215,17 +216,22 @@ export async function makeQrisWorld<X extends XenditPort>(options: {
 
 /** The calls a test makes, against whichever world `current` returns now. */
 export function qrisCalls(current: () => World<XenditPort>, secretKey = TEST_KEY) {
-  const call = function call(
+  const call = async function call(
     method: string,
     path: string,
-    options: { token?: string; as?: string; body?: unknown } = {},
+    options: { token?: string; as?: string; body?: unknown; proven?: boolean } = {},
   ): Promise<Response> {
+    const token = options.token ?? current().device;
+    const as = options.as ?? current().cashierId;
     return Promise.resolve(
       current().h.app.request(`${BASE}${path}`, {
         method,
         headers: {
-          Authorization: `Bearer ${options.token ?? current().device}`,
-          'X-Acting-User': options.as ?? current().cashierId,
+          Authorization: `Bearer ${token}`,
+          // The counter PC is shared: the server checked this person's PIN there.
+          ...(options.proven === false
+            ? { 'X-Acting-User': as }
+            : await asPerson(current().h, token, as)),
           ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
         },
         ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),

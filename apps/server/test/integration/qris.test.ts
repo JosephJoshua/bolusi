@@ -96,7 +96,7 @@ describe('connecting a QRIS account', () => {
       ['GET', '/v1/money/qris/accounts'],
       ['GET', `/v1/money/qris/charges/${stranger}`],
     ] as const) {
-      const response = await call(method, path, { as: stranger });
+      const response = await call(method, path, { as: stranger, proven: false });
       expect(response.status).toBe(403);
       expect(await errorCode(response)).toBe('ACTING_USER_INVALID');
     }

@@ -4,7 +4,7 @@
 //
 // Whether the user may take or put back now is the owning module's call (the servisan pane knows
 // its state); the stock rules check it again on save and on the server.
-import { t } from '@bolusi/i18n';
+import { formatMoney, t } from '@bolusi/i18n';
 import { Button, SearchField, Section, OverflowText } from '@bolusi/ui-web';
 import { Check, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
@@ -19,6 +19,7 @@ import {
   overStockHint,
   usePutBack,
   useTakePart,
+  useUseCost,
   useUsedParts,
   type PartUse,
 } from '../take-part.js';
@@ -62,84 +63,155 @@ export function UsedPartsSection({
     onDone(message);
   };
   return (
-    <Section
-      title={ti('inventory.use.title')}
-      action={
-        takeable ? (
-          <Button
-            label={ti('inventory.use.take')}
-            aria-label={ti('inventory.use.takeTitle')}
-            variant="text"
-            size="sm"
-            className="-my-1"
-            onClick={() => setTask({ kind: 'take' })}
-            data-testid={`${testId}.take`}
+    <>
+      <Section
+        title={ti('inventory.use.title')}
+        action={
+          takeable ? (
+            <Button
+              label={ti('inventory.use.take')}
+              aria-label={ti('inventory.use.takeTitle')}
+              variant="text"
+              size="sm"
+              className="-my-1"
+              onClick={() => setTask({ kind: 'take' })}
+              data-testid={`${testId}.take`}
+            />
+          ) : undefined
+        }
+        testId={testId}
+      >
+        <QueryPanel query={query} onRetry={retry}>
+          {() =>
+            parts.length === 0 ? (
+              <p className="text-body text-text-muted">{ti('inventory.use.none')}</p>
+            ) : (
+              <ul className="flex flex-col divide-y divide-border">
+                {parts.map((part) => (
+                  <li
+                    key={part.itemId}
+                    className="flex items-center gap-4 py-2"
+                    data-testid={`${testId}.part.${part.itemId}`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-body font-semibold text-text">{part.name}</p>
+                      <p className="text-small text-text-muted">
+                        {ti('inventory.use.out', { count: part.out })}
+                      </p>
+                      {flagUnreturned ? (
+                        <p className="mt-1 flex items-center gap-1 text-small font-semibold text-warning">
+                          <TriangleAlert size={14} aria-hidden />
+                          {ti('inventory.use.notReturned')}
+                        </p>
+                      ) : null}
+                    </div>
+                    {editable ? (
+                      <Button
+                        label={ti('inventory.use.putBack')}
+                        aria-label={`${ti('inventory.use.putBack')} ${part.name}`}
+                        variant="text"
+                        size="sm"
+                        onClick={() => setTask({ kind: 'putBack', part })}
+                        data-testid={`${testId}.putBack.${part.itemId}`}
+                      />
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )
+          }
+        </QueryPanel>
+        {task.kind === 'take' ? (
+          <TakePartDialog
+            use={use}
+            device={device}
+            onClose={() => setTask({ kind: 'none' })}
+            onDone={() => finish(ti('inventory.done.taken'))}
           />
-        ) : undefined
-      }
-      testId={testId}
-    >
+        ) : task.kind === 'putBack' ? (
+          <PutBackDialog
+            use={use}
+            part={task.part}
+            onClose={() => setTask({ kind: 'none' })}
+            onDone={() => finish(ti('inventory.done.putBack'))}
+          />
+        ) : null}
+      </Section>
+      {parts.length === 0 ? null : <UseCostSection use={use} testId={`${testId}.cost`} />}
+    </>
+  );
+}
+
+/** What the parts on a use cost the store, for people who may see buy prices. */
+function UseCostSection({
+  use,
+  testId,
+}: {
+  readonly use: PartUse;
+  readonly testId: string;
+}): React.JSX.Element | null {
+  const { shown, query, total, unpriced, retry } = useUseCost(use);
+  if (!shown) return null;
+  return (
+    <Section title={ti('inventory.useCost.title')} testId={testId}>
       <QueryPanel query={query} onRetry={retry}>
-        {() =>
-          parts.length === 0 ? (
-            <p className="text-body text-text-muted">{ti('inventory.use.none')}</p>
-          ) : (
+        {(rows) => (
+          <div>
             <ul className="flex flex-col divide-y divide-border">
-              {parts.map((part) => (
+              {rows.map((row) => (
                 <li
-                  key={part.itemId}
+                  key={row.itemId}
                   className="flex items-center gap-4 py-2"
-                  data-testid={`${testId}.part.${part.itemId}`}
+                  data-testid={`${testId}.${row.itemId}`}
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-body font-semibold text-text">{part.name}</p>
-                    <p className="text-small text-text-muted">
-                      {ti('inventory.use.out', { count: part.out })}
+                    <p className="text-body text-text">{row.name}</p>
+                    <p className="tabular text-small text-text-muted">
+                      {ti('inventory.useCost.line', { count: row.out })}
                     </p>
-                    {flagUnreturned ? (
-                      <p className="mt-1 flex items-center gap-1 text-small font-semibold text-warning">
-                        <TriangleAlert size={14} aria-hidden />
-                        {ti('inventory.use.notReturned')}
-                      </p>
-                    ) : null}
                   </div>
-                  {editable ? (
-                    <Button
-                      label={ti('inventory.use.putBack')}
-                      aria-label={`${ti('inventory.use.putBack')} ${part.name}`}
-                      variant="text"
-                      size="sm"
-                      onClick={() => setTask({ kind: 'putBack', part })}
-                      data-testid={`${testId}.putBack.${part.itemId}`}
-                    />
-                  ) : null}
+                  {row.cost === null ? (
+                    <span className="shrink-0 text-body text-text-muted">
+                      {ti('inventory.useCost.missing')}
+                    </span>
+                  ) : (
+                    <span className="tabular shrink-0 text-right text-body font-semibold text-text">
+                      {formatMoney(row.cost)}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
-          )
-        }
+            {rows.length > 1 && unpriced === 0 ? (
+              <div
+                className="flex items-baseline justify-between gap-4 border-t border-border pt-3"
+                data-testid={`${testId}.total`}
+              >
+                <span className="text-body font-semibold text-text">
+                  {ti('inventory.useCost.total')}
+                </span>
+                <span className="tabular text-body font-semibold text-text">
+                  {formatMoney(total)}
+                </span>
+              </div>
+            ) : null}
+            {unpriced === 0 ? null : (
+              <p className="pt-2 text-small text-warning" data-testid={`${testId}.unpriced`}>
+                {ti('inventory.useCost.unpriced', { count: unpriced })}
+              </p>
+            )}
+          </div>
+        )}
       </QueryPanel>
-      {task.kind === 'take' ? (
-        <TakePartDialog
-          use={use}
-          device={device}
-          onClose={() => setTask({ kind: 'none' })}
-          onDone={() => finish(ti('inventory.done.taken'))}
-        />
-      ) : task.kind === 'putBack' ? (
-        <PutBackDialog
-          use={use}
-          part={task.part}
-          onClose={() => setTask({ kind: 'none' })}
-          onDone={() => finish(ti('inventory.done.putBack'))}
-        />
-      ) : null}
     </Section>
   );
 }
 
-/** Pick a part, say how many, take it. Stock may go below zero; the owner sees it flagged. */
-function TakePartDialog({
+/**
+ * Pick a part, say how many, take it. Stock may go below zero; the owner sees it flagged. Exported
+ * for a use that offers taking elsewhere (a servisan that went home keeps it under "Lainnya").
+ */
+export function TakePartDialog({
   use,
   device,
   onClose,

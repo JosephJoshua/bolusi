@@ -70,7 +70,7 @@ export function createQrisRouter(deps: ServerDeps) {
   // surface's ACTING_USER_INVALID, not a server error.
   const acting = (c: Context<AppEnv>): Promise<ActingUser> =>
     deps
-      .forTenant(tenantIdFromContext(c), (db) => resolveActingUser(c, db))
+      .forTenant(tenantIdFromContext(c), (db) => resolveActingUser(c, db, deps.now()))
       .catch((error: unknown) => {
         if (error instanceof IdentityError) throw new ApiError(error.code, error.details);
         throw error;

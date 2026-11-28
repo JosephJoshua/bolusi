@@ -54,7 +54,8 @@ async function switchTo(name: string): Promise<void> {
 }
 
 async function openParts(): Promise<void> {
-  fireEvent.click(await screen.findByRole('button', { name: 'Barang' }));
+  // Barang's stock: a sidebar item of its own, or "Stok" under Barang for whoever also buys.
+  fireEvent.click(await screen.findByTestId('nav.parts'));
   await screen.findByTestId('inventory.desk.table');
 }
 
@@ -75,9 +76,16 @@ describe('parts on the PC', () => {
     await openParts();
     expect(byTestId('inventory.desk.add')).toBeTruthy();
     expect(screen.getByTestId('inventory.desk.views.belowZero').textContent).toMatch(/Stok minus/);
+    // An owner also buys: the stock is "Stok" under Barang, named in the trail and the sidebar.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Stok');
+    expect(byTestId('page.crumb.items').textContent).toBe('Barang');
+    expect(within(byTestId('nav.sidebar')).getByRole('group', { name: 'Barang' })).toBeTruthy();
 
     await switchTo('Budi Santoso');
     await openParts();
+    // A technician does not buy: Barang is one page, with no trail.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Barang');
+    expect(screen.queryByTestId('page.crumb.items')).toBeNull();
     expect(screen.queryByTestId('inventory.desk.add')).toBeNull();
     expect(screen.queryByTestId('inventory.desk.views.belowZero')).toBeNull();
     expect(screen.getByTestId('inventory.desk.views.outOfStock')).toBeTruthy();
@@ -219,6 +227,22 @@ describe('parts on the PC', () => {
     fireEvent.click(await screen.findByText('Petrus Yikwa'));
     await screen.findByTestId('repair.desk.ticket.customer');
     expect(screen.queryByTestId('repair.desk.ticket.parts.take')).toBeNull();
+  });
+
+  it('keeps Ambil sparepart under Lainnya once the phone went home: a correction, not work', async () => {
+    await renderApp(OWNER);
+    const tab = await screen.findByTestId('repair.desk.board.views.returned');
+    fireEvent.mouseDown(tab, { button: 0 });
+    fireEvent.click(tab);
+    fireEvent.click(await screen.findByText('Yakob Tabuni'));
+    await screen.findByTestId('repair.desk.ticket.customer');
+    expect(screen.queryByTestId('repair.desk.ticket.parts.take')).toBeNull();
+    fireEvent.pointerDown(await screen.findByTestId('repair.desk.ticket.more'), {
+      button: 0,
+      pointerType: 'mouse',
+    });
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Ambil sparepart' }));
+    await screen.findByTestId('inventory.desk.take');
   });
 
   it('offers no Ambil sparepart on a cancelled servisan, even to an owner', async () => {

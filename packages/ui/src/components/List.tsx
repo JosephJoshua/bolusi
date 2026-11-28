@@ -4,6 +4,7 @@
 import { useCallback, type ReactElement } from 'react';
 import { FlatList, StyleSheet, View, type ListRenderItem } from 'react-native';
 
+import { useDataArriving } from '../arrival.js';
 import { EmptyState, type EmptyStateProps } from './EmptyState.js';
 import { ErrorState, type ErrorStateProps } from './ErrorState.js';
 import { LoadingState } from './LoadingState.js';
@@ -47,7 +48,10 @@ export function List<TItem>({
 }: ListProps<TItem>): React.JSX.Element {
   // Stable while `renderRow` is, so a screen re-render with the same items re-renders no rows.
   const renderItem = useCallback<ListRenderItem<TItem>>(({ item }) => renderRow(item), [renderRow]);
-  switch (state.kind) {
+  // A new device's first sync is still bringing the rows: an empty list then is loading, not news.
+  const arriving = useDataArriving();
+  const shown: ListState<TItem> = state.kind === 'empty' && arriving ? { kind: 'loading' } : state;
+  switch (shown.kind) {
     case 'loading':
       return (
         <View testID={`${testID}.loading`} style={styles.root}>
@@ -57,19 +61,19 @@ export function List<TItem>({
     case 'empty':
       return (
         <View testID={`${testID}.empty`} style={styles.root}>
-          <EmptyState {...state.empty} />
+          <EmptyState {...shown.empty} />
         </View>
       );
     case 'error':
       return (
         <View testID={`${testID}.error`} style={styles.root}>
-          <ErrorState {...state.error} />
+          <ErrorState {...shown.error} />
         </View>
       );
     case 'unauthorized':
       return (
         <View testID={`${testID}.unauthorized`} style={styles.root}>
-          <UnauthorizedState {...state.unauthorized} />
+          <UnauthorizedState {...shown.unauthorized} />
         </View>
       );
     case 'ready':
@@ -77,7 +81,7 @@ export function List<TItem>({
         <FlatList
           testID={testID}
           style={styles.root}
-          data={state.items as TItem[]}
+          data={shown.items as TItem[]}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           windowSize={WINDOW_SIZE}

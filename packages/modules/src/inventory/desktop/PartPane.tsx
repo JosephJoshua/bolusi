@@ -26,6 +26,7 @@ import { movementTitle, signedQty, stockText } from '../labels.js';
 import { itemDetails, type ItemDetailRow } from '../queries.js';
 import { useInventoryQuery, useInventoryRuntime } from '../runtime.js';
 import { CountDialog, PartDialog } from './dialogs.js';
+import { PartCostSection } from './PartCost.js';
 
 export interface PartPaneProps {
   readonly itemId: string;
@@ -46,6 +47,7 @@ export function PartPane({
   const runtime = useInventoryRuntime();
   const canManage = runtime.hasPermission(INVENTORY_PERMISSION.manageItems);
   const canCount = runtime.hasPermission(INVENTORY_PERMISSION.count);
+  const seesCosts = runtime.hasPermission(INVENTORY_PERMISSION.readCost);
   const runner = useActionRunner();
   const [reloadNonce, setReloadNonce] = useState(0);
   const [task, setTask] = useState<Task>('none');
@@ -187,6 +189,8 @@ export function PartPane({
     const facts = itemFacts(row);
     return (
       <>
+        {seesCosts ? <PartCostSection itemId={row.id} /> : null}
+
         {facts.length === 0 && !canManage ? null : (
           <Section
             title={ti('inventory.detail.title')}

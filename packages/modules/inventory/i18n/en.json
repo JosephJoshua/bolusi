@@ -12,7 +12,8 @@
     "transferSent": "Transfer sent",
     "transferReceived": "Transfer received",
     "transferCancelled": "Transfer cancelled",
-    "transferSettled": "Transfer settled"
+    "transferSettled": "Transfer settled",
+    "stockCosted": "Buy price recorded"
   },
   "refusal": {
     "alreadyRecorded": "This was already recorded.",
@@ -33,7 +34,9 @@
     "nothingToSettle": "That is more than is still missing.",
     "reasonRequired": "Write the reason first.",
     "numberNotThisDevice": "This transfer number is not from this device.",
-    "numberUsed": "This transfer number is already used."
+    "numberUsed": "This transfer number is already used.",
+    "notReceived": "A buy price only goes on stock that arrived.",
+    "costNotYours": "You can’t change this buy price."
   },
   "list": {
     "title": "Items",
@@ -56,6 +59,9 @@
     "filterCount": "Filter ({count})",
     "scan": "Scan",
     "pickPart": "Pick an item to see its details."
+  },
+  "place": {
+    "stock": "Stock"
   },
   "filter": {
     "active": "All",
@@ -235,7 +241,10 @@
     "moveDown": "Move down",
     "removeOption": "Remove choice {option}",
     "addToName": "Add {label} to the name",
-    "noOptions": "No choices yet. New ones can also be typed when filling in an item."
+    "noOptions": "No choices yet. New ones can also be typed when filling in an item.",
+    "kindLabel": "Field type",
+    "formatHintPc": "Add to the name:",
+    "optionsPlaceholder": "Type a choice, then Enter"
   },
   "desk": {
     "col": {
@@ -254,5 +263,181 @@
     },
     "results": "{count} items",
     "closePart": "Close item"
+  },
+  "cost": {
+    "title": "Buy price",
+    "average": "Average cost",
+    "perPiece": "{amount} each",
+    "noAverage": "No buy price yet",
+    "unpriced": "{count} deliveries have no buy price yet",
+    "receipt": "{qty} pcs · {label}",
+    "receiptNoLabel": "{qty} pcs",
+    "missing": "Not filled in"
+  },
+  "bulk": {
+    "open": "Add many",
+    "title": "Add many items",
+    "col": {
+      "name": "Name",
+      "fits": "Fits phones",
+      "code": "Code",
+      "barcode": "Barcode",
+      "tags": "Labels",
+      "stock": "Stock"
+    },
+    "problem": {
+      "tooLong": "At most {max} characters.",
+      "tooMany": "At most {max}.",
+      "phoneUnknown": "{phones} is not in the phone list yet, so it is saved as typed.",
+      "phoneNear": "{phones} is not in the phone list yet. Did you mean {near}?",
+      "wholeNumber": "Write a whole number, such as 5.",
+      "nameOrFields": "Fill in the fields or type a name first."
+    },
+    "saved": "{count} items saved.",
+    "left": "{count} rows not saved yet; check the ones marked red.",
+    "blocked": "{count} incomplete",
+    "save": "Save {count} items",
+    "saving": "Saving {done} of {total}…",
+    "hint": {
+      "name": "Leave empty for the automatic name: {format}",
+      "fits": "Separate with commas, such as Redmi Note 10, Redmi Note 10S",
+      "list": "Separate with commas",
+      "sheet": "Type straight in, or copy from Excel and paste with Ctrl+V. Column headings are recognised."
+    },
+    "row": "Row {n}",
+    "deleteRow": "Delete row",
+    "where": "Row {n}, {column}",
+    "switchTitle": "Change category?",
+    "switchMessage": "Rows not saved yet will be removed.",
+    "switchConfirm": "Change",
+    "leaveMessage": "Rows not saved yet will be lost."
+  },
+  "transfer": {
+    "section": "Transfers",
+    "list": {
+      "new": "Send to another store",
+      "open": "Open",
+      "all": "All",
+      "emptyOpen": "No open transfers.",
+      "emptyAll": "No transfers between stores yet.",
+      "to": "To {store}",
+      "from": "From {store}",
+      "parts": "{count} parts",
+      "progress": "{arrived} of {sent} arrived",
+      "pick": "Pick a transfer to see it.",
+      "otherStore": "Another store"
+    },
+    "stage": {
+      "sent": "On the way",
+      "partial": "Partly arrived",
+      "done": "Done",
+      "cancelled": "Cancelled",
+      "over": "Needs a check"
+    },
+    "detail": {
+      "route": "{from} to {to}",
+      "sent": "Sent {date} by {name}",
+      "sentAt": "Sent {date}",
+      "cancelled": "Cancelled {date} by {name}",
+      "lines": "Parts",
+      "arrivedOf": "{arrived} of {sent} arrived",
+      "missing": "{count} not arrived",
+      "extra": "{count} extra",
+      "notSent": "Never left",
+      "overHint": "More is recorded as arrived than was sent. The sending store’s owner needs to settle it.",
+      "missingHint": "The sending store’s owner can put what has not arrived back into stock or write it off.",
+      "history": "History",
+      "arrival": "Received",
+      "line": "{name} × {qty}"
+    },
+    "outcome": {
+      "back": "Back in stock",
+      "lost": "Written off",
+      "found": "Arrived after all",
+      "arrived": "Arrived after all"
+    },
+    "action": {
+      "receive": "Receive",
+      "settle": "Settle",
+      "cancel": "Cancel transfer"
+    },
+    "cancel": {
+      "title": "Cancel this transfer?",
+      "message": "Every part goes back into this store’s stock."
+    },
+    "form": {
+      "title": "Send parts",
+      "store": "To store",
+      "noStores": "This business has no other store yet.",
+      "lines": "Parts",
+      "addPart": "Add part",
+      "noParts": "No parts yet.",
+      "remove": "Remove",
+      "qty": "Quantity",
+      "note": "Note (optional)",
+      "send": "Send",
+      "pickFirst": "Pick the store and the parts first.",
+      "stockLeaves": "This store’s stock goes down at once."
+    },
+    "receive": {
+      "title": "Receive transfer",
+      "hint": "Enter what actually arrived.",
+      "arrived": "Arrived",
+      "save": "Add to stock",
+      "nothing": "Enter what arrived first.",
+      "note": "Note (optional)"
+    },
+    "settle": {
+      "title": "Settle transfer",
+      "hintMissing": "For what has not arrived: put it back into this store’s stock or write it off.",
+      "hintOver": "What the other store recorded as arrived comes off this store’s stock.",
+      "back": "Back to stock",
+      "lost": "Lost",
+      "arrived": "Arrived after all",
+      "open": "{count} not arrived",
+      "over": "{count} extra",
+      "reason": "Why it was lost",
+      "save": "Save",
+      "nothing": "Enter a quantity first.",
+      "tooMany": "More than has not arrived.",
+      "needReason": "Write the reason first."
+    },
+    "done": {
+      "sent": "Parts sent.",
+      "received": "Added to stock.",
+      "cancelled": "Transfer cancelled.",
+      "settled": "Transfer settled."
+    },
+    "discard": {
+      "title": "Leave without sending?",
+      "message": "What you filled in will be lost."
+    },
+    "desk": {
+      "col": {
+        "number": "Number",
+        "store": "Store",
+        "progress": "Arrived",
+        "stage": "Status",
+        "date": "Date"
+      },
+      "close": "Close transfer"
+    }
+  },
+  "pick": {
+    "title": "Pick a part",
+    "searchHint": "Search name or code",
+    "clear": "Clear search",
+    "scan": "Scan",
+    "empty": "No items on the list yet.",
+    "noMatches": "No match. Try another word.",
+    "stock": "Stock {count}",
+    "onList": "Already picked"
+  },
+  "useCost": {
+    "title": "Parts cost",
+    "line": "{count} pcs",
+    "missing": "No price yet",
+    "total": "Total cost",
+    "unpriced": "{count} parts have no buy price yet"
   }
 }

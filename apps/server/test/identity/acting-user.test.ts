@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import { PERM, PERMISSION_BY_ID, PERMISSIONS } from '../../src/identity/permissions.js';
 import { uuidv7 } from '../../src/uuidv7.js';
 import {
+  asPerson,
   makeIdentityHarness,
   provision,
   seedControlSession,
@@ -33,9 +34,15 @@ async function setup() {
   return { p, storeId, device };
 }
 
-async function getDevices(token: string, actingUser?: string): Promise<number> {
+/** `proven`: with the person session a shared device needs (auth/acting-user.ts). */
+async function getDevices(token: string, actingUser?: string, proven = false): Promise<number> {
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
-  if (actingUser !== undefined) headers['X-Acting-User'] = actingUser;
+  if (actingUser !== undefined) {
+    Object.assign(
+      headers,
+      proven ? await asPerson(h, token, actingUser) : { 'X-Acting-User': actingUser },
+    );
+  }
   const res = await h.app.request('http://srv.test/v1/devices', { headers });
   return res.status;
 }
@@ -86,13 +93,16 @@ test('X-Acting-User: usable on the device but lacking auth.device_read → 403 P
     roleKeys: ['staff'],
   });
   const res = await h.app.request('http://srv.test/v1/devices', {
-    headers: { Authorization: `Bearer ${device.token}`, 'X-Acting-User': staff },
+    headers: {
+      Authorization: `Bearer ${device.token}`,
+      ...(await asPerson(h, device.token, staff)),
+    },
   });
   expect(res.status).toBe(403);
   expect(((await res.json()) as { error: { code: string } }).error.code).toBe('PERMISSION_DENIED');
 
   // The owner (device_read via main_owner) → 200.
-  expect(await getDevices(device.token, p.ownerUserId)).toBe(200);
+  expect(await getDevices(device.token, p.ownerUserId, true)).toBe(200);
   // A control session for the owner → 200 (control-session path, no X-Acting-User).
   const control = await seedControlSession(h, { tenantId: p.tenantId, userId: p.ownerUserId });
   expect(await getDevices(control)).toBe(200);
@@ -104,8 +114,8 @@ test('permission ids used in the §4.5 checks are exactly 02-permissions §11 re
     expect(PERMISSION_BY_ID.has(id), `${id} not in the registry`).toBe(true);
   }
   // Non-vacuity (T-14): the registry is the full v0 set, not silently empty.
-  expect(PERMISSIONS).toHaveLength(56);
-  expect(PERMISSION_BY_ID.size).toBe(56);
+  expect(PERMISSIONS).toHaveLength(57);
+  expect(PERMISSION_BY_ID.size).toBe(57);
 });
 
 test('drift guard: the canonical @bolusi/core permission registry matches the seeded DB permissions table exactly', async () => {
@@ -121,7 +131,7 @@ test('drift guard: the canonical @bolusi/core permission registry matches the se
     .selectFrom('permissions')
     .select(['id', 'scope', 'isDangerous', 'description'])
     .execute();
-  expect(rows.length, 'permissions table is empty — the drift guard would be vacuous').toBe(56);
+  expect(rows.length, 'permissions table is empty — the drift guard would be vacuous').toBe(57);
   const dbById = new Map(
     rows.map((r) => [
       r.id,
@@ -153,5 +163,5 @@ test('a deactivated user with the device-read grant still reads nothing: the lis
 
   expect(await getDevices(device.token, former)).toBe(403);
   // Positive control: the same grant on an active user reads the list.
-  expect(await getDevices(device.token, p.ownerUserId)).toBe(200);
+  expect(await getDevices(device.token, p.ownerUserId, true)).toBe(200);
 });

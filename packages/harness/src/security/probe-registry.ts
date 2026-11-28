@@ -51,10 +51,15 @@ const RULE_HANDOFF_OWNER =
 const RULE_QRIS_STORE =
   'a QRIS account or QR is set up and followed from a device of its own store; any other store gets the cross-tenant 404';
 
-/** Device bearer + the acting-user claim the control-plane routes need (api/02-auth §4.5). */
+/**
+ * Device bearer + the acting-user claim the control-plane routes need (api/02-auth §4.5), with the
+ * prober's server-checked person session when it acts as itself (auth/acting-user.ts). Anyone else
+ * is claimed bare, which the server refuses as unproven.
+ */
 const actingHeaders = (ctx: ProbeContext, userId: string): Record<string, string> => ({
   Authorization: ctx.tenantAAuth,
   'X-Acting-User': userId,
+  ...(userId === ctx.tenantAUserId ? { 'X-Person-Session': ctx.tenantAPersonSession } : {}),
   ...JSON_CT,
 });
 

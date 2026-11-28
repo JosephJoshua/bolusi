@@ -18,6 +18,7 @@
 //   registry + zod → UNKNOWN_TYPE | SCHEMA_INVALID
 //   authorization (declared permission, server directory) → PERMISSION_DENIED
 //   the type's rules (state change, targets, minted values; server records) → RULE_VIOLATED
+//   a decision on a shared device (decision.ts) without its author's person session → PERMISSION_DENIED
 //   a refusal from scope onward still advances the chain head (refused_operations), so the
 //     device's later ops keep syncing; a re-push of a refused op gets the same refusal
 //   accepted → allocate serverSeq → INSERT (+ clock-skew flag) → APPLY PROJECTIONS → advance head
@@ -46,6 +47,11 @@ import { lockTenantCounter, storeTenantCounter } from './server-seq.js';
 import { isClockSkewed } from './skew.js';
 import { classifyChain, type ChainHead } from './steps/chain.js';
 import { findRefusal, loadBatchVerdicts } from './steps/dedupe.js';
+import {
+  checkDecisionProof,
+  createDecisionProofs,
+  isDecisionPermission,
+} from './steps/decision.js';
 import { checkPermission, createAuthorLookup } from './steps/permission.js';
 import { checkRules } from './steps/rules.js';
 import { classifySchema } from './steps/schema.js';
@@ -235,6 +241,7 @@ export async function processPushBatch(
       reject(op, code, reason);
     };
     const authors = createAuthorLookup(db, identity.tenantId);
+    const proofs = createDecisionProofs(db, device, identity.personSessions ?? [], deps.now());
     const scopeLookup = createScopeLookup(db, identity.tenantId);
     const anomaly = async (
       op: SignedOperation,
@@ -369,6 +376,7 @@ export async function processPushBatch(
         await refuse(op, 'PERMISSION_DENIED', permission.reason);
         continue;
       }
+      let usedDecision = isDecisionPermission(deps.registry.permissionOf(op.type));
 
       // 8. the op type's rules, against the server's records as of this op (earlier ops of the
       // batch are already folded). No anomaly: two people changing one ticket offline is not tamper.
@@ -381,9 +389,17 @@ export async function processPushBatch(
         authors,
         deps.crypto,
         deps.now(),
+        () => (usedDecision = true),
       );
       if (rules !== null) {
         await refuse(op, 'RULE_VIOLATED', rules.reason);
+        continue;
+      }
+
+      // 9. a decision made on a shared device carries its author's server-checked PIN (decision.ts).
+      const proof = await checkDecisionProof(op, device, usedDecision, proofs);
+      if (proof !== null) {
+        await refuse(op, 'PERMISSION_DENIED', proof.reason);
         continue;
       }
 

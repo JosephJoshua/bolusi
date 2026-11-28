@@ -384,6 +384,10 @@ describe('rejected operations (05 §2.3 / 06 §8) — surfaced, never silent', (
 
     fireOn(screen, `sync-rejected-${opId}`);
     await settle();
+    // The code and the server's words are for support, so they wait behind a link (design guide §8).
+    expect(screen.query(`sync-rejected-reason-${opId}`)).toBeNull();
+    fireOn(screen, `sync-rejected-technical-${opId}`);
+    await settle();
 
     expect(screen.get(`sync-rejected-reason-${opId}`).props['children']).toBe(
       RejectingTransport.REASON,

@@ -95,7 +95,11 @@ export async function runPush(
           : { onConflictSurfaced: deps.onConflictSurfaced }),
         ...(deps.onDeviceAnomaly === undefined ? {} : { onDeviceAnomaly: deps.onDeviceAnomaly }),
       },
-      { deviceId: identity.deviceId, tenantId: identity.tenantId },
+      {
+        deviceId: identity.deviceId,
+        tenantId: identity.tenantId,
+        personSessions: request.personSessions ?? [],
+      },
       request.ops,
     ),
   );

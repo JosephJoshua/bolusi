@@ -25,6 +25,7 @@ import { readScopeMigration } from './028-read-scope.js';
 import { purchasingMigration } from './029-purchasing.js';
 import { rejectionHandledMigration } from './031-rejection-handled.js';
 import { transfersMigration } from './032-transfers.js';
+import { inventoryCostsMigration } from './033-inventory-costs.js';
 import type { ClientMigration } from './types.js';
 
 /** Every client migration, in version order. Append new ones; never rewrite a shipped one. */
@@ -54,6 +55,7 @@ export const CLIENT_MIGRATIONS: readonly ClientMigration[] = [
   purchasingMigration,
   rejectionHandledMigration,
   transfersMigration,
+  inventoryCostsMigration,
 ];
 
 export interface RunMigrationsOptions {

@@ -161,6 +161,16 @@ export interface InventoryCategories {
   updatedBy: string;
 }
 
+export interface InventoryCosts {
+  at: Int8;
+  itemId: string;
+  movementId: string;
+  storeId: string;
+  tenantId: string;
+  unitCost: Int8;
+  userId: string;
+}
+
 export interface InventoryItemFacets {
   facet: string;
   itemId: string;
@@ -837,6 +847,7 @@ export interface DB {
   idempotencyKeys: IdempotencyKeys;
   identityAudit: IdentityAudit;
   inventoryCategories: InventoryCategories;
+  inventoryCosts: InventoryCosts;
   inventoryItemFacets: InventoryItemFacets;
   inventoryItemFits: InventoryItemFits;
   inventoryItems: InventoryItems;

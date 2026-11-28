@@ -12,12 +12,13 @@ import {
   OptionsFilter,
   OverflowText,
   PageHeader,
+  type Crumb,
   SearchField,
   StatePanel,
   Tabs,
   type ColumnDef,
 } from '@bolusi/ui-web';
-import { FilterX, Package, Plus, SearchX } from 'lucide-react';
+import { FilterX, Package, Plus, SearchX, Table2, Tags } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useSettledValue } from '../../screen-kit/index.js';
@@ -44,9 +45,18 @@ const NO_CATEGORIES: readonly CategoryRow[] = [];
 const ALL = 'all';
 
 export interface PartsPageProps {
+  /**
+   * Where the page sits when its place has sections (Barang › Stok): the section's name as the
+   * title and the place above it. Without it the page is its place's only page.
+   */
+  readonly place?: { readonly title: string; readonly trail: readonly Crumb[] } | undefined;
   /** The list's filter, owned by the app so it survives a trip to another page. */
   readonly filter: ListFilter;
   readonly onFilterChange: (filter: ListFilter) => void;
+  /** The categories page, for whoever sets categories up. */
+  readonly onOpenCategories?: (() => void) | undefined;
+  /** The sheet for entering many items at once. */
+  readonly onBulkAdd?: (() => void) | undefined;
 }
 
 interface LoadedParts {
@@ -57,9 +67,16 @@ interface LoadedParts {
   readonly belowZero: number;
 }
 
-export function PartsPage({ filter, onFilterChange }: PartsPageProps): React.JSX.Element {
+export function PartsPage({
+  filter,
+  onFilterChange,
+  place,
+  onOpenCategories,
+  onBulkAdd,
+}: PartsPageProps): React.JSX.Element {
   const runtime = useInventoryRuntime();
   const canManage = runtime.hasPermission(INVENTORY_PERMISSION.manageItems);
+  const canSetUp = runtime.hasPermission(INVENTORY_PERMISSION.manageCategories);
   const [text, setText] = useState('');
   const [pages, setPages] = useState(1);
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -289,17 +306,39 @@ export function PartsPage({ filter, onFilterChange }: PartsPageProps): React.JSX
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="inventory.desk.parts">
       <PageHeader
-        title={ti('inventory.list.title')}
+        title={place?.title ?? ti('inventory.list.title')}
+        trail={place?.trail}
+        trailLabel={t('core.nav.trail')}
         actions={
-          canManage ? (
-            <Button
-              label={ti('inventory.action.add')}
-              variant="primary"
-              icon={Plus}
-              shortcut="F2"
-              onClick={() => setAdding(true)}
-              data-testid="inventory.desk.add"
-            />
+          canManage || canSetUp ? (
+            <>
+              {canSetUp && onOpenCategories !== undefined ? (
+                <Button
+                  label={ti('inventory.list.manageCategories')}
+                  icon={Tags}
+                  onClick={onOpenCategories}
+                  data-testid="inventory.desk.categories"
+                />
+              ) : null}
+              {canManage && onBulkAdd !== undefined ? (
+                <Button
+                  label={ti('inventory.bulk.open')}
+                  icon={Table2}
+                  onClick={onBulkAdd}
+                  data-testid="inventory.desk.bulk"
+                />
+              ) : null}
+              {canManage ? (
+                <Button
+                  label={ti('inventory.action.add')}
+                  variant="primary"
+                  icon={Plus}
+                  shortcut="F2"
+                  onClick={() => setAdding(true)}
+                  data-testid="inventory.desk.add"
+                />
+              ) : null}
+            </>
           ) : undefined
         }
       >

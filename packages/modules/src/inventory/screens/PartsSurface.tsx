@@ -1,14 +1,15 @@
 /**
  * PartsSurface — the items list and everything reached from it (an item, adding, editing, counting,
- * the filters, the owner's categories), as local navigation like RepairHome. The list's filter
- * lives here, so it holds across a trip into an item and back. Back closes the open step first, then the part, then the
- * surface, through the registered step back.
+ * the filters, the owner's categories), as local navigation like RepairHome: the Stok section of
+ * the Barang place. The list's filter lives here, so it holds across a trip into an item and back.
+ * While anything is open it publishes a `PlaceStep`, so back closes the open step first, then the
+ * part; on the list it publishes null and the place's tabs show.
  */
 import { EmptyState, ListDetail, useListDetailSplit } from '@bolusi/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { DiscardGuard, StepBack } from '../../screen-kit/index.js';
-import type { ScreenChrome } from '../../screen-kit/screens/views.js';
+import type { DiscardGuard, PlaceStep } from '../../screen-kit/index.js';
+import type { PlaceHeader, ScreenChrome } from '../../screen-kit/screens/views.js';
 import { ti, type InventoryKey } from '../i18n.js';
 import { NO_CATEGORY, type CategoryRow, type ItemDetailRow, type ItemRow } from '../queries.js';
 import { CategoryForm, CategoryList } from './CategoryScreens.js';
@@ -31,15 +32,15 @@ type View =
 
 export interface PartsSurfaceProps {
   readonly chrome: ScreenChrome;
-  readonly onClose: () => void;
-  readonly onRegisterStepBack?: ((back: StepBack | null) => void) | undefined;
+  readonly place: PlaceHeader;
+  readonly onRegisterPlaceStep?: ((step: PlaceStep | null) => void) | undefined;
   readonly onRegisterDiscardGuard?: ((guard: DiscardGuard | null) => void) | undefined;
 }
 
 export function PartsSurface({
   chrome,
-  onClose,
-  onRegisterStepBack,
+  place,
+  onRegisterPlaceStep,
   onRegisterDiscardGuard,
 }: PartsSurfaceProps): React.JSX.Element {
   const [view, setView] = useState<View>({ kind: 'list' });
@@ -55,46 +56,48 @@ export function PartsSurface({
     [onRegisterDiscardGuard],
   );
 
-  const back = useCallback((): boolean => {
+  // On a wide screen the list stays beside the open part. Changing a part (adding, editing, counting)
+  // and the filters and categories are tasks of their own and keep the whole screen, so a tap on
+  // the list never throws away a half-done one.
+  const beside = view.kind === 'list' || view.kind === 'part';
+  const split = useListDetailSplit() && beside;
+
+  useEffect(() => {
+    if (view.kind === 'list') {
+      onRegisterPlaceStep?.(null);
+      return;
+    }
     const leave = (to: View): void => {
       const guard = guardRef.current;
       if (guard === null) setView(to);
       else guard(() => setView(to));
     };
-    switch (view.kind) {
-      case 'list':
-        return false;
-      case 'part':
-      case 'add':
-      case 'filter':
-      case 'categories':
-        leave({ kind: 'list' });
-        return true;
-      case 'category':
-        leave({ kind: 'categories' });
-        return true;
-      case 'edit':
-      case 'count':
-        leave({ kind: 'part', itemId: view.part.id });
-        return true;
-    }
-  }, [view]);
-
-  useEffect(() => {
-    onRegisterStepBack?.(back);
-    return () => onRegisterStepBack?.(null);
-  }, [back, onRegisterStepBack]);
+    const back = (): void => {
+      switch (view.kind) {
+        case 'part':
+        case 'add':
+        case 'filter':
+        case 'categories':
+          leave({ kind: 'list' });
+          return;
+        case 'category':
+          leave({ kind: 'categories' });
+          return;
+        case 'edit':
+        case 'count':
+          leave({ kind: 'part', itemId: view.part.id });
+          return;
+      }
+    };
+    onRegisterPlaceStep?.({ back, listBeside: split });
+    return () => onRegisterPlaceStep?.(null);
+  }, [view, split, onRegisterPlaceStep]);
 
   const openPart = (itemId: string, done: InventoryKey | null = null): void => {
     setNotice(done);
     setView({ kind: 'part', itemId });
   };
 
-  // On a wide screen the list stays beside the open part. Changing a part (adding, editing, counting)
-  // and the filters and categories are tasks of their own and keep the whole screen, so a tap on
-  // the list never throws away a half-done one.
-  const beside = view.kind === 'list' || view.kind === 'part';
-  const split = useListDetailSplit() && beside;
   // The list's header carries the sync chip and the avatar; the pane beside it keeps neither.
   const paneChrome: ScreenChrome = split ? { syncChip: null, avatar: null } : chrome;
   const openId = view.kind === 'part' ? view.itemId : null;
@@ -109,7 +112,7 @@ export function PartsSurface({
         setCategoryNotice(null);
         setView({ kind: 'categories' });
       }}
-      onBack={onClose}
+      place={place}
       onOpenPart={(itemId) => {
         if (itemId !== openId) openPart(itemId);
       }}

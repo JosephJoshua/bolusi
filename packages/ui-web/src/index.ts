@@ -41,6 +41,15 @@ export {
 } from './components/DataTable.js';
 export { Dialog, type DialogProps } from './components/Dialog.js';
 export {
+  EditableGrid,
+  type CellProblem,
+  type EditableGridLabels,
+  type EditableGridProps,
+  type GridColumn,
+  type GridRow,
+} from './components/EditableGrid.js';
+export { parseClipboardTable, rowFilled, toClipboardTable } from './components/grid-model.js';
+export {
   FieldFrame,
   SecretField,
   TextArea,
@@ -69,6 +78,8 @@ export { Menu, type MenuItem } from './components/Menu.js';
 export { FreshGlow } from './components/FreshGlow.js';
 /** Fed by the app with what another device changed; read by `FreshGlow`. */
 export { markFresh } from '@bolusi/ui/fresh';
+/** Fed by the app while a new PC's first sync runs; read by `DataTable`. */
+export { setDataArriving } from '@bolusi/ui/arrival';
 export { RollingText } from './components/RollingText.js';
 export {
   CaptureTile,
@@ -102,6 +113,8 @@ export {
   PageHeader,
   Sidebar,
   SidebarToggle,
+  type Crumb,
+  type NavGroup,
   type NavItem,
   type SidebarToggleLabels,
 } from './components/Shell.js';

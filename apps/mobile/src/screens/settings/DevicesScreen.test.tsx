@@ -49,7 +49,8 @@ describe('DevicesScreen', () => {
   test('lists this phone first without a block, the others with one, the blocked apart', async () => {
     const { screen } = await mount(() => Promise.resolve(LIST));
     expect(screen.query('devices-block-d-this')).toBeNull();
-    expect(screen.query('devices-block-d-ani')).not.toBeNull();
+    // Read out as the action and the device, without the confirmation's question mark.
+    expect(screen.all('devices-block-d-ani')[0]?.props['accessibilityLabel']).toBe('Blokir HP Ani');
     expect(screen.query('devices-block-d-old')).toBeNull();
     expect(textsIn(screen.get('devices-screen'))).toContain(t('auth.devices.blockedSection'));
     expect(screen.query('devices-alone')).toBeNull();

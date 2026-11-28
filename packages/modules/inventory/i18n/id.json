@@ -12,7 +12,8 @@
     "transferSent": "Transfer dikirim",
     "transferReceived": "Transfer diterima",
     "transferCancelled": "Transfer dibatalkan",
-    "transferSettled": "Transfer diselesaikan"
+    "transferSettled": "Transfer diselesaikan",
+    "stockCosted": "Harga beli dicatat"
   },
   "refusal": {
     "alreadyRecorded": "Data ini sudah tercatat sebelumnya.",
@@ -33,7 +34,9 @@
     "nothingToSettle": "Jumlahnya melebihi yang belum sampai.",
     "reasonRequired": "Tulis alasannya terlebih dahulu.",
     "numberNotThisDevice": "Nomor transfer ini bukan dari perangkat ini.",
-    "numberUsed": "Nomor transfer ini sudah dipakai."
+    "numberUsed": "Nomor transfer ini sudah dipakai.",
+    "notReceived": "Harga beli hanya untuk barang yang sudah diterima.",
+    "costNotYours": "Kamu tidak bisa mengubah harga beli ini."
   },
   "list": {
     "title": "Barang",
@@ -56,6 +59,9 @@
     "filterCount": "Filter ({count})",
     "scan": "Pindai",
     "pickPart": "Pilih barang untuk melihat detailnya."
+  },
+  "place": {
+    "stock": "Stok"
   },
   "filter": {
     "active": "Semua",
@@ -235,7 +241,10 @@
     "moveDown": "Turunkan",
     "removeOption": "Hapus pilihan {option}",
     "addToName": "Tambahkan {label} ke nama",
-    "noOptions": "Belum ada pilihan. Pilihan baru juga bisa ditulis saat mengisi barang."
+    "noOptions": "Belum ada pilihan. Pilihan baru juga bisa ditulis saat mengisi barang.",
+    "kindLabel": "Jenis isian",
+    "formatHintPc": "Tambahkan ke nama:",
+    "optionsPlaceholder": "Tulis pilihan, lalu Enter"
   },
   "desk": {
     "col": {
@@ -254,5 +263,181 @@
     },
     "results": "{count} barang",
     "closePart": "Tutup barang"
+  },
+  "cost": {
+    "title": "Harga beli",
+    "average": "Modal rata-rata",
+    "perPiece": "{amount}/pcs",
+    "noAverage": "Belum ada harga beli",
+    "unpriced": "Harga beli {count} kiriman belum diisi",
+    "receipt": "{qty} pcs · {label}",
+    "receiptNoLabel": "{qty} pcs",
+    "missing": "Belum diisi"
+  },
+  "bulk": {
+    "open": "Tambah banyak",
+    "title": "Tambah banyak barang",
+    "col": {
+      "name": "Nama",
+      "fits": "Cocok untuk HP",
+      "code": "Kode",
+      "barcode": "Barcode",
+      "tags": "Label",
+      "stock": "Stok"
+    },
+    "problem": {
+      "tooLong": "Paling banyak {max} huruf.",
+      "tooMany": "Paling banyak {max}.",
+      "phoneUnknown": "{phones} belum ada di daftar HP, jadi disimpan seperti ditulis.",
+      "phoneNear": "{phones} belum ada di daftar HP. Maksudnya {near}?",
+      "wholeNumber": "Tulis angka bulat, misalnya 5.",
+      "nameOrFields": "Isi kolom isiannya atau tulis namanya dulu."
+    },
+    "saved": "{count} barang disimpan.",
+    "left": "{count} baris belum disimpan, cek yang ditandai merah.",
+    "blocked": "{count} belum lengkap",
+    "save": "Simpan {count} barang",
+    "saving": "Menyimpan {done} dari {total}…",
+    "hint": {
+      "name": "Kosongkan untuk nama otomatis: {format}",
+      "fits": "Pisahkan dengan koma, misalnya Redmi Note 10, Redmi Note 10S",
+      "list": "Pisahkan dengan koma",
+      "sheet": "Ketik langsung, atau salin dari Excel lalu tempel dengan Ctrl+V. Judul kolom ikut dikenali."
+    },
+    "row": "Baris {n}",
+    "deleteRow": "Hapus baris",
+    "where": "Baris {n}, {column}",
+    "switchTitle": "Ganti kategori?",
+    "switchMessage": "Baris yang belum disimpan akan dihapus.",
+    "switchConfirm": "Ganti",
+    "leaveMessage": "Baris yang belum disimpan akan hilang."
+  },
+  "transfer": {
+    "section": "Kiriman",
+    "list": {
+      "new": "Kirim ke toko lain",
+      "open": "Belum selesai",
+      "all": "Semua",
+      "emptyOpen": "Tidak ada kiriman yang belum selesai.",
+      "emptyAll": "Belum ada kiriman antar toko.",
+      "to": "Ke {store}",
+      "from": "Dari {store}",
+      "parts": "{count} sparepart",
+      "progress": "{arrived} dari {sent} sampai",
+      "pick": "Pilih kiriman untuk melihat detailnya.",
+      "otherStore": "Toko lain"
+    },
+    "stage": {
+      "sent": "Dalam perjalanan",
+      "partial": "Sebagian sampai",
+      "done": "Selesai",
+      "cancelled": "Dibatalkan",
+      "over": "Perlu dicek"
+    },
+    "detail": {
+      "route": "{from} ke {to}",
+      "sent": "Dikirim {date} oleh {name}",
+      "sentAt": "Dikirim {date}",
+      "cancelled": "Dibatalkan {date} oleh {name}",
+      "lines": "Sparepart",
+      "arrivedOf": "{arrived} dari {sent} sampai",
+      "missing": "Belum sampai {count}",
+      "extra": "Lebih {count}",
+      "notSent": "Tidak terkirim",
+      "overHint": "Tercatat sampai lebih banyak dari yang dikirim. Pemilik toko pengirim perlu menyelesaikannya.",
+      "missingHint": "Pemilik toko pengirim bisa mengembalikan yang belum sampai ke stok atau mencatatnya hilang.",
+      "history": "Riwayat",
+      "arrival": "Diterima",
+      "line": "{name} × {qty}"
+    },
+    "outcome": {
+      "back": "Kembali ke stok",
+      "lost": "Dicatat hilang",
+      "found": "Ternyata sampai",
+      "arrived": "Ternyata sampai"
+    },
+    "action": {
+      "receive": "Terima barang",
+      "settle": "Selesaikan",
+      "cancel": "Batalkan kiriman"
+    },
+    "cancel": {
+      "title": "Batalkan kiriman ini?",
+      "message": "Semua sparepart kembali ke stok toko ini."
+    },
+    "form": {
+      "title": "Kirim sparepart",
+      "store": "Toko tujuan",
+      "noStores": "Belum ada toko lain di usaha ini.",
+      "lines": "Sparepart",
+      "addPart": "Tambah sparepart",
+      "noParts": "Belum ada sparepart.",
+      "remove": "Hapus",
+      "qty": "Jumlah",
+      "note": "Catatan (opsional)",
+      "send": "Kirim",
+      "pickFirst": "Pilih toko tujuan dan sparepartnya dulu.",
+      "stockLeaves": "Stok toko ini langsung berkurang."
+    },
+    "receive": {
+      "title": "Terima kiriman",
+      "hint": "Isi jumlah yang benar-benar sampai.",
+      "arrived": "Sampai",
+      "save": "Masukkan ke stok",
+      "nothing": "Isi jumlah yang sampai dulu.",
+      "note": "Catatan (opsional)"
+    },
+    "settle": {
+      "title": "Selesaikan kiriman",
+      "hintMissing": "Untuk yang belum sampai: kembalikan ke stok toko ini atau catat hilang.",
+      "hintOver": "Yang tercatat sampai di toko tujuan dikurangi dari stok toko ini.",
+      "back": "Kembali ke stok",
+      "lost": "Hilang",
+      "arrived": "Ternyata sampai",
+      "open": "Belum sampai {count}",
+      "over": "Lebih {count}",
+      "reason": "Alasan hilang",
+      "save": "Simpan",
+      "nothing": "Isi jumlahnya dulu.",
+      "tooMany": "Lebih dari yang belum sampai.",
+      "needReason": "Tulis alasannya dulu."
+    },
+    "done": {
+      "sent": "Sparepart dikirim.",
+      "received": "Barang masuk ke stok.",
+      "cancelled": "Kiriman dibatalkan.",
+      "settled": "Kiriman diselesaikan."
+    },
+    "discard": {
+      "title": "Keluar tanpa mengirim?",
+      "message": "Isian kiriman ini akan hilang."
+    },
+    "desk": {
+      "col": {
+        "number": "Nomor",
+        "store": "Toko",
+        "progress": "Sampai",
+        "stage": "Status",
+        "date": "Tanggal"
+      },
+      "close": "Tutup kiriman"
+    }
+  },
+  "pick": {
+    "title": "Pilih sparepart",
+    "searchHint": "Cari nama atau kode",
+    "clear": "Hapus pencarian",
+    "scan": "Pindai",
+    "empty": "Belum ada barang di daftar.",
+    "noMatches": "Barang tidak ditemukan. Coba kata lain.",
+    "stock": "Stok {count}",
+    "onList": "Sudah dipilih"
+  },
+  "useCost": {
+    "title": "Modal sparepart",
+    "line": "{count} pcs",
+    "missing": "Belum ada harga",
+    "total": "Total modal",
+    "unpriced": "{count} sparepart belum ada harga belinya"
   }
 }
