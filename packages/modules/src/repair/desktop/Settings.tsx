@@ -34,23 +34,18 @@ import {
   type IntakeOptionList,
   type IntakeOptionSettings,
 } from '../intake-options.js';
-import { INTAKE_HINT_KEY, INTAKE_LIST_KEY, builtInLabel, optionLabel } from '../labels.js';
+import { INTAKE_HINT_KEY, INTAKE_LIST_KEY, optionLabel } from '../labels.js';
 import {
   addRow,
-  changedHidden,
-  changedItems,
-  editorFor,
-  editorProblems,
-  hasProblems,
   moveRow,
   removeRow,
   updateRow,
-  type BuiltInName,
   type EditorRow,
   type EditorState,
   type ListProblem,
   type RowProblem,
 } from '../options-editor.js';
+import { useOptionsEditor } from '../options-editor-form.js';
 import {
   printSettingsForm,
   printSettingsInput,
@@ -232,40 +227,11 @@ function ListEditor({
   readonly onDirtyChange: RepairSettingsProps['onDirtyChange'];
   readonly testId: string;
 }): React.JSX.Element {
-  const runtime = useRepairRuntime();
-  const runner = useActionRunner();
-  const builtInName: BuiltInName = (option) => builtInLabel(list, option.id);
-  const [state, setState] = useState<EditorState>(() => editorFor(list, settings, builtInName));
-  const [showProblems, setShowProblems] = useState(false);
+  const editor = useOptionsEditor(list, settings, can);
+  const { runner, state, setState, showProblems, problems, dirty, manage, hide } = editor;
   const [saved, setSaved] = useState<string | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null);
-
-  const manage = can.manageIntakeOptions;
-  const hide = can.hideIntakeOptions;
-  const changes = (against: IntakeOptionSettings, rows: EditorState) => ({
-    items: manage ? changedItems(rows, against.lists[list], builtInName) : null,
-    hidden: hide ? changedHidden(rows, against.hidden[list]) : null,
-  });
-  // What the rows are compared with: the latest of the live read and this page's own last save, so
-  // a save shows as saved before its change has come back through the live query.
-  const [base, setBase] = useState(settings);
-  const { items, hidden } = changes(base, state);
-  const dirty = items !== null || hidden !== null;
-  const problems = editorProblems(state, builtInName, (option) => optionLabel(list, option));
   useReportDirty(dirty, onDirtyChange);
-
-  // Untouched rows follow a change that syncs in; typed ones stay and are compared on save.
-  const live = useRef(settings);
-  useEffect(() => {
-    if (live.current === settings) return;
-    live.current = settings;
-    const edited = changes(base, state);
-    setBase(settings);
-    if (edited.items === null && edited.hidden === null) {
-      setState(editorFor(list, settings, builtInName));
-    }
-    // Only a new read decides; the rows are the ones on screen at that moment.
-  }, [settings]);
 
   const edit = (next: (current: EditorState) => EditorState): void => {
     setSaved(null);
@@ -273,38 +239,8 @@ function ListEditor({
   };
 
   const save = (): void => {
-    if (!dirty || runner.busy) return;
-    if (hasProblems(problems)) {
-      setShowProblems(true);
-      return;
-    }
-    void runner
-      .run(async () => {
-        const read = async () => (await runtime.query('intakeOptionSettings', {})).rows[0]!;
-        // The list first: hiding then applies to the list as saved.
-        if (items !== null) await runtime.run('changeIntakeOptions', { list, items });
-        try {
-          if (hidden !== null) await runtime.run('hideIntakeOptions', { list, hidden });
-        } catch (error) {
-          // The list did save, and its new rows now have ids: show it as saved, so saving again
-          // never adds them twice. What was to be hidden is chosen again.
-          if (items !== null) {
-            const fresh = await read();
-            setBase(fresh);
-            setState(editorFor(list, fresh, builtInName));
-          }
-          throw error;
-        }
-        return read();
-      })
-      .then((fresh) => {
-        if (fresh === undefined) return;
-        // New rows now have ids: start again from what was saved.
-        setBase(fresh);
-        setState(editorFor(list, fresh, builtInName));
-        setShowProblems(false);
-        setSaved(tn('repair.options.saved'));
-      });
+    if (!dirty) return;
+    editor.save({ onSaved: () => setSaved(tn('repair.options.saved')) });
   };
 
   const add = (text = ''): void => {
@@ -391,10 +327,7 @@ function ListEditor({
           busy={runner.busy}
           saved={saved}
           onSave={save}
-          onDiscard={() => {
-            setShowProblems(false);
-            setState(editorFor(list, base, builtInName));
-          }}
+          onDiscard={editor.discard}
           saveLabel={tn('repair.options.save')}
           testId={testId}
         />
