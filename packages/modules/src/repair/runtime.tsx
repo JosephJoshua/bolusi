@@ -11,6 +11,7 @@ import type { CancelFees, PrintSettings } from './queries.js';
 import type { ApprovalsPort } from '../approvals/runtime.js';
 import type { InventoryRuntime } from '../inventory/runtime.js';
 import type { PurchasingRuntime } from '../purchasing/runtime.js';
+import { useCashDrawerOf, type CashDrawer } from '../money/drawers.js';
 import type { MoneyPort, MoneyRuntime } from '../money/runtime.js';
 import { NO_METHOD } from '../money/payment-entry.js';
 import type { PaymentAccountRow } from '../money/queries.js';
@@ -261,6 +262,16 @@ export function useIntakeOptionSettings(reloadKey = 0): QueryState<IntakeOptionS
 }
 
 const NO_ACCOUNTS: readonly PaymentAccountRow[] = [];
+
+/** The drawer this device takes cash into, as Kas has it: a servisan's cash goes there. */
+export function useRepairCashDrawer(): CashDrawer {
+  const runtime = useRepairRuntime();
+  const drawers = useRepairQuery(
+    async (rt) => (await rt.money.query('drawers', {})).rows,
+    'drawers',
+  );
+  return useCashDrawerOf(runtime.money.drawerChoice, drawers);
+}
 
 /**
  * The store's payment methods besides cash, live; null while they load, so a method picked before

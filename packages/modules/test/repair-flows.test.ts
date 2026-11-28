@@ -828,7 +828,7 @@ describe('intake draft', () => {
     // A discount at intake is an owner's to give.
     const { ticketId } = (await h.run(
       'openTicket',
-      toOpenTicketInput(draft, OPTIONS, Date.now()),
+      toOpenTicketInput(draft, OPTIONS, Date.now(), [], 'cash'),
       h.storeOwnerId,
     )) as { ticketId: string };
     const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
@@ -859,7 +859,7 @@ describe('intake draft', () => {
     expect(stepProblems(paid, 'review', OPTIONS)).toEqual([]);
     const { ticketId } = (await h.run(
       'openTicket',
-      toOpenTicketInput(paid, OPTIONS, Date.now()),
+      toOpenTicketInput(paid, OPTIONS, Date.now(), [], 'cash'),
       h.storeOwnerId,
     )) as { ticketId: string };
     const ticket = (await h.query('getTicket', { ticketId }, h.cashierId)).rows[0];
@@ -889,7 +889,7 @@ describe('intake draft', () => {
     // No DP, nothing to ask; and an account the store no longer offers falls back to the drawer.
     expect(stepProblems({ ...draft, downPayment: '' }, 'price', OPTIONS, accounts)).toEqual([]);
     expect(stepProblems(draft, 'price', OPTIONS, [])).toEqual([]);
-    expect(toOpenTicketInput(draft, OPTIONS, 0, [])).toMatchObject({
+    expect(toOpenTicketInput(draft, OPTIONS, 0, [], 'cash')).toMatchObject({
       downPaymentAccount: 'cash',
       downPaymentReference: null,
     });
@@ -898,7 +898,7 @@ describe('intake draft', () => {
     expect(stepProblems(coded, 'review', OPTIONS, accounts)).toEqual([]);
     const { ticketId } = (await h.run(
       'openTicket',
-      toOpenTicketInput(coded, OPTIONS, Date.now(), accounts),
+      toOpenTicketInput(coded, OPTIONS, Date.now(), accounts, 'cash'),
       h.storeOwnerId,
     )) as { ticketId: string };
     const money = (
@@ -918,7 +918,9 @@ describe('intake draft', () => {
     expect(stepProblems(draft, 'review', OPTIONS, accounts)).toEqual(['downPaymentMethod']);
     expect(stepProblems({ ...draft, downPayment: '' }, 'price', OPTIONS, accounts)).toEqual([]);
     expect(stepProblems(draft, 'price', OPTIONS, [])).toEqual([]);
-    expect(toOpenTicketInput(draft, OPTIONS, 0, [])).toMatchObject({ downPaymentAccount: 'cash' });
+    expect(toOpenTicketInput(draft, OPTIONS, 0, [], 'cash')).toMatchObject({
+      downPaymentAccount: 'cash',
+    });
     const cash = { ...draft, downPaymentAccount: 'cash' };
     expect(stepProblems(cash, 'review', OPTIONS, accounts)).toEqual([]);
   });
@@ -981,7 +983,7 @@ describe('intake draft', () => {
     };
     expect(stepProblems(draft, 'review', options)).toEqual([]);
     const now = new Date(2026, 9, 25, 9, 30).getTime();
-    const input = toOpenTicketInput(draft, options, now);
+    const input = toOpenTicketInput(draft, options, now, [], 'cash');
     expect(input.checklist).toEqual([
       { item: 'screen', label: 'LCD', state: 'ok', note: '' },
       { item: 'c-face', label: 'Face ID', state: 'issue', note: '' },
@@ -1017,8 +1019,13 @@ describe('intake draft', () => {
     h = await openRepairHarness(4107);
     const draft = complete(h);
     const withLock = (lockKind: IntakeDraft['device']['lockKind'], passcode: string) =>
-      toOpenTicketInput({ ...draft, device: { ...draft.device, lockKind, passcode } }, OPTIONS, 0)
-        .device.passcode;
+      toOpenTicketInput(
+        { ...draft, device: { ...draft.device, lockKind, passcode } },
+        OPTIONS,
+        0,
+        [],
+        'cash',
+      ).device.passcode;
     expect(withLock('pattern', '14753')).toBe('pattern:14753');
     expect(withLock('pin', '0000')).toBe('pin:0000');
     expect(withLock('password', 'a:b')).toBe('password:a:b');
@@ -1032,6 +1039,8 @@ describe('intake draft', () => {
         { ...draft, device: { ...draft.device, lockKind: 'pattern', passcode: '14753' } },
         OPTIONS,
         Date.now(),
+        [],
+        'cash',
       ),
       // The draft carries a discount, which only an owner may give.
       h.storeOwnerId,

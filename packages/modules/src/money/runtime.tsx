@@ -13,6 +13,7 @@ import {
 
 import type { ApprovalsPort } from '../approvals/runtime.js';
 
+import type { DrawerChoice } from './drawer-choice.js';
 import type { MoneyModule } from './manifest.js';
 import type { QrisPort } from './qris.js';
 
@@ -22,10 +23,20 @@ export interface MoneyStore {
   readonly name: string;
 }
 
+/** A role a drawer can be limited to, named as the staff list names it ("Kasir"). */
+export interface MoneyRole {
+  readonly id: string;
+  readonly name: string;
+}
+
 /** The ledger's port, and the business's stores a central payment method may be given to. */
 export interface MoneyPort extends ModulePort<MoneyModule> {
   /** Every store of the business, as this device last heard; this store alone before then. */
   stores(): Promise<readonly MoneyStore[]>;
+  /** The roles a drawer can be limited to; owners use every drawer, so their roles are left out. */
+  roles(): Promise<readonly MoneyRole[]>;
+  /** The cash drawer this device takes cash into (drawers.tsx). */
+  readonly drawerChoice: DrawerChoice;
   /** QRIS through Xendit; absent on a device that cannot reach the server (a demo). */
   readonly qris?: QrisPort;
 }

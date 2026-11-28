@@ -11,7 +11,7 @@ import {
   parseRupiah as parseRupiahUpTo,
 } from '../shared/rupiah.js';
 import type { PartUse } from '../inventory/part-use.js';
-import { CASH_ACCOUNT, MONEY_PERMISSION } from '../money/constants.js';
+import { MONEY_PERMISSION } from '../money/constants.js';
 import {
   chosenMethod,
   methodMissing,
@@ -1557,13 +1557,15 @@ export function toOpenTicketInput(
   draft: IntakeDraft,
   options: IntakeOptionLists,
   now: number,
-  accounts: readonly PaymentAccountRow[] = [],
+  accounts: readonly PaymentAccountRow[],
+  /** The drawer this device takes cash into: a cash DP goes there. */
+  drawer: string,
 ): OpenTicketInput {
   const downPayment = intakeDownPayment(draft);
   const method =
     downPayment > 0
-      ? chosenMethod(draft.downPaymentAccount, draft.downPaymentReference, accounts)
-      : { account: CASH_ACCOUNT, reference: null };
+      ? chosenMethod(draft.downPaymentAccount, draft.downPaymentReference, accounts, drawer)
+      : { account: drawer, reference: null };
   const checklist = options.checks.flatMap(({ id, label }) => {
     const state: ChecklistState | undefined = draft.checks[id];
     return state === undefined ? [] : [{ item: id, label, state, note: '' }];

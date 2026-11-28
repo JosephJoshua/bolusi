@@ -38,10 +38,15 @@
     "overLimit": "Over your limit. Ask a store owner.",
     "moveAboveDrawer": "Not enough cash in the drawer.",
     "cashMoveNotFound": "This cash record isn’t in this store.",
-    "laterCountSettled": "A later drawer count was already settled, so this record can’t be cancelled any more."
+    "laterCountSettled": "A later drawer count was already settled, so this record can’t be cancelled any more.",
+    "notADrawer": "That isn’t one of this store’s cash drawers.",
+    "drawerNotYours": "Your role doesn’t use this drawer.",
+    "sameDrawer": "Pick another drawer to move the cash to.",
+    "mainDrawerStays": "The store’s main drawer can’t be switched off."
   },
   "method": {
-    "cash": "Cash"
+    "cash": "Cash",
+    "cashIn": "Cash · {drawer}"
   },
   "pay": {
     "amount": "Amount",
@@ -103,7 +108,9 @@
     "withdrawal": "To the owner",
     "expense": "Store expense",
     "deposit": "Bank deposit",
-    "float": "Add change money"
+    "float": "Add change money",
+    "transfer": "Move to another drawer",
+    "transferIn": "Moved in from another drawer"
   },
   "count": {
     "counted": "Cash in the drawer",
@@ -125,7 +132,9 @@
     "hintAmount": "Enter the amount.",
     "hintReason": "Enter a description.",
     "noAccount": "The store has no bank account yet. Ask an owner to add one.",
-    "aboveDrawer": "The drawer only has {amount}. Lower the amount first."
+    "aboveDrawer": "The drawer only has {amount}. Lower the amount first.",
+    "to": "To drawer",
+    "hintTo": "Pick the drawer to move the cash to."
   },
   "settle": {
     "title": "Cash difference",
@@ -198,7 +207,6 @@
     "add": "Add method",
     "addTitle": "Add method",
     "editTitle": "Edit method",
-    "cashAlways": "Always available",
     "central": "All stores",
     "inactive": "Not in use",
     "none": "No QRIS, EDC or bank accounts yet.",
@@ -319,5 +327,22 @@
     },
     "rejected": "{name} turned down taking {amount} off the bill.",
     "rejectedNote": "{name} turned down taking {amount} off the bill: {note}"
+  },
+  "drawer": {
+    "main": "Main drawer",
+    "pick": "Drawer"
+  },
+  "drawers": {
+    "title": "Cash drawers",
+    "add": "Add drawer",
+    "addTitle": "Add drawer",
+    "editTitle": "Edit drawer",
+    "namePlaceholder": "E.g. Accessories drawer",
+    "usedBy": "Used by",
+    "everyone": "Every role",
+    "someRoles": "Pick roles",
+    "ownersHint": "Owners can always use every drawer.",
+    "roleRequired": "Pick at least one role.",
+    "activeCaption": "When switched off, the drawer can’t be picked. Past records stay."
   }
 }

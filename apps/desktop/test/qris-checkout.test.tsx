@@ -123,6 +123,7 @@ function Checkout({ port }: { readonly port: QrisPort }): React.JSX.Element {
     DUE - qris.pending,
     qris.lines,
     [ACCOUNT],
+    'cash',
     qris.qrAccounts,
     qris.blocking,
   );

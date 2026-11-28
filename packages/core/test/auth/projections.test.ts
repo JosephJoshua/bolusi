@@ -304,6 +304,7 @@ describe('permission denial audit (auth_permission_denials) — the load-bearing
       storeId: STORE,
       userId: OWNER,
       hasPermission: () => true,
+      rolesHeld: () => [],
     };
   }
 

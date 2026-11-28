@@ -18,7 +18,12 @@ import { useDownPaymentAsk } from './down-payment-ask.js';
 import { downPaymentEntry } from './flows.js';
 import { tn } from './i18n.js';
 import { DOWN_PAYMENT_GAP_KEY, downPaymentChangeLine, downPaymentTitleKey } from './labels.js';
-import { useDownPaymentMethod, usePaymentAccounts, useRepairRuntime } from './runtime.js';
+import {
+  useDownPaymentMethod,
+  usePaymentAccounts,
+  useRepairCashDrawer,
+  useRepairRuntime,
+} from './runtime.js';
 
 export interface DownPaymentFacts {
   readonly ticketId: string;
@@ -54,7 +59,9 @@ export function useDownPaymentForm(
     referenceMissing: referenceMissing(method.account, method.reference, accounts),
   });
   const complete = gap === null && loadedAccounts !== null;
-  const through = chosenMethod(method.account, method.reference, accounts);
+  const cash = useRepairCashDrawer();
+  const drawers = cash.drawers;
+  const through = chosenMethod(method.account, method.reference, accounts, cash.ref);
   const fix =
     correcting && complete && amount !== null ? { ticketId, amount, reason, ...through } : null;
   // Whether it goes to an owner shows as soon as the new amount is typed, before the reason.
@@ -109,7 +116,7 @@ export function useDownPaymentForm(
         : downPaymentChangeLine(
             current,
             amount,
-            accountLabel(offeredAccount(method.account, accounts), accounts),
+            accountLabel(offeredAccount(method.account, accounts), accounts, drawers),
           ),
     limitLine:
       !correcting || ask.limit === null

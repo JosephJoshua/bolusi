@@ -2,7 +2,7 @@
 // customer each is for and the methods' names, a page at a time.
 import { dayStart, inHistory } from './kas.js';
 import type { MoneyKey } from './i18n.js';
-import type { MoneyEntryRow, PaymentAccountRow } from './queries.js';
+import type { DrawerRow, MoneyEntryRow, PaymentAccountRow } from './queries.js';
 import { useMoneyQuery } from './runtime.js';
 import type { QueryState } from '../screen-kit/index.js';
 
@@ -27,6 +27,7 @@ export interface DayRecords {
   readonly more: boolean;
   readonly customers: ReadonlyMap<string, string>;
   readonly accounts: readonly PaymentAccountRow[];
+  readonly drawers: readonly DrawerRow[];
 }
 
 /** The records of the day starting at `day`, `pages` pages of them; `nonce` reads them again. */
@@ -46,7 +47,7 @@ export function useDayRecords(day: number, pages: number, nonce: number): QueryS
         cursor = result.nextCursor;
         if (cursor === null) break;
       }
-      const [customers, accounts] = await Promise.all([
+      const [customers, accounts, drawers] = await Promise.all([
         rt.customersOf(
           rows
             .filter((row) => row.documentKind !== null && row.documentId !== null)
@@ -57,8 +58,12 @@ export function useDayRecords(day: number, pages: number, nonce: number): QueryS
           .query('paymentAccounts', { includeInactive: true })
           .then((result) => result.rows)
           .catch(() => [] as PaymentAccountRow[]),
+        rt
+          .query('drawers', { includeInactive: true })
+          .then((result) => result.rows)
+          .catch(() => [] as DrawerRow[]),
       ]);
-      return { rows, more: cursor !== null && cursor !== undefined, customers, accounts };
+      return { rows, more: cursor !== null && cursor !== undefined, customers, accounts, drawers };
     },
     `history:${String(day)}:${String(pages)}:${String(nonce)}`,
   );

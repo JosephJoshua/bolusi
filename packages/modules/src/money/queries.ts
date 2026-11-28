@@ -14,10 +14,13 @@ import { zMsEpoch, zUuid } from '@bolusi/schemas';
 
 import {
   CASH_ACCOUNT,
+  DRAWER_KIND,
   MONEY_PERMISSION,
   SYSTEM_ACCOUNT,
   type CashMoveKind,
   type EntryKind,
+  drawerRef,
+  paymentAccountIdOf,
   type PaymentAccountKind,
 } from './constants.js';
 import type { MoneyDocumentSources } from './documents.js';
@@ -26,8 +29,11 @@ import {
   centralStoreIds,
   countExpected,
   documentBalance,
+  drawerOpenTo,
+  drawerRoles,
   voidCounted,
 } from './rules.js';
+import { zAccountRef } from './operations.js';
 import type { MoneyDatabase } from './schema.js';
 import { userNames } from '../shared/user-names.js';
 
@@ -74,6 +80,8 @@ async function paymentAccountsHandler(
     .where('tenantId', '=', qctx.tenantId)
     .where((eb) => eb.or([eb('storeId', '=', store), eb('storeId', 'is', null)]));
   if (!input.includeInactive) query = query.where('active', '=', 1);
+  // Drawers are cash, read through `drawers`; this lists the other ways money comes in.
+  query = query.where('kind', '!=', DRAWER_KIND);
   const rows = await query.orderBy('name').orderBy('id').execute();
   const accounts = rows
     .map((row) => ({
@@ -154,6 +162,8 @@ export interface MoneyEntryRow {
   readonly documentKind: string | null;
   readonly documentId: string | null;
   readonly documentLabel: string | null;
+  /** The drawer a cash move, count or settlement is about; null for every other record. */
+  readonly drawer: string | null;
   readonly createdBy: string;
   /** Who recorded it, from the device's staff list; null for someone it does not know. */
   readonly createdByName: string | null;
@@ -188,6 +198,7 @@ function entryRow(row: Record<string, unknown>, names: ReadonlyMap<string, strin
     documentKind: (row['documentKind'] as string | null) ?? null,
     documentId: (row['documentId'] as string | null) ?? null,
     documentLabel: (row['documentLabel'] as string | null) ?? null,
+    drawer: (row['drawer'] as string | null) ?? null,
     createdBy: row['createdBy'] as string,
     createdByName: names.get(row['createdBy'] as string) ?? null,
     createdAt: Number(row['createdAt']),
@@ -267,25 +278,55 @@ export interface CashDrawer {
   readonly counts: readonly CashCountRow[];
 }
 
-async function cashBalance(qctx: Qctx): Promise<number> {
+async function cashBalance(qctx: Qctx, drawer: string): Promise<number> {
   const row = await qctx.db
     .selectFrom('moneyLines')
     .select(sql<string | number>`COALESCE(SUM(debit - credit), 0)`.as('balance'))
     .where('storeId', '=', storeOf(qctx))
-    .where('account', '=', CASH_ACCOUNT)
+    .where('account', '=', drawer)
     .executeTakeFirst();
   return Number(row?.balance ?? 0);
 }
 
 export const cashDrawerInput = z
-  .object({ counts: z.number().int().min(0).max(100).default(10) })
+  .object({
+    counts: z.number().int().min(0).max(100).default(10),
+    /** The drawer: the main one unless named. */
+    drawer: zAccountRef.default(CASH_ACCOUNT),
+  })
   .strict();
+
+/** Whether `drawer` is one of this store's drawers and the caller may use it (`drawerOpenTo`). */
+async function usesDrawer(qctx: Qctx, drawer: string): Promise<boolean> {
+  if (drawer !== CASH_ACCOUNT) {
+    const id = paymentAccountIdOf(drawer);
+    const row =
+      id === null
+        ? undefined
+        : await qctx.db
+            .selectFrom('moneyAccounts')
+            .select('kind')
+            .where('id', '=', id)
+            .where('storeId', '=', storeOf(qctx))
+            .executeTakeFirst();
+    // A payment account is not a drawer: its balance is not read this way.
+    if (row?.kind !== DRAWER_KIND) return false;
+  }
+  const roleIds = await drawerRoles(qctx.db, storeOf(qctx), drawer);
+  return drawerOpenTo(
+    roleIds,
+    qctx.rolesHeld(),
+    qctx.hasPermission(MONEY_PERMISSION.manageAccounts),
+  );
+}
 
 async function cashDrawerHandler(
   input: z.output<typeof cashDrawerInput>,
   qctx: Qctx,
 ): Promise<QueryPage<CashDrawer>> {
   const store = storeOf(qctx);
+  // A drawer someone does not use is not theirs to count or read, as the rules refuse its moves.
+  if (!(await usesDrawer(qctx, input.drawer))) return { rows: [], nextCursor: null };
   const counts =
     input.counts === 0
       ? []
@@ -294,6 +335,11 @@ async function cashDrawerHandler(
           .selectAll()
           .where('storeId', '=', store)
           .where('kind', '=', 'cash_counted')
+          .where((eb) =>
+            input.drawer === CASH_ACCOUNT
+              ? eb.or([eb('drawer', '=', CASH_ACCOUNT), eb('drawer', 'is', null)])
+              : eb('drawer', '=', input.drawer),
+          )
           .orderBy('createdAt', 'desc')
           .orderBy('id', 'desc')
           .limit(input.counts)
@@ -315,7 +361,7 @@ async function cashDrawerHandler(
   const rows: CashCountRow[] = [];
   for (const count of counts) {
     const counted = Number(count.amount);
-    const expected = await countExpected(qctx.db, store, {
+    const expected = await countExpected(qctx.db, store, input.drawer, {
       id: count.id,
       createdAt: Number(count.createdAt),
     });
@@ -334,7 +380,7 @@ async function cashDrawerHandler(
     });
   }
   return {
-    rows: [{ expected: await cashBalance(qctx), counts: rows }],
+    rows: [{ expected: await cashBalance(qctx, input.drawer), counts: rows }],
     nextCursor: null,
   };
 }
@@ -353,6 +399,69 @@ export const drawerForMoveQuery = {
   permission: MONEY_PERMISSION.moveCash,
 } as const;
 
+// ── drawers (the store's cash drawers) ────────────────────────────────────────────────────────
+
+export interface DrawerRow {
+  /** How records name it: `cash` for the main drawer, `account:<id>` for another. */
+  readonly ref: string;
+  /** Null for the main drawer until an owner names it. */
+  readonly name: string | null;
+  readonly main: boolean;
+  /** The roles it is limited to; empty for every role. */
+  readonly roleIds: readonly string[];
+  readonly active: boolean;
+  /** Whether the caller may use it (`drawerOpenTo`). */
+  readonly usable: boolean;
+}
+
+export const drawersInput = z.object({ includeInactive: z.boolean().default(false) }).strict();
+
+/** The main drawer first, then the store's other drawers by name. */
+async function drawersHandler(
+  input: z.output<typeof drawersInput>,
+  qctx: Qctx,
+): Promise<QueryPage<DrawerRow>> {
+  const store = storeOf(qctx);
+  const held = qctx.rolesHeld();
+  const manages = qctx.hasPermission(MONEY_PERMISSION.manageAccounts);
+  const rows = await qctx.db
+    .selectFrom('moneyAccounts')
+    .selectAll()
+    .where('tenantId', '=', qctx.tenantId)
+    .where('storeId', '=', store)
+    .where('kind', '=', DRAWER_KIND)
+    .orderBy('name')
+    .orderBy('id')
+    .execute();
+  const toRow = (row: (typeof rows)[number] | undefined, ref: string): DrawerRow => {
+    const roleIds = JSON.parse(row?.roleIdsJson ?? '[]') as string[];
+    return {
+      ref,
+      name: row?.name ?? null,
+      main: ref === CASH_ACCOUNT,
+      roleIds,
+      active: row === undefined || Number(row.active) === 1,
+      usable: drawerOpenTo(roleIds, held, manages),
+    };
+  };
+  const main = toRow(
+    rows.find((row) => row.id === store),
+    CASH_ACCOUNT,
+  );
+  const others = rows
+    .filter((row) => row.id !== store)
+    .map((row) => toRow(row, drawerRef(row.id, store)))
+    .filter((row) => input.includeInactive || row.active);
+  return { rows: [main, ...others], nextCursor: null };
+}
+
+export const drawersQuery = {
+  name: 'drawers',
+  permission: MONEY_PERMISSION.read,
+  input: drawersInput,
+  handler: drawersHandler,
+} as const;
+
 // ── moneyEntries (the store's records over a period) ───────────────────────────────────────────
 
 export const moneyEntriesInput = z
@@ -366,10 +475,17 @@ export const moneyEntriesInput = z
 
 const ENTRIES_SORT = 'createdAt.desc';
 
+/** The store's drawers the caller may not use: their records are not theirs to read. */
+async function closedDrawers(qctx: Qctx): Promise<string[]> {
+  const { rows } = await drawersHandler({ includeInactive: true }, qctx);
+  return rows.filter((row) => !row.usable).map((row) => row.ref);
+}
+
 async function moneyEntriesHandler(
   input: z.output<typeof moneyEntriesInput>,
   qctx: Qctx,
 ): Promise<QueryPage<MoneyEntryRow>> {
+  const closed = await closedDrawers(qctx);
   let query = qctx.db
     .selectFrom('moneyEntries')
     .selectAll()
@@ -378,6 +494,24 @@ async function moneyEntriesHandler(
     .where('createdAt', '<', input.to)
     .orderBy('createdAt', 'desc')
     .orderBy('id', 'desc');
+  if (closed.length > 0) {
+    // A drawer's moves, counts and settlements, and cash taken into it, stay with whoever uses it.
+    // A transfer shows to the drawer it went to as well as the one it left.
+    query = query.where((eb) =>
+      eb.and([
+        eb.or([
+          eb('drawer', 'is', null),
+          eb('drawer', 'not in', closed),
+          eb.and([eb('subKind', '=', 'transfer'), eb('account', 'not in', closed)]),
+        ]),
+        eb.or([
+          eb('drawer', 'is not', null),
+          eb('account', 'is', null),
+          eb('account', 'not in', closed),
+        ]),
+      ]),
+    );
+  }
   if (input.cursor !== undefined) {
     const position = decodeCursor(input.cursor, ENTRIES_SORT);
     query = query.where((eb) =>

@@ -51,3 +51,11 @@ export {
   type QrisFailure,
   type QrisPort,
 } from './qris.js';
+export {
+  createDrawerChoice,
+  memoryDrawerChoice,
+  pickDrawer,
+  type DrawerChoice,
+  type DrawerChoiceStorage,
+} from './drawer-choice.js';
+export type { DrawerRow } from './queries.js';

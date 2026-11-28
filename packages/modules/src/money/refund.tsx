@@ -19,7 +19,8 @@ import type { MoneyDocument } from './documents.js';
 import { accountLabel, moneyInByMethod, type MoneyTarget } from './kas.js';
 import { tm } from './i18n.js';
 import { rupiah } from './payment-entry.js';
-import type { DocumentMoney, PaymentAccountRow } from './queries.js';
+import { useStoreDrawers } from './drawers.js';
+import type { DocumentMoney, DrawerRow, PaymentAccountRow } from './queries.js';
 import { useMoneyQuery, useMoneyRuntime, type MoneyRuntime } from './runtime.js';
 
 /** A method money can go back through, and the most that can. */
@@ -36,6 +37,7 @@ export interface RefundMethod {
 export function refundMethods(
   money: DocumentMoney,
   accounts: readonly PaymentAccountRow[],
+  drawers: readonly DrawerRow[],
   owner: boolean,
 ): RefundMethod[] {
   const credit = Math.max(0, -money.balance);
@@ -43,7 +45,7 @@ export function refundMethods(
     .filter((total) => total.amount > 0)
     .map((total) => ({
       account: total.account,
-      label: accountLabel(total.account, accounts),
+      label: accountLabel(total.account, accounts, drawers),
       limit: owner ? total.amount : Math.min(credit, total.amount),
     }))
     .filter((method) => method.limit > 0);
@@ -166,9 +168,11 @@ export function useRefund(target: MoneyTarget, done: MoneyFormDone): RefundForm 
   const limit = owner ? runtime.limitOf(MONEY_PERMISSION.refund) : null;
   const mayAsk = askable && mayAskBeyond(runtime, limit);
   const { money, accounts } = useDocumentMoney(target.document);
+  const drawers = useStoreDrawers();
   const methods = useMemo(
-    () => (money === null || accounts === null ? [] : refundMethods(money, accounts, owner)),
-    [money, accounts, owner],
+    () =>
+      money === null || accounts === null ? [] : refundMethods(money, accounts, drawers, owner),
+    [money, accounts, drawers, owner],
   );
   const [picked, setAccount] = useState<string | null>(null);
   const [typed, setDigits] = useState<string | null>(null);

@@ -973,3 +973,66 @@ describe('every module`s ops are judged by their rules, not only repair', () => 
     expect(result.results[3]).toMatchObject({ reason: 'repair.refusal.invalidOptions' });
   });
 });
+
+describe('money: a drawer limited to some roles', () => {
+  test('the server refuses a count or a payment into a drawer the author’s roles do not use', async () => {
+    const { world, builder } = await setupWorld(3390, 'none');
+    const cashierRole = testId(3391);
+    await grantRole(db, {
+      tenantId: world.tenantId,
+      userId: world.userId,
+      roleId: cashierRole,
+      roleName: 'cashier',
+      permissionIds: ['repair.read', 'money.read', 'money.receive', 'money.count_cash'],
+    });
+    // An accessories drawer only another role uses, set up by an owner earlier.
+    const accessories = testId(3392);
+    await db
+      .insertInto('moneyAccounts')
+      .values({
+        id: accessories,
+        tenantId: world.tenantId,
+        storeId: world.storeId,
+        kind: 'drawer',
+        name: 'Laci aksesoris',
+        active: 1,
+        storeIdsJson: null,
+        roleIdsJson: JSON.stringify([testId(3393)]),
+        createdAt: NOW,
+        updatedBy: world.userId,
+        updatedAt: NOW,
+      })
+      .execute();
+    const document = { kind: 'repair.ticket', id: TICKET, label: 'ABC-0001' };
+    const entry = (n: number, type: string, payload: Record<string, unknown>) =>
+      builder.append({
+        type,
+        entityType: 'money_entry',
+        entityId: `01920000-0000-7000-8000-0000000e0d0${n}`,
+        payload,
+      });
+    const intoAccessories = entry(1, 'money.payment_received', {
+      document,
+      account: `account:${accessories}`,
+      amount: 50_000,
+      reference: null,
+      tendered: null,
+    });
+    const countAccessories = entry(2, 'money.cash_counted', {
+      counted: 0,
+      note: '',
+      drawer: `account:${accessories}`,
+    });
+    const countMain = entry(3, 'money.cash_counted', { counted: 0, note: '' });
+
+    const result = await push(world, [intoAccessories, countAccessories, countMain]);
+
+    expect(result.results.map((r) => r.status)).toEqual(['rejected', 'rejected', 'accepted']);
+    expect(result.results[0]).toMatchObject({ reason: 'money.refusal.drawerNotYours' });
+    expect(result.results[1]).toMatchObject({ reason: 'money.refusal.drawerNotYours' });
+    const main = await sql<{ drawer: string }>`
+      SELECT drawer FROM money_entries WHERE kind = 'cash_counted'
+    `.execute(db);
+    expect(main.rows.map((row) => row.drawer)).toEqual(['cash']);
+  });
+});

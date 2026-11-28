@@ -68,9 +68,24 @@ export const MONEY_PERMISSION = {
   manageCentralAccounts: 'money.manage_central_accounts',
 } as const;
 
-/** The drawer of the store that recorded the line. Every store has exactly one. */
+/**
+ * The store's main cash drawer: every store has one, and records name it `cash`. A store may add
+ * more drawers ("Laci aksesoris"), each a configured account of kind `drawer` named
+ * `account:<id>`. The main drawer's own settings (its name, the roles that use it) are a `drawer`
+ * account whose id is the store's id (`drawerAccountId`).
+ */
 export const CASH_ACCOUNT = 'cash' as const;
 const PAYMENT_ACCOUNT_PREFIX = 'account:';
+
+/** The configured account that holds a drawer's settings: the store's id for the main drawer. */
+export function drawerAccountId(drawer: string, storeId: string): string | null {
+  return drawer === CASH_ACCOUNT ? storeId : paymentAccountIdOf(drawer);
+}
+
+/** How records name the drawer whose settings are account `accountId`. */
+export function drawerRef(accountId: string, storeId: string): string {
+  return accountId === storeId ? CASH_ACCOUNT : paymentAccountRef(accountId);
+}
 
 /** The ledger account of a configured payment account. */
 export function paymentAccountRef(accountId: string): string {
@@ -112,9 +127,17 @@ export const REVENUE_ACCOUNTS = [
 ] as const;
 export type RevenueAccount = (typeof REVENUE_ACCOUNTS)[number];
 
-/** Configured accounts. Cash is never configured: it is each store's drawer. */
+/** The places other than cash a customer pays through. */
 export const PAYMENT_ACCOUNT_KINDS = ['qris', 'edc', 'transfer'] as const;
 export type PaymentAccountKind = (typeof PAYMENT_ACCOUNT_KINDS)[number];
+
+/** A store's extra cash drawer (or the main drawer's settings): always the store's own. */
+export const DRAWER_KIND = 'drawer' as const;
+/** What a configured account is: a payment method, or a cash drawer. */
+export const MONEY_ACCOUNT_KINDS = [...PAYMENT_ACCOUNT_KINDS, DRAWER_KIND] as const;
+export type MoneyAccountKind = (typeof MONEY_ACCOUNT_KINDS)[number];
+/** The most roles one drawer may name. */
+export const MAX_DRAWER_ROLES = 50;
 
 /** EDC slips carry an approval code, the one thing that ties the payment to the bank's record. */
 export function referenceRequired(kind: PaymentAccountKind | 'cash'): boolean {
@@ -122,11 +145,12 @@ export function referenceRequired(kind: PaymentAccountKind | 'cash'): boolean {
 }
 
 /**
- * Why cash leaves or enters the drawer other than a sale or refund:
+ * Why cash leaves or enters a drawer other than a sale or refund:
  * `withdrawal` an owner takes the takings ("Setor ke pemilik"), `expense` a small store cost,
- * `deposit` cash paid into one of the store's bank accounts, `float` change money put in.
+ * `deposit` cash paid into one of the store's bank accounts, `float` change money put in,
+ * `transfer` cash moved to another of the store's drawers ("Pindah kas").
  */
-export const CASH_MOVE_KINDS = ['withdrawal', 'expense', 'deposit', 'float'] as const;
+export const CASH_MOVE_KINDS = ['withdrawal', 'expense', 'deposit', 'float', 'transfer'] as const;
 export type CashMoveKind = (typeof CASH_MOVE_KINDS)[number];
 
 /** Whether a move takes cash out of the drawer (everything but change money put in). */

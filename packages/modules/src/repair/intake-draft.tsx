@@ -15,7 +15,7 @@ import {
 } from './flows.js';
 import type { IntakeOptionLists } from './intake-options.js';
 import { useRestoredVideoCheck } from './ownership-video.js';
-import { useRepairRuntime } from './runtime.js';
+import { useRepairCashDrawer, useRepairRuntime } from './runtime.js';
 
 /** `onOpenedAlready` gets the id of a kept draft's servisan that was opened before the app died. */
 export function useIntakeDraft(
@@ -94,13 +94,17 @@ export function useOpenTicket(
   onOpened: (ticketId: string) => void,
 ) {
   const runtime = useRepairRuntime();
+  // A cash DP goes into the drawer this device takes cash into.
+  const cash = useRepairCashDrawer();
   return (
     draft: IntakeDraft,
     options: IntakeOptionLists,
     accounts: readonly PaymentAccountRow[],
   ): void => {
     void runner
-      .run(() => runtime.run('openTicket', toOpenTicketInput(draft, options, now(), accounts)))
+      .run(() =>
+        runtime.run('openTicket', toOpenTicketInput(draft, options, now(), accounts, cash.ref)),
+      )
       .then((opened) => {
         if (opened !== undefined) onOpened(opened.ticketId);
       });

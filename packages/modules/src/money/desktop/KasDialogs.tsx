@@ -8,13 +8,8 @@ import { formatDateTime, formatMoney } from '@bolusi/i18n';
 import { Button, TextField, ToggleChip } from '@bolusi/ui-web';
 import { useState } from 'react';
 
-import {
-  CASH_ACCOUNT,
-  CASH_MOVE_KINDS,
-  MAX_REASON,
-  MAX_REFERENCE,
-  MONEY_PERMISSION,
-} from '../constants.js';
+import { CASH_ACCOUNT, MAX_REASON, MAX_REFERENCE, MONEY_PERMISSION } from '../constants.js';
+import { drawerLabel, useStoreDrawers } from '../drawers.js';
 import { tm } from '../i18n.js';
 import { ta } from '../../approvals/i18n.js';
 import {
@@ -155,6 +150,7 @@ export function MoveCashDialog({ onDone, onClose }: TaskProps): React.JSX.Elemen
   const move = useCashMove(onDone);
   const { runner, kind, setKind, setAccount, digits, setDigits } = move;
   const { reason, setReason, banks, depositAccount, missing, missingValues, submit } = move;
+  const { kinds, targets, to } = move;
   const testId = 'money.desk.move';
 
   return (
@@ -178,7 +174,7 @@ export function MoveCashDialog({ onDone, onClose }: TaskProps): React.JSX.Elemen
           aria-label={tm('money.move.kind')}
           data-testid={`${testId}.kinds`}
         >
-          {CASH_MOVE_KINDS.map((option) => (
+          {kinds.map((option) => (
             <ToggleChip
               key={option}
               label={tm(CASH_MOVE_LABEL[option])}
@@ -205,6 +201,27 @@ export function MoveCashDialog({ onDone, onClose }: TaskProps): React.JSX.Elemen
                 selected={depositAccount?.id === row.id}
                 onToggle={() => setAccount(`account:${row.id}`)}
                 testId={`${testId}.account.${row.id}`}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {kind === 'transfer' ? (
+        <div className="flex flex-col gap-2">
+          <span className="text-small font-semibold text-text">{tm('money.move.to')}</span>
+          <div
+            className="flex flex-wrap gap-2"
+            role="group"
+            aria-label={tm('money.move.to')}
+            data-testid={`${testId}.targets`}
+          >
+            {targets.map((row) => (
+              <ToggleChip
+                key={row.ref}
+                label={drawerLabel(row)}
+                selected={to?.ref === row.ref}
+                onToggle={() => setAccount(row.ref)}
+                testId={`${testId}.target.${row.ref}`}
               />
             ))}
           </div>
@@ -604,6 +621,7 @@ export function VoidPaymentDialog({
     entry,
     { onDone, onAsked },
   );
+  const drawers = useStoreDrawers();
   const testId = 'money.desk.void';
 
   return (
@@ -626,7 +644,7 @@ export function VoidPaymentDialog({
         <span className="text-body text-text-muted">
           {[
             customer,
-            accountLabel(entry.account ?? '', accounts),
+            accountLabel(entry.account ?? '', accounts, drawers),
             entry.documentLabel,
             formatDateTime(entry.createdAt),
           ]

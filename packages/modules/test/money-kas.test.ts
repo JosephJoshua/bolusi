@@ -11,9 +11,11 @@ import { historyEmptyKey, shiftDay } from '../src/money/day-records.js';
 import { MONEY_PERMISSION } from '../src/money/constants.js';
 import { turnedDownLines } from '../src/money/void-ask.js';
 import { refundLimitText } from '../src/money/refund.js';
+import { createDrawerChoice, pickDrawer } from '../src/money/drawer-choice.js';
 import type { ApprovalRow } from '../src/approvals/queries.js';
 
 import {
+  accountLabel,
   cashMoveCheck,
   countToday,
   dayStart,
@@ -58,6 +60,7 @@ function entry(overrides: Partial<MoneyEntryRow>): MoneyEntryRow {
     voidedBy: null,
     voidedAt: null,
     voidReason: null,
+    drawer: null,
     ...overrides,
   };
 }
@@ -174,17 +177,109 @@ test('nobody takes more cash out of the drawer than the book says is in it', () 
 });
 
 test("the drawer's moves include an owner's correction, signed as it changed the drawer", () => {
-  const moves = drawerMoves([
-    entry({ id: 'out', kind: 'cash_moved', subKind: 'expense', account: null, amount: 20_000 }),
-    entry({ id: 'in', kind: 'cash_moved', subKind: 'float', account: null, amount: 50_000 }),
-    entry({ id: 'fix', kind: 'cash_adjusted', account: null, amount: -5_000 }),
-    entry({ id: 'paid', account: 'cash', amount: 100_000 }),
-  ]);
+  const moves = drawerMoves(
+    [
+      entry({ id: 'out', kind: 'cash_moved', subKind: 'expense', account: null, amount: 20_000 }),
+      entry({ id: 'in', kind: 'cash_moved', subKind: 'float', account: null, amount: 50_000 }),
+      entry({ id: 'fix', kind: 'cash_adjusted', account: null, amount: -5_000 }),
+      entry({ id: 'paid', account: 'cash', amount: 100_000 }),
+    ],
+    'cash',
+  );
   expect(moves.map((m) => [m.entry.id, m.label, m.delta])).toEqual([
     ['out', 'money.moveKind.expense', -20_000],
     ['in', 'money.moveKind.float', 50_000],
     ['fix', 'money.kas.adjusted', -5_000],
   ]);
+});
+
+describe('several drawers', () => {
+  beforeAll(() => {
+    initI18n({ locale: 'id' });
+    registerMoneyCatalog({ id: idCatalog, en: enCatalog });
+  });
+  const main = { ref: 'cash', name: null, main: true, roleIds: [], active: true, usable: true };
+  const accessories = {
+    ref: 'account:a',
+    name: 'Laci aksesoris',
+    main: false,
+    roleIds: ['role-manager'],
+    active: true,
+    usable: true,
+  };
+
+  test('each drawer reads its own moves, and a transfer from both sides', () => {
+    const entries = [
+      entry({
+        id: 'float',
+        kind: 'cash_moved',
+        subKind: 'float',
+        account: null,
+        amount: 50_000,
+        drawer: 'cash',
+      }),
+      entry({
+        id: 'other',
+        kind: 'cash_moved',
+        subKind: 'expense',
+        account: null,
+        amount: 5_000,
+        drawer: 'account:a',
+      }),
+      entry({
+        id: 'move',
+        kind: 'cash_moved',
+        subKind: 'transfer',
+        account: 'account:a',
+        amount: 20_000,
+        drawer: 'cash',
+      }),
+    ];
+    expect(drawerMoves(entries, 'cash').map((m) => [m.entry.id, m.label, m.delta])).toEqual([
+      ['float', 'money.moveKind.float', 50_000],
+      ['move', 'money.moveKind.transfer', -20_000],
+    ]);
+    expect(drawerMoves(entries, 'account:a').map((m) => [m.entry.id, m.label, m.delta])).toEqual([
+      ['other', 'money.moveKind.expense', -5_000],
+      ['move', 'money.moveKind.transferIn', 20_000],
+    ]);
+  });
+
+  test('cash names its drawer only where the store keeps more than one', () => {
+    expect(accountLabel('cash', [], [main])).toBe('Tunai');
+    expect(accountLabel('cash', [], [main, accessories])).toBe('Tunai · Laci utama');
+    expect(accountLabel('account:a', [], [main, accessories])).toBe('Tunai · Laci aksesoris');
+    // A drawer since switched off, with only the main one left, is still cash, never its id.
+    expect(accountLabel('account:a', [], [main, { ...accessories, active: false }])).toBe(
+      'Tunai · Laci aksesoris',
+    );
+    expect(accountLabel('account:a', [], [accessories])).toBe('Tunai');
+  });
+
+  test('the device takes cash into its remembered drawer, while this person may use it', () => {
+    expect(pickDrawer([main, accessories], 'account:a')?.ref).toBe('account:a');
+    expect(pickDrawer([main, { ...accessories, usable: false }], 'account:a')?.ref).toBe('cash');
+    expect(pickDrawer([main, accessories], null)?.ref).toBe('cash');
+    expect(pickDrawer([{ ...main, usable: false }], 'cash')).toBeNull();
+  });
+
+  test('a remembered drawer is read once, and a choice is kept', async () => {
+    const saved: string[] = [];
+    const choice = createDrawerChoice({
+      read: () => Promise.resolve('account:a'),
+      write: (drawer) => {
+        saved.push(drawer);
+        return Promise.resolve();
+      },
+    });
+    expect(choice.current()).toBeUndefined();
+    let told = 0;
+    choice.subscribe(() => (told += 1));
+    await choice.choose('cash');
+    expect(choice.current()).toBe('cash');
+    expect(saved).toEqual(['cash']);
+    expect(told).toBeGreaterThanOrEqual(2);
+  });
 });
 
 describe('history', () => {
@@ -203,7 +298,7 @@ describe('history', () => {
   };
 
   test('a payment names its servisan and method, even one switched off since', () => {
-    const line = historyLine(entry({ account: 'account:q', amount: 150_000 }), [qris]);
+    const line = historyLine(entry({ account: 'account:q', amount: 150_000 }), [qris], []);
     expect(line).toEqual({
       label: 'money.opType.paymentReceived',
       details: ['B7B-0001', 'QRIS BCA'],
@@ -223,22 +318,31 @@ describe('history', () => {
         documentLabel: null,
       }),
       [],
+      [],
     );
     expect(expense.label).toBe('money.moveKind.expense');
     expect(expense.details).toEqual(['Bensin']);
     // One minus sign everywhere: the one formatMoney writes (round 2 QA, F14).
     expect(expense.amount).toBe('\u2212Rp\u00A025.000');
     expect(expense.amount).toBe(formatMoney(-25_000));
-    const refund = historyLine(entry({ kind: 'refund_paid', amount: 20_000, reason: 'Batal' }), []);
+    const refund = historyLine(
+      entry({ kind: 'refund_paid', amount: 20_000, reason: 'Batal' }),
+      [],
+      [],
+    );
     expect(refund.amount).toBe('\u2212Rp\u00A020.000');
     expect(refund.details).toContain('Batal');
     // A handover refund is saved as a code, and older ones in fixed English: both read localized.
     for (const reason of ['handover_refund', 'Returned at handover']) {
-      const handover = historyLine(entry({ kind: 'refund_paid', amount: 1, reason }), []);
+      const handover = historyLine(entry({ kind: 'refund_paid', amount: 1, reason }), [], []);
       expect(handover.details).toContain('Sisa DP saat HP diambil');
       expect(handover.details).not.toContain(reason);
     }
-    const short = historyLine(entry({ kind: 'cash_adjusted', account: null, amount: -5_000 }), []);
+    const short = historyLine(
+      entry({ kind: 'cash_adjusted', account: null, amount: -5_000 }),
+      [],
+      [],
+    );
     expect(short.label).toBe('money.kas.adjusted');
     expect(short.amount).toBe('\u2212Rp\u00A05.000');
   });
@@ -247,6 +351,7 @@ describe('history', () => {
     const line = historyLine(
       entry({ account: 'account:q', createdByName: 'Dewi' }),
       [qris],
+      [],
       'Yakobus',
     );
     expect(line.details).toEqual(['Yakobus', 'B7B-0001', 'QRIS BCA', 'Dewi']);
@@ -276,6 +381,7 @@ describe('history', () => {
     const line = historyLine(
       entry({ account: 'account:q', amount: 150_000, voidedAt: 5, voidReason: 'Salah metode' }),
       [qris],
+      [],
       'Yulianus Wenda',
     );
     expect(line.details).toEqual(['Yulianus Wenda', 'B7B-0001', 'QRIS BCA', 'Salah metode']);
@@ -294,7 +400,7 @@ describe('history', () => {
     expect(voidable(entry({}), owner)).toBe(true);
     const voided = entry({ voidedAt: 5, voidReason: 'Salah metode' });
     expect(voidable(voided, owner)).toBe(false);
-    expect(historyLine(voided, []).voided).toBe(true);
+    expect(historyLine(voided, [], []).voided).toBe(true);
     expect(voidable(entry({ kind: 'refund_paid' }), owner)).toBe(false);
     expect(voidable(entry({ kind: 'charge_recorded' }), owner)).toBe(false);
     expect(voidable(entry({ kind: 'cash_counted' }), owner)).toBe(false);

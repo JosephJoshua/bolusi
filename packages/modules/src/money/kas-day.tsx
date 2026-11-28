@@ -19,7 +19,14 @@ import {
   type NamedBalance,
   type OpenBalances,
 } from './kas.js';
-import type { CashCountRow, CashDrawer, MoneyEntryRow, PaymentAccountRow } from './queries.js';
+import { useCashDrawer, type CashDrawer } from './drawers.js';
+import type {
+  CashCountRow,
+  CashDrawer as DrawerBook,
+  DrawerRow,
+  MoneyEntryRow,
+  PaymentAccountRow,
+} from './queries.js';
 import { useMoneyQuery, useMoneyRuntime } from './runtime.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -30,9 +37,13 @@ function readyOr<T>(query: QueryState<T>): T | null {
 }
 
 export interface KasDay {
+  /** The drawer this device takes cash into, and the others this person may switch to. */
+  readonly cash: CashDrawer;
+  /** Every drawer of the store, for naming records (`accountLabel`). */
+  readonly drawers: readonly DrawerRow[];
   /** The drawer read itself, for its loading state. */
-  readonly drawerQuery: QueryState<CashDrawer>;
-  readonly drawer: CashDrawer | null;
+  readonly drawerQuery: QueryState<DrawerBook | null>;
+  readonly drawer: DrawerBook | null;
   readonly accounts: readonly PaymentAccountRow[];
   /** The day's records have loaded (and this person may read them). */
   readonly entriesReady: boolean;
@@ -63,9 +74,14 @@ export function useKasDay(now: () => number): KasDay {
   const today = dayStart(now());
   const [nonce, setNonce] = useState(0);
   const again = `:${String(nonce)}`;
+  const cash = useCashDrawer();
   const drawerQuery = useMoneyQuery(
-    async (rt) => (await rt.query('cashDrawer', {})).rows[0]!,
-    `drawer${again}`,
+    async (rt) => (await rt.query('cashDrawer', { drawer: cash.ref })).rows[0] ?? null,
+    `drawer:${cash.ref}${again}`,
+  );
+  const drawers = useMoneyQuery(
+    async (rt) => (await rt.query('drawers', { includeInactive: true })).rows,
+    `drawers${again}`,
   );
   const entries = useMoneyQuery(
     async (rt) => {
@@ -101,12 +117,14 @@ export function useKasDay(now: () => number): KasDay {
   const drawer = readyOr(drawerQuery);
   const todayEntries = readyOr(entries) ?? [];
   return {
+    cash,
+    drawers: readyOr(drawers) ?? [],
     drawerQuery,
     drawer,
     accounts: readyOr(accounts) ?? [],
     entriesReady: entries.status === 'ready',
     moneyIn: moneyIn(todayEntries),
-    moves: drawerMoves(todayEntries),
+    moves: drawerMoves(todayEntries, cash.ref),
     open: splitOpenBalances(readyOr(balances) ?? []),
     difference: drawer === null ? null : differenceToSettle(drawer.counts),
     counted: drawer === null ? null : countToday(drawer.counts, now()),

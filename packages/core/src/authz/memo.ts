@@ -22,6 +22,7 @@ import {
   evaluateAllowance,
   evaluatePermission,
   computeEffectiveSet,
+  rolesHeld,
   type EffectiveSet,
   type PermissionQuery,
   type PermissionResult,
@@ -136,6 +137,12 @@ export class PermissionEvaluator {
     return evaluateAllowance(this.registry, this.snapshot, query, (userId, storeId) =>
       this.effectiveSetFor(userId, storeId),
     );
+  }
+
+  /** The roles the user holds in the store (evaluate.ts `rolesHeld`); none before the first load. */
+  rolesHeld(query: Omit<PermissionQuery, 'permissionId'>): string[] {
+    if (!this.primed) return [];
+    return rolesHeld(this.snapshot, query);
   }
 
   /**

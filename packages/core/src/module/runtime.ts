@@ -135,6 +135,10 @@ export function createModuleRuntime<DB>(
             ),
           ),
         sha256: (data) => options.crypto.sha256(data),
+        rolesOf: (userId) =>
+          Promise.resolve(
+            options.evaluator.rolesHeld({ userId, tenantId: op.tenantId, storeId: op.storeId }),
+          ),
         withinLimit: (userId, permissionId, amount) =>
           Promise.resolve(
             used(

@@ -18,9 +18,11 @@ import {
   CASH_MOVE_KINDS,
   MAX_ACCOUNT_NAME,
   MAX_AMOUNT,
+  MAX_DRAWER_ROLES,
   MAX_REASON,
   MAX_REFERENCE,
   MONEY_ACCOUNT_ENTITY,
+  MONEY_ACCOUNT_KINDS,
   MONEY_ENTRY_ENTITY,
   MONEY_OP,
   MONEY_PERMISSION,
@@ -32,6 +34,8 @@ import { accountSavedRule, centralAccountSavedRule, createMoneyRules } from './r
 import type { MoneyDatabase } from './schema.js';
 
 export const zAmount = zMoneyIdr.min(1).max(MAX_AMOUNT);
+/** A role's id, as the directory names it. */
+export const zRoleId = z.string().min(1).max(64);
 export const zReason = z.string().trim().min(1).max(MAX_REASON);
 const zNote = z.string().trim().max(MAX_REASON);
 const zReference = z.string().trim().min(1).max(MAX_REFERENCE).nullable();
@@ -47,7 +51,16 @@ const accountFields = {
   active: z.boolean(),
 };
 
-export const accountSavedPayload = z.object(accountFields).strict();
+/** A store's own account: a payment method, or one of its cash drawers. */
+export const accountSavedPayload = z
+  .object({
+    ...accountFields,
+    kind: z.enum(MONEY_ACCOUNT_KINDS),
+    /** Drawers only: the roles that use it; empty for every role. */
+    roleIds: z.array(zRoleId).max(MAX_DRAWER_ROLES).optional(),
+  })
+  .strict();
+/** Central accounts are payment methods: a drawer is always one store's. */
 export const centralAccountSavedPayload = z
   .object({
     ...accountFields,
@@ -94,13 +107,20 @@ export const cashMovedPayload = z
     kind: z.enum(CASH_MOVE_KINDS),
     amount: zAmount,
     reason: zReason,
-    /** The account a deposit went into; null for every other kind. */
+    /** The account a deposit went into, or the drawer a transfer went to; null for every other kind. */
     account: zAccountRef.nullable(),
+    /** The drawer the cash left or entered; the main drawer when absent. */
+    drawer: zAccountRef.optional(),
   })
   .strict();
 
 export const cashCountedPayload = z
-  .object({ counted: zMoneyIdr.min(0).max(MAX_AMOUNT), note: zNote })
+  .object({
+    counted: zMoneyIdr.min(0).max(MAX_AMOUNT),
+    note: zNote,
+    /** The drawer counted; the main drawer when absent. */
+    drawer: zAccountRef.optional(),
+  })
   .strict();
 
 export const cashAdjustedPayload = z

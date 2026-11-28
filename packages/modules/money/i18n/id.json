@@ -38,10 +38,15 @@
     "overLimit": "Melebihi batas Anda. Minta persetujuan pemilik toko.",
     "moveAboveDrawer": "Uang di laci tidak cukup.",
     "cashMoveNotFound": "Catatan kas ini tidak ada di toko ini.",
-    "laterCountSettled": "Selisih hitungan kas berikutnya sudah diselesaikan, jadi catatan ini tidak dapat dibatalkan."
+    "laterCountSettled": "Selisih hitungan kas berikutnya sudah diselesaikan, jadi catatan ini tidak dapat dibatalkan.",
+    "notADrawer": "Itu bukan laci kas toko ini.",
+    "drawerNotYours": "Jabatan Anda tidak memakai laci ini.",
+    "sameDrawer": "Pilih laci lain sebagai tujuan.",
+    "mainDrawerStays": "Laci utama toko tidak dapat dinonaktifkan."
   },
   "method": {
-    "cash": "Tunai"
+    "cash": "Tunai",
+    "cashIn": "Tunai · {drawer}"
   },
   "pay": {
     "amount": "Jumlah",
@@ -103,7 +108,9 @@
     "withdrawal": "Setor ke pemilik",
     "expense": "Biaya toko",
     "deposit": "Setor ke bank",
-    "float": "Tambah uang kembalian"
+    "float": "Tambah uang kembalian",
+    "transfer": "Pindah ke laci lain",
+    "transferIn": "Pindahan dari laci lain"
   },
   "count": {
     "counted": "Uang di laci",
@@ -125,7 +132,9 @@
     "hintAmount": "Isi jumlah.",
     "hintReason": "Isi keterangan.",
     "noAccount": "Belum ada rekening toko. Minta pemilik menambahkannya.",
-    "aboveDrawer": "Uang di laci hanya {amount}. Kurangi jumlah terlebih dahulu."
+    "aboveDrawer": "Uang di laci hanya {amount}. Kurangi jumlah terlebih dahulu.",
+    "to": "Ke laci",
+    "hintTo": "Pilih laci tujuan."
   },
   "settle": {
     "title": "Selisih kas",
@@ -198,7 +207,6 @@
     "add": "Tambah metode",
     "addTitle": "Tambah metode",
     "editTitle": "Ubah metode",
-    "cashAlways": "Selalu ada",
     "central": "Semua toko",
     "inactive": "Tidak dipakai",
     "none": "Belum ada QRIS, EDC, atau rekening.",
@@ -319,5 +327,22 @@
     },
     "rejected": "{name} menolak memotong tagihan {amount}.",
     "rejectedNote": "{name} menolak memotong tagihan {amount}: {note}"
+  },
+  "drawer": {
+    "main": "Laci utama",
+    "pick": "Laci"
+  },
+  "drawers": {
+    "title": "Laci kas",
+    "add": "Tambah laci",
+    "addTitle": "Tambah laci",
+    "editTitle": "Ubah laci",
+    "namePlaceholder": "Contoh: Laci aksesoris",
+    "usedBy": "Dipakai oleh",
+    "everyone": "Semua jabatan",
+    "someRoles": "Pilih jabatan",
+    "ownersHint": "Pemilik selalu dapat memakai semua laci.",
+    "roleRequired": "Pilih minimal satu jabatan.",
+    "activeCaption": "Jika dinonaktifkan, laci tidak dapat dipilih. Catatan lama tetap ada."
   }
 }

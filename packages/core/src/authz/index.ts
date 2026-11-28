@@ -27,6 +27,7 @@ export {
   evaluateAllowance,
   evaluatePermission,
   parsePermissionIds,
+  rolesHeld,
   type DenialReason,
   type EffectiveSet,
   type EffectiveSetLookup,

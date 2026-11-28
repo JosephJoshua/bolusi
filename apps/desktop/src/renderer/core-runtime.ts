@@ -7,6 +7,7 @@ import { createUuidV7Generator, retryAfterDecision } from '@bolusi/core';
 import { consoleDiagnostics } from '@bolusi/device/ports/diagnostics';
 import type { InventoryRuntime } from '@bolusi/modules/inventory/desktop';
 import type { PurchasingRuntime } from '@bolusi/modules/purchasing/desktop';
+import { createDrawerChoice } from '@bolusi/modules/money';
 import { catalogModelSearch } from '@bolusi/modules/repair';
 import type { RepairPrinting, RepairRuntime } from '@bolusi/modules/repair/desktop';
 import type { CapturedMedia, CaptureRequest } from '@bolusi/modules/screen-kit';
@@ -139,6 +140,11 @@ export function createCoreRepairRuntime(deps: {
       limitOf,
       newId,
       stores: () => call('money.stores'),
+      roles: () => call('money.roles'),
+      drawerChoice: createDrawerChoice({
+        read: () => call('money.drawer.read'),
+        write: (drawer) => call('money.drawer.write', drawer),
+      }),
       // QRIS through Xendit, made by the core like the staff calls; errors come back as QrisError.
       qris: {
         connections: () => call('money.qris.connections'),
