@@ -612,29 +612,14 @@ export function RefundStep({
   readonly onAsked?: (() => void) | undefined;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
-  const runtime = useMoneyRuntime();
-  const runner = useActionRunner();
-  const form = useRefund(target, onAsked !== undefined);
+  const form = useRefund(target, { onDone, onAsked });
+  const { runner, submit } = form;
   const leave = useStepLeave(
     form.dirty,
     { chrome, onDone, onCancel, onRegisterDiscardGuard },
     testID,
   );
   const amount = rupiah(form.digits);
-
-  const submit = (): void => {
-    const { input, ask } = form;
-    const save =
-      ask !== null
-        ? () => runtime.approvals.run('requestApproval', ask)
-        : input !== null
-          ? () => runtime.run('refund', input)
-          : null;
-    if (save === null) return;
-    void runner.run<unknown>(save).then((result) => {
-      if (result !== undefined) (ask !== null ? (onAsked ?? onDone) : onDone)();
-    });
-  };
 
   return (
     <FlowScreen
@@ -758,29 +743,14 @@ export function ReduceChargeStep({
   readonly onAsked?: (() => void) | undefined;
   readonly testID?: string | undefined;
 }): React.JSX.Element {
-  const runtime = useMoneyRuntime();
-  const runner = useActionRunner();
-  const form = useReduceCharge(target, onAsked !== undefined);
+  const form = useReduceCharge(target, { onDone, onAsked });
+  const { runner, submit } = form;
   const leave = useStepLeave(
     form.dirty,
     { chrome, onDone, onCancel, onRegisterDiscardGuard },
     testID,
   );
   const amount = rupiah(form.digits);
-
-  const submit = (): void => {
-    const { input, ask } = form;
-    const save =
-      ask !== null
-        ? () => runtime.approvals.run('requestApproval', ask)
-        : input !== null
-          ? () => runtime.run('reduceCharge', input)
-          : null;
-    if (save === null) return;
-    void runner.run<unknown>(save).then((result) => {
-      if (result !== undefined) (ask !== null ? (onAsked ?? onDone) : onDone)();
-    });
-  };
 
   return (
     <FlowScreen

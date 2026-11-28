@@ -500,26 +500,11 @@ export function RefundDialog({
   /** Beyond a manager's limit an owner is asked instead, and this runs once asked. */
   readonly onAsked?: (() => void) | undefined;
 }): React.JSX.Element {
-  const runtime = useMoneyRuntime();
-  const runner = useActionRunner();
-  const form = useRefund(target, onAsked !== undefined);
+  const form = useRefund(target, { onDone, onAsked });
+  const { runner, submit } = form;
   const amount = rupiah(form.digits);
   const testId = 'money.desk.refund';
   const nothing = form.ready && form.methods.length === 0;
-
-  const submit = (): void => {
-    const { input, ask } = form;
-    const save =
-      ask !== null
-        ? () => runtime.approvals.run('requestApproval', ask)
-        : input !== null
-          ? () => runtime.run('refund', input)
-          : null;
-    if (save === null) return;
-    void runner.run<unknown>(save).then((result) => {
-      if (result !== undefined) (ask !== null ? (onAsked ?? onDone) : onDone)();
-    });
-  };
 
   return (
     <MoneyDialog
@@ -639,25 +624,10 @@ export function ReduceChargeDialog({
   /** Beyond a manager's limit an owner is asked instead, and this runs once asked. */
   readonly onAsked?: (() => void) | undefined;
 }): React.JSX.Element {
-  const runtime = useMoneyRuntime();
-  const runner = useActionRunner();
-  const form = useReduceCharge(target, onAsked !== undefined);
+  const form = useReduceCharge(target, { onDone, onAsked });
+  const { runner, submit } = form;
   const amount = rupiah(form.digits);
   const testId = 'money.desk.reduce';
-
-  const submit = (): void => {
-    const { input, ask } = form;
-    const save =
-      ask !== null
-        ? () => runtime.approvals.run('requestApproval', ask)
-        : input !== null
-          ? () => runtime.run('reduceCharge', input)
-          : null;
-    if (save === null) return;
-    void runner.run<unknown>(save).then((result) => {
-      if (result !== undefined) (ask !== null ? (onAsked ?? onDone) : onDone)();
-    });
-  };
 
   return (
     <MoneyDialog
