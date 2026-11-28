@@ -10,6 +10,8 @@
 import { formatMoney } from '@bolusi/i18n';
 import { useMemo, useState } from 'react';
 
+import { useActionRunner, type ActionRunner } from '../screen-kit/index.js';
+
 import { APPROVAL_PERMISSION } from '../approvals/constants.js';
 import { CASH_ACCOUNT, MONEY_APPROVAL_KIND, MONEY_PERMISSION } from './constants.js';
 import type { RefundInput, ReduceChargeInput } from './commands.js';
@@ -71,6 +73,38 @@ export interface MoneyAsk {
   readonly reason: string;
 }
 
+/** What a form does once saved: `onAsked` is set where it may ask an owner instead. */
+export interface MoneyFormDone {
+  readonly onDone: () => void;
+  /** Beyond a manager's limit an owner is asked instead, and this runs once asked. */
+  readonly onAsked?: (() => void) | undefined;
+}
+
+/** Saves `input` with `command`, or sends `ask` instead; then `onDone`, or `onAsked` once asked. */
+function useSaveOrAsk<I>(
+  command: 'refund' | 'reduceCharge',
+  done: MoneyFormDone,
+): {
+  readonly runner: ActionRunner;
+  readonly save: (input: I | null, ask: MoneyAsk | null) => void;
+} {
+  const runtime = useMoneyRuntime();
+  const runner = useActionRunner();
+  const save = (input: I | null, ask: MoneyAsk | null): void => {
+    const run =
+      ask !== null
+        ? () => runtime.approvals.run('requestApproval', ask)
+        : input !== null
+          ? () => runtime.run(command, input as never)
+          : null;
+    if (run === null) return;
+    void runner.run<unknown>(run).then((result) => {
+      if (result !== undefined) (ask !== null ? (done.onAsked ?? done.onDone) : done.onDone)();
+    });
+  };
+  return { runner, save };
+}
+
 /** A limited role (a manager) beyond its limit asks an owner, where the step lets it ask. */
 function mayAskBeyond(runtime: MoneyRuntime, limit: number | null): boolean {
   return limit !== null && runtime.approvals.hasPermission(APPROVAL_PERMISSION.use);
@@ -118,11 +152,16 @@ export interface RefundForm {
   readonly input: RefundInput | null;
   /** What saving asks for when `asking`. */
   readonly ask: MoneyAsk | null;
+  readonly runner: ActionRunner;
+  /** Gives the money back, or asks an owner for it. */
+  readonly submit: () => void;
 }
 
-/** `askable`: the step can send an approval request, and says where its answer shows. */
-export function useRefund(target: MoneyTarget, askable = false): RefundForm {
+/** With `done.onAsked` the step can send an approval request, and says where its answer shows. */
+export function useRefund(target: MoneyTarget, done: MoneyFormDone): RefundForm {
   const runtime = useMoneyRuntime();
+  const askable = done.onAsked !== undefined;
+  const { runner, save } = useSaveOrAsk<RefundInput>('refund', done);
   const owner = runtime.hasPermission(MONEY_PERMISSION.refund);
   const limit = owner ? runtime.limitOf(MONEY_PERMISSION.refund) : null;
   const mayAsk = askable && mayAskBeyond(runtime, limit);
@@ -173,6 +212,14 @@ export function useRefund(target: MoneyTarget, askable = false): RefundForm {
           reason: reason.trim(),
           reference: account === CASH_ACCOUNT || trimmed === '' ? null : trimmed,
         };
+  const refundAsk: MoneyAsk | null =
+    asking && input !== null && method !== null
+      ? {
+          kind: MONEY_APPROVAL_KIND.refund,
+          input: { ...input, methodLabel: method.label },
+          reason: input.reason,
+        }
+      : null;
   return {
     ready: money !== null && accounts !== null,
     owner,
@@ -200,14 +247,9 @@ export function useRefund(target: MoneyTarget, askable = false): RefundForm {
     problem,
     dirty: typed !== null || picked !== null || reason.trim() !== '' || trimmed !== '',
     input: asking ? null : input,
-    ask:
-      asking && input !== null && method !== null
-        ? {
-            kind: MONEY_APPROVAL_KIND.refund,
-            input: { ...input, methodLabel: method.label },
-            reason: input.reason,
-          }
-        : null,
+    ask: refundAsk,
+    runner,
+    submit: () => save(asking ? null : input, refundAsk),
   };
 }
 
@@ -240,14 +282,19 @@ export interface ReduceChargeForm {
   readonly input: ReduceChargeInput | null;
   /** What saving asks for when `asking`. */
   readonly ask: MoneyAsk | null;
+  readonly runner: ActionRunner;
+  /** Lowers the bill, or asks an owner to. */
+  readonly submit: () => void;
 }
 
 /**
- * An owner lowers a bill already charged; the whole debt is filled in. `askable`: the step can send
- * an approval request (on a servisan).
+ * An owner lowers a bill already charged; the whole debt is filled in. With `done.onAsked` the step
+ * can send an approval request (on a servisan).
  */
-export function useReduceCharge(target: MoneyTarget, askable = false): ReduceChargeForm {
+export function useReduceCharge(target: MoneyTarget, done: MoneyFormDone): ReduceChargeForm {
   const runtime = useMoneyRuntime();
+  const askable = done.onAsked !== undefined;
+  const { runner, save } = useSaveOrAsk<ReduceChargeInput>('reduceCharge', done);
   const limit = runtime.limitOf(MONEY_PERMISSION.refund);
   const mayAsk = askable && mayAskBeyond(runtime, limit);
   const { money } = useDocumentMoney(target.document);
@@ -276,6 +323,10 @@ export function useReduceCharge(target: MoneyTarget, askable = false): ReduceCha
     problem !== null || amount === null
       ? null
       : { document: target.document, amount, reason: reason.trim() };
+  const reduceAsk: MoneyAsk | null =
+    asking && input !== null
+      ? { kind: MONEY_APPROVAL_KIND.reduceCharge, input: { ...input }, reason: input.reason }
+      : null;
   return {
     ready: money !== null,
     owed,
@@ -293,10 +344,9 @@ export function useReduceCharge(target: MoneyTarget, askable = false): ReduceCha
     problem,
     dirty: typed !== null || reason.trim() !== '',
     input: asking ? null : input,
-    ask:
-      asking && input !== null
-        ? { kind: MONEY_APPROVAL_KIND.reduceCharge, input: { ...input }, reason: input.reason }
-        : null,
+    ask: reduceAsk,
+    runner,
+    submit: () => save(asking ? null : input, reduceAsk),
   };
 }
 
