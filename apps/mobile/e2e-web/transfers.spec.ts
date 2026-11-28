@@ -9,6 +9,7 @@
 import type { Page } from '@playwright/test';
 
 import { expect, shoot as check, test } from './qa';
+import { toServisan } from './shell.js';
 
 const SIZES = {
   phone: { width: 360, height: 640 },
@@ -23,7 +24,7 @@ const tap = (page: Page, testID: string) => page.getByTestId(testID).first().cli
 
 async function openTransfers(page: Page): Promise<void> {
   await page.goto('/?screen=repair&state=owner');
-  await expect(page.getByTestId('repair.board')).toBeVisible();
+  await toServisan(page);
   await tap(page, 'shell-tabs.items');
   await tap(page, 'items.sections.transfers');
   await expect(page.getByTestId('inventory.transfers')).toBeVisible();

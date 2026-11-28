@@ -87,6 +87,20 @@ async function ticketRow(harness: RepairHarness, ticketId: string) {
   return (await harness.query('getTicket', { ticketId }, harness.cashierId)).rows[0];
 }
 
+/**
+ * An owner's way to a servisan a request waits on, here on the board alone: its number in the
+ * search. (In the app it is Perlu dicek, which `AttentionHome.test.tsx` drives.)
+ */
+async function findOnBoard(
+  screen: RenderResult,
+  harness: RepairHarness,
+  ticketId: string,
+): Promise<void> {
+  type(screen, 'repair.board.search', String((await ticketRow(harness, ticketId)).ticketNumber));
+  await settleTyping();
+  expect(await waitUntil(() => screen.query(`repair.board.row.${ticketId}`) !== null)).toBe(true);
+}
+
 describe('counter intake', () => {
   // On the first Android run "Tidak dicek" showed as "Tidak": squeezed beside the check's name.
   // Where the states fit they sit on the name's line; on a narrow phone or a large system font they
@@ -326,6 +340,27 @@ describe('an intake restored after the app died mid-submit', () => {
 });
 
 describe('technician work', () => {
+  test('a start that is refused is said on the step, which stays open', async () => {
+    h = await openRepairScreenHarness(5202);
+    const ticketId = await openTicket(h);
+    const real = repairRuntimeFor(h, h.technicianId);
+    const runtime = {
+      ...real,
+      run: ((name: string, input: unknown) =>
+        name === 'startWork'
+          ? Promise.reject(new Error('refused'))
+          : real.run(name as never, input as never)) as typeof real.run,
+    };
+    const screen = await mount(h, h.technicianId, { runtime });
+    await press(screen, 'repair.board.views.unassigned');
+    await press(screen, `repair.board.row.${ticketId}`);
+    await press(screen, 'repair.ticket.action.start');
+    await press(screen, 'repair.work.before.take.press');
+    await press(screen, 'repair.work.before.primary');
+    expect(screen.query('repair.work.before.error')).not.toBeNull();
+    expect(screen.query('repair.work.before')).not.toBeNull();
+  });
+
   test('starting needs a before photo and marking repaired needs an after photo', async () => {
     h = await openRepairScreenHarness(5201);
     const ticketId = await openTicket(h);
@@ -693,7 +728,7 @@ describe('Bayar nanti (owners; the counter asks)', () => {
     counter.unmount();
 
     const owner = await mount(h, h.storeOwnerId);
-    await press(owner, 'repair.board.views.approvals');
+    await findOnBoard(owner, h, ticketId);
     await press(owner, `repair.board.row.${ticketId}`);
     const [request] = (
       await h.approvalsQuery('approvalRequests', { targetId: ticketId }, h.storeOwnerId)
@@ -743,7 +778,7 @@ describe('a down payment fix (owners; the counter asks)', () => {
     counter.unmount();
 
     const owner = await mount(h, h.storeOwnerId);
-    await press(owner, 'repair.board.views.approvals');
+    await findOnBoard(owner, h, ticketId);
     await press(owner, `repair.board.row.${ticketId}`);
     await press(owner, `repair.ticket.approvals.${request!.id}`);
     await press(owner, 'repair.ticket.approval.primary');
@@ -771,7 +806,7 @@ describe('a down payment fix (owners; the counter asks)', () => {
 
     // Rp\u00A060.000 off is beyond the manager's Rp\u00A030.000: only rejecting is offered.
     const manager = await mount(h, h.managerId);
-    await press(manager, 'repair.board.views.approvals');
+    await findOnBoard(manager, h, ticketId);
     await press(manager, `repair.board.row.${ticketId}`);
     await press(manager, `repair.ticket.approvals.${request!.id}`);
     expect(manager.all('repair.ticket.approval.primary')[0]!.props['disabled']).toBe(true);
@@ -958,9 +993,9 @@ describe('cancelling (owners; the counter asks)', () => {
     expect(counter.query(`repair.ticket.approvals.${request!.id}`)).not.toBeNull();
     counter.unmount();
 
-    // The owner finds it under its own view, and approves it from the servisan.
+    // The owner finds the servisan, marked as waiting, and approves it there.
     const owner = await mount(h, h.storeOwnerId);
-    await press(owner, 'repair.board.views.approvals');
+    await findOnBoard(owner, h, ticketId);
     expect(owner.query(`repair.board.row.${ticketId}.approvalWaiting`)).not.toBeNull();
     await press(owner, `repair.board.row.${ticketId}`);
     await press(owner, `repair.ticket.approvals.${request!.id}`);
@@ -970,8 +1005,6 @@ describe('cancelling (owners; the counter asks)', () => {
       cancelFee: 20_000,
       cancelledBy: h.storeOwnerId,
     });
-    // Nothing waits any more, so the view goes and the board returns to its usual queue.
-    expect(owner.query('repair.board.views.approvals')).toBeNull();
   });
 
   test('a free cancel says so once, without an "Rp 0" under it', async () => {
@@ -1179,7 +1212,7 @@ describe('discounts (owners; the counter asks)', () => {
     counter.unmount();
 
     const approver = await mount(h, h.storeOwnerId);
-    await press(approver, 'repair.board.views.approvals');
+    await findOnBoard(approver, h, ticketId);
     await press(approver, `repair.board.row.${ticketId}`);
     await press(approver, `repair.ticket.approvals.${request!.id}`);
     await press(approver, 'repair.ticket.approval.primary');
@@ -2090,7 +2123,7 @@ describe('money once the phone went home', () => {
     ).rows;
     expect(request).toMatchObject({ kind: 'money.refund', amount: 40_000, reason: 'Garansi kaca' });
     const owner = await mount(h, h.storeOwnerId);
-    await press(owner, 'repair.board.views.approvals');
+    await findOnBoard(owner, h, ticketId);
     await press(owner, `repair.board.row.${ticketId}`);
     await press(owner, `repair.ticket.approvals.${request!.id}`);
     expect(text(owner, 'repair.ticket.approval')).toContain('Dikembalikan melalui Tunai.');
