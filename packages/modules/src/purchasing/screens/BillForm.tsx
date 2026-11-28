@@ -7,7 +7,6 @@
 import { formatMoney, formatPhone, keepNumbersWhole } from '@bolusi/i18n';
 import {
   AmountRow,
-  border,
   ChipRow,
   color,
   ListRow,
@@ -18,6 +17,7 @@ import {
   TextInput,
   ToggleChip,
   type,
+  Rows,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -160,7 +160,7 @@ export function BillForm({
             ) : rows.length === 0 ? (
               <Text style={styles.muted}>{tp('purchasing.form.noSuppliers')}</Text>
             ) : (
-              <View style={styles.bleed}>
+              <Rows style={styles.bleed}>
                 {rows.map((row) => (
                   <ListRow
                     key={row.id}
@@ -173,7 +173,7 @@ export function BillForm({
                     testID={`${testID}.supplier.${row.id}`}
                   />
                 ))}
-              </View>
+              </Rows>
             )
           }
         </QueryView>
@@ -274,53 +274,59 @@ export function BillForm({
         {draft.lines.length === 0 ? (
           <Text style={styles.muted}>{tp('purchasing.form.noParts')}</Text>
         ) : (
-          draft.lines.map((line) => {
-            const price = linePrice(line);
-            return (
-              <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
-                <View style={styles.lineTop}>
-                  <Text style={styles.lineName}>{line.name}</Text>
-                  <TextButton
-                    label={tp('purchasing.form.remove')}
-                    accessibilityLabel={`${tp('purchasing.form.remove')} ${line.name}`}
-                    tone="danger"
-                    onPress={() => onChange(removeBillLine(draft, line.itemId))}
-                    testID={`${testID}.line.${line.itemId}.remove`}
+          <Rows>
+            {draft.lines.map((line) => {
+              const price = linePrice(line);
+              return (
+                <View
+                  key={line.itemId}
+                  style={styles.line}
+                  testID={`${testID}.line.${line.itemId}`}
+                >
+                  <View style={styles.lineTop}>
+                    <Text style={styles.lineName}>{line.name}</Text>
+                    <TextButton
+                      label={tp('purchasing.form.remove')}
+                      accessibilityLabel={`${tp('purchasing.form.remove')} ${line.name}`}
+                      tone="danger"
+                      onPress={() => onChange(removeBillLine(draft, line.itemId))}
+                      testID={`${testID}.line.${line.itemId}.remove`}
+                    />
+                  </View>
+                  <QuantityStepper
+                    label={tp('purchasing.form.qty')}
+                    value={line.qty}
+                    onChange={(qty) => onChange(setBillLine(draft, line.itemId, { qty }))}
+                    min={1}
+                    max={MAX_LINE_QTY}
+                    decreaseLabel={tp('purchasing.form.decrease')}
+                    increaseLabel={tp('purchasing.form.increase')}
+                    testID={`${testID}.line.${line.itemId}.qty`}
                   />
+                  <TextInput
+                    label={tp('purchasing.bill.price')}
+                    value={line.price}
+                    onChangeText={(text) => {
+                      const kept = amountField(text, MAX_UNIT_PRICE);
+                      if (kept !== null) onChange(setBillLine(draft, line.itemId, { price: kept }));
+                    }}
+                    keyboardType="number-pad"
+                    selectTextOnFocus
+                    testID={`${testID}.line.${line.itemId}.price`}
+                  />
+                  {price === null ? null : (
+                    <Text style={styles.caption} testID={`${testID}.line.${line.itemId}.amount`}>
+                      {tp('purchasing.bill.lineAmount', {
+                        qty: line.qty,
+                        price: formatMoney(price),
+                        amount: formatMoney(line.qty * price),
+                      })}
+                    </Text>
+                  )}
                 </View>
-                <QuantityStepper
-                  label={tp('purchasing.form.qty')}
-                  value={line.qty}
-                  onChange={(qty) => onChange(setBillLine(draft, line.itemId, { qty }))}
-                  min={1}
-                  max={MAX_LINE_QTY}
-                  decreaseLabel={tp('purchasing.form.decrease')}
-                  increaseLabel={tp('purchasing.form.increase')}
-                  testID={`${testID}.line.${line.itemId}.qty`}
-                />
-                <TextInput
-                  label={tp('purchasing.bill.price')}
-                  value={line.price}
-                  onChangeText={(text) => {
-                    const kept = amountField(text, MAX_UNIT_PRICE);
-                    if (kept !== null) onChange(setBillLine(draft, line.itemId, { price: kept }));
-                  }}
-                  keyboardType="number-pad"
-                  selectTextOnFocus
-                  testID={`${testID}.line.${line.itemId}.price`}
-                />
-                {price === null ? null : (
-                  <Text style={styles.caption} testID={`${testID}.line.${line.itemId}.amount`}>
-                    {tp('purchasing.bill.lineAmount', {
-                      qty: line.qty,
-                      price: formatMoney(price),
-                      amount: formatMoney(line.qty * price),
-                    })}
-                  </Text>
-                )}
-              </View>
-            );
-          })
+              );
+            })}
+          </Rows>
         )}
       </Section>
 
@@ -368,8 +374,6 @@ const styles = StyleSheet.create({
   line: {
     paddingVertical: space.md,
     gap: space.sm,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   lineTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   lineName: { ...type.bodyBold, color: color.text, flex: 1 },

@@ -19,6 +19,7 @@ import {
   space,
   Text,
   type,
+  Rows,
 } from '@bolusi/ui';
 import { StyleSheet, View } from 'react-native';
 
@@ -174,18 +175,20 @@ export function KasBoard({
 
             {turnedDown.length === 0 ? null : (
               <Section title={tm('money.kas.turnedDown')} testID={`${testID}.turnedDown`}>
-                {turnedDown.map((row) => (
-                  <AmountRow
-                    key={row.id}
-                    label={ta(approvalKindKey(row.kind))}
-                    detail={[about(row), [row.decidedByName, row.note].filter(Boolean).join(': ')]
-                      .filter(Boolean)
-                      .join(' · ')}
-                    value={row.amount}
-                    onPress={onHistory}
-                    testID={`${testID}.turnedDown.${row.id}`}
-                  />
-                ))}
+                <Rows>
+                  {turnedDown.map((row) => (
+                    <AmountRow
+                      key={row.id}
+                      label={ta(approvalKindKey(row.kind))}
+                      detail={[about(row), [row.decidedByName, row.note].filter(Boolean).join(': ')]
+                        .filter(Boolean)
+                        .join(' · ')}
+                      value={row.amount}
+                      onPress={onHistory}
+                      testID={`${testID}.turnedDown.${row.id}`}
+                    />
+                  ))}
+                </Rows>
               </Section>
             )}
 
@@ -216,7 +219,7 @@ export function KasBoard({
                   {moneyIn.methods.length === 0 && moneyIn.refunded === 0 ? (
                     <Text style={styles.muted}>{tm('money.kas.nothingIn')}</Text>
                   ) : (
-                    <>
+                    <Rows>
                       {moneyIn.methods.map((method) => (
                         <AmountRow
                           key={method.account}
@@ -238,60 +241,66 @@ export function KasBoard({
                         strong
                         testID={`${testID}.in.total`}
                       />
-                    </>
+                    </Rows>
                   )}
                 </Section>
               ) : null}
               {moves.length === 0 ? null : (
                 <Section title={tm('money.kas.movesToday')} testID={`${testID}.moves`}>
-                  {moves.map(({ entry, label, delta }) => (
-                    <AmountRow
-                      key={entry.id}
-                      label={tm(label)}
-                      detail={[formatTime(entry.createdAt), entry.reason]
-                        .filter(Boolean)
-                        .join(' · ')}
-                      value={delta}
-                      signed
-                      testID={`${testID}.moves.${entry.id}`}
-                    />
-                  ))}
+                  <Rows>
+                    {moves.map(({ entry, label, delta }) => (
+                      <AmountRow
+                        key={entry.id}
+                        label={tm(label)}
+                        detail={[formatTime(entry.createdAt), entry.reason]
+                          .filter(Boolean)
+                          .join(' · ')}
+                        value={delta}
+                        signed
+                        testID={`${testID}.moves.${entry.id}`}
+                      />
+                    ))}
+                  </Rows>
                 </Section>
               )}
 
               {open.owed.length === 0 ? null : (
                 <Section title={tm('money.kas.owed')} testID={`${testID}.owed`}>
-                  {open.owed.map((row) => (
-                    <AmountRow
-                      key={row.documentId}
-                      label={row.customer ?? row.documentLabel}
-                      detail={[
-                        row.customer === null ? null : row.documentLabel,
-                        tm('money.kas.since', { date: formatDate(row.since) }),
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                      value={row.balance}
-                      onPress={mayReceive ? () => onReceive(row) : undefined}
-                      testID={`${testID}.owed.${row.documentId}`}
-                    />
-                  ))}
+                  <Rows>
+                    {open.owed.map((row) => (
+                      <AmountRow
+                        key={row.documentId}
+                        label={row.customer ?? row.documentLabel}
+                        detail={[
+                          row.customer === null ? null : row.documentLabel,
+                          tm('money.kas.since', { date: formatDate(row.since) }),
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                        value={row.balance}
+                        onPress={mayReceive ? () => onReceive(row) : undefined}
+                        testID={`${testID}.owed.${row.documentId}`}
+                      />
+                    ))}
+                  </Rows>
                 </Section>
               )}
 
               {open.owedBack.length === 0 ? null : (
                 <Section title={tm('money.kas.owedBack')} testID={`${testID}.owedBack`}>
                   <Text style={styles.muted}>{tm('money.kas.owedBackHint')}</Text>
-                  {open.owedBack.map((row) => (
-                    <AmountRow
-                      key={row.documentId}
-                      label={row.customer ?? row.documentLabel}
-                      detail={row.customer === null ? undefined : row.documentLabel}
-                      value={-row.balance}
-                      onPress={mayReceive ? () => onRefund(row) : undefined}
-                      testID={`${testID}.owedBack.${row.documentId}`}
-                    />
-                  ))}
+                  <Rows>
+                    {open.owedBack.map((row) => (
+                      <AmountRow
+                        key={row.documentId}
+                        label={row.customer ?? row.documentLabel}
+                        detail={row.customer === null ? undefined : row.documentLabel}
+                        value={-row.balance}
+                        onPress={mayReceive ? () => onRefund(row) : undefined}
+                        testID={`${testID}.owedBack.${row.documentId}`}
+                      />
+                    ))}
+                  </Rows>
                 </Section>
               )}
             </>

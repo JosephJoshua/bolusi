@@ -3,7 +3,7 @@
  * each with its total and when it is due, and the way to record the next one.
  */
 import { keepCodeWhole } from '@bolusi/i18n';
-import { AmountRow, color, Text, TextButton, type } from '@bolusi/ui';
+import { AmountRow, color, Text, TextButton, type, Rows } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 
@@ -56,7 +56,7 @@ export function OrderBills({
           rows.length === 0 ? (
             <Text style={styles.muted}>{tp('purchasing.bill.orderNoBills')}</Text>
           ) : (
-            <>
+            <Rows>
               {rows.map((row) => (
                 <AmountRow
                   key={row.id}
@@ -75,7 +75,7 @@ export function OrderBills({
                   testID={`${testID}.total`}
                 />
               ) : null}
-            </>
+            </Rows>
           )
         }
       </QueryView>

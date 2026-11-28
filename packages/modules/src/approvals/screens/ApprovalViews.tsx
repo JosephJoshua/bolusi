@@ -17,6 +17,7 @@ import {
   TextInput,
   type,
   useBleed,
+  Rows,
 } from '@bolusi/ui';
 import { t } from '@bolusi/i18n';
 import { StyleSheet, View } from 'react-native';
@@ -79,7 +80,7 @@ export function ApprovalSection({
   return (
     <Section title={ta('approvals.section.title')} testID={testID}>
       {/* A row's own padding is hit area: its text lines up with the screen's content edge. */}
-      <View style={bleedMargins(bleed)}>
+      <Rows style={bleedMargins(bleed)}>
         {rows.map((row) => {
           const description = describe(row);
           return (
@@ -98,7 +99,7 @@ export function ApprovalSection({
             />
           );
         })}
-      </View>
+      </Rows>
     </Section>
   );
 }

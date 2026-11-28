@@ -9,11 +9,11 @@ import {
   QuantityStepper,
   TextButton,
   TextInput,
-  border,
   color,
   space,
   type,
   Text,
+  Rows,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -134,7 +134,7 @@ export function OrderForm({
             rows.length === 0 ? (
               <Text style={styles.muted}>{tp('purchasing.form.noSuppliers')}</Text>
             ) : (
-              <View style={styles.bleed}>
+              <Rows style={styles.bleed}>
                 {rows.map((row) => (
                   <ListRow
                     key={row.id}
@@ -147,7 +147,7 @@ export function OrderForm({
                     testID={`${testID}.supplier.${row.id}`}
                   />
                 ))}
-              </View>
+              </Rows>
             )
           }
         </QueryView>
@@ -167,30 +167,32 @@ export function OrderForm({
         {draft.lines.length === 0 ? (
           <Text style={styles.muted}>{tp('purchasing.form.noParts')}</Text>
         ) : (
-          draft.lines.map((line) => (
-            <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
-              <View style={styles.lineTop}>
-                <Text style={styles.lineName}>{line.name}</Text>
-                <TextButton
-                  label={tp('purchasing.form.remove')}
-                  accessibilityLabel={`${tp('purchasing.form.remove')} ${line.name}`}
-                  tone="danger"
-                  onPress={() => onChange(removeLine(draft, line.itemId))}
-                  testID={`${testID}.line.${line.itemId}.remove`}
+          <Rows>
+            {draft.lines.map((line) => (
+              <View key={line.itemId} style={styles.line} testID={`${testID}.line.${line.itemId}`}>
+                <View style={styles.lineTop}>
+                  <Text style={styles.lineName}>{line.name}</Text>
+                  <TextButton
+                    label={tp('purchasing.form.remove')}
+                    accessibilityLabel={`${tp('purchasing.form.remove')} ${line.name}`}
+                    tone="danger"
+                    onPress={() => onChange(removeLine(draft, line.itemId))}
+                    testID={`${testID}.line.${line.itemId}.remove`}
+                  />
+                </View>
+                <QuantityStepper
+                  label={tp('purchasing.form.qty')}
+                  value={line.qty}
+                  onChange={(qty) => onChange(setQty(draft, line.itemId, qty))}
+                  min={1}
+                  max={MAX_LINE_QTY}
+                  decreaseLabel={tp('purchasing.form.decrease')}
+                  increaseLabel={tp('purchasing.form.increase')}
+                  testID={`${testID}.line.${line.itemId}.qty`}
                 />
               </View>
-              <QuantityStepper
-                label={tp('purchasing.form.qty')}
-                value={line.qty}
-                onChange={(qty) => onChange(setQty(draft, line.itemId, qty))}
-                min={1}
-                max={MAX_LINE_QTY}
-                decreaseLabel={tp('purchasing.form.decrease')}
-                increaseLabel={tp('purchasing.form.increase')}
-                testID={`${testID}.line.${line.itemId}.qty`}
-              />
-            </View>
-          ))
+            ))}
+          </Rows>
         )}
       </Section>
 
@@ -215,8 +217,6 @@ const styles = StyleSheet.create({
   line: {
     paddingVertical: space.md,
     gap: space.sm,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   lineTop: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   lineName: { ...type.bodyBold, color: color.text, flex: 1 },

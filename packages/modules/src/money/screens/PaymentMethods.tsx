@@ -17,6 +17,7 @@ import {
   space,
   type,
   Text,
+  Rows,
 } from '@bolusi/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -166,24 +167,26 @@ export function PaymentMethodList({
       >
         {(rows) => (
           <View style={styles.list}>
-            <ListRow
-              primaryText={tm('money.method.cash')}
-              secondaryText={tm('money.methods.cashAlways')}
-              testID={`${testID}.cash`}
-            />
-            {methodsInOrder(rows).map((account) => {
-              const editable = access.mayEdit(account);
-              return (
-                <ListRow
-                  key={account.id}
-                  primaryText={account.name}
-                  secondaryText={methodSummary(account, stores)}
-                  showChevron={editable}
-                  onPress={editable ? () => onOpen(account) : undefined}
-                  testID={`${testID}.row.${account.id}`}
-                />
-              );
-            })}
+            <Rows>
+              <ListRow
+                primaryText={tm('money.method.cash')}
+                secondaryText={tm('money.methods.cashAlways')}
+                testID={`${testID}.cash`}
+              />
+              {methodsInOrder(rows).map((account) => {
+                const editable = access.mayEdit(account);
+                return (
+                  <ListRow
+                    key={account.id}
+                    primaryText={account.name}
+                    secondaryText={methodSummary(account, stores)}
+                    showChevron={editable}
+                    onPress={editable ? () => onOpen(account) : undefined}
+                    testID={`${testID}.row.${account.id}`}
+                  />
+                );
+              })}
+            </Rows>
             {rows.length === 0 ? (
               <EmptyState
                 title={tm('money.methods.none')}
@@ -323,15 +326,17 @@ export function PaymentMethodForm({
             />
             {everyStore ? null : (
               <View style={styles.storeRows}>
-                {storeList.map((store) => (
-                  <ListRow
-                    key={store.id}
-                    primaryText={store.name}
-                    checked={picked.includes(store.id)}
-                    onPress={() => form.togglePicked(store.id)}
-                    testID={`${testID}.store.${store.id}`}
-                  />
-                ))}
+                <Rows>
+                  {storeList.map((store) => (
+                    <ListRow
+                      key={store.id}
+                      primaryText={store.name}
+                      checked={picked.includes(store.id)}
+                      onPress={() => form.togglePicked(store.id)}
+                      testID={`${testID}.store.${store.id}`}
+                    />
+                  ))}
+                </Rows>
                 {form.tried && form.noStore ? (
                   <View style={styles.errorRow} testID={`${testID}.storeError`}>
                     <Icon name="warning" size={size.iconChip} color={color.danger} />

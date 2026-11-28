@@ -20,6 +20,7 @@ import {
   TileGrid,
   ToggleChip,
   type,
+  Rows,
 } from '@bolusi/ui';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -712,20 +713,22 @@ export function AssignStep({
               {tn('repair.assign.none')}
             </Text>
           ) : (
-            rows.map((tech) => (
-              <ListRow
-                key={tech.id}
-                primaryText={tech.name}
-                secondaryText={tn('repair.assign.load', { count: tech.load })}
-                trailing={
-                  tech.id === currentTechnicianId ? (
-                    <Icon name="check" size={size.iconInline} color={color.success} />
-                  ) : undefined
-                }
-                onPress={() => assign(tech.id)}
-                testID={`${testID}.row.${tech.id}`}
-              />
-            ))
+            <Rows>
+              {rows.map((tech) => (
+                <ListRow
+                  key={tech.id}
+                  primaryText={tech.name}
+                  secondaryText={tn('repair.assign.load', { count: tech.load })}
+                  trailing={
+                    tech.id === currentTechnicianId ? (
+                      <Icon name="check" size={size.iconInline} color={color.success} />
+                    ) : undefined
+                  }
+                  onPress={() => assign(tech.id)}
+                  testID={`${testID}.row.${tech.id}`}
+                />
+              ))}
+            </Rows>
           )
         }
       </QueryView>
