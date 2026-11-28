@@ -202,6 +202,8 @@ export const OWNER_ONLY_PERMISSIONS: readonly string[] = [
   AUTH_PERMISSION.auditView,
   // Writing off parts a transfer never delivered closes a shortfall (owner decision 2026-11-25).
   INVENTORY_PERMISSION.settleTransfer,
+  // What parts cost to buy and what the store owes its suppliers (owner decision 2026-11-25).
+  PURCHASING_PERMISSION.bills,
 ];
 
 const BY_ID = new Map(ROLE_ABILITIES.map((ability) => [ability.id, ability]));

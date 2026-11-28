@@ -21,7 +21,7 @@ import {
   opensPurchasing,
   PurchasingRuntimeProvider,
   tp,
-  type OrderFilter,
+  type BelanjaTab,
 } from '@bolusi/modules/purchasing/desktop';
 import {
   AttentionPage,
@@ -214,7 +214,7 @@ export function Counter({
   // Belanja, for whoever orders from suppliers; it picks parts from the same list.
   const purchasing = repair.purchasing;
   const showsPurchasing = opensPurchasing(inventory, purchasing);
-  const [ordersFilter, setOrdersFilter] = useState<OrderFilter>('open');
+  const [ordersFilter, setOrdersFilter] = useState<BelanjaTab>('open');
   // Kiriman, for whoever sends or receives parts between the business's stores.
   const showsTransfers = showsParts && opensTransfers(inventory);
   const [transfersFilter, setTransfersFilter] = useState<TransferFilter>('open');

@@ -1,5 +1,6 @@
 // Belanja on the counter PC: this store's orders to suppliers, the ones still running first, with
-// the selected order open beside them. A new order is F2; the suppliers are a dialog away.
+// the selected order open beside them, and for whoever reads them the suppliers' bills. A new order
+// (or bill, on Tagihan) is F2; the suppliers are a dialog away.
 import { formatDate, t } from '@bolusi/i18n';
 import {
   Button,
@@ -7,19 +8,28 @@ import {
   DataTable,
   OverflowText,
   PageHeader,
-  type Crumb,
   StatePanel,
   Tabs,
   type ColumnDef,
+  type Crumb,
 } from '@bolusi/ui-web';
 import { Plus, ShoppingCart, Store } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { QueryPanel, overlayOpen, typingInField } from '../../screen-kit/desktop/index.js';
+import { opensBills } from '../constants.js';
 import { tp, type PurchasingKey } from '../i18n.js';
 import { STAGE_CHIP } from '../order-form.js';
-import { ORDER_FILTERS, type OrderFilter, type OrderRow } from '../queries.js';
-import { loadOrderPages, usePurchasingQuery } from '../runtime.js';
+import { ORDER_FILTERS, type OrderRow } from '../queries.js';
+import { EMPTY_BILL, type BelanjaTab } from '../bills/bill-form.js';
+import type { BillRow } from '../bills/queries.js';
+import {
+  loadBillPages,
+  loadOrderPages,
+  usePurchasingQuery,
+  usePurchasingRuntime,
+} from '../runtime.js';
+import { BillDialog, BillPane, billColumns } from './bills.js';
 import { OrderDialog, SuppliersDialog } from './dialogs.js';
 import { OrderPane } from './OrderPane.js';
 import { STAGE_ICON } from './stage.js';
@@ -32,16 +42,19 @@ export interface OrdersPageProps {
    * title and the place above it. Without it the page is its place's only page.
    */
   readonly place?: { readonly title: string; readonly trail: readonly Crumb[] } | undefined;
-  /** Running or done, owned by the app so it survives a trip to another page. */
-  readonly filter: OrderFilter;
-  readonly onFilterChange: (filter: OrderFilter) => void;
+  /** Running, done or the bills, owned by the app so it survives a trip to another page. */
+  readonly filter: BelanjaTab;
+  readonly onFilterChange: (filter: BelanjaTab) => void;
 }
 
 export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): React.JSX.Element {
   const [pages, setPages] = useState(1);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [task, setTask] = useState<'none' | 'new' | 'suppliers'>('none');
+  const [task, setTask] = useState<'none' | 'new' | 'newBill' | 'suppliers'>('none');
+  const runtime = usePurchasingRuntime();
+  const readsBills = opensBills(runtime);
+  const bills = readsBills && filter === 'bills';
   const [notice, setNotice] = useState<PurchasingKey | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
   const paneRef = useRef<HTMLDivElement>(null);
@@ -49,10 +62,21 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
 
   const query = usePurchasingQuery(
     async (rt) => {
-      return { filter, ...(await loadOrderPages(rt, filter, pages, PAGE)) };
+      return {
+        filter,
+        ...(await loadOrderPages(rt, filter === 'bills' ? 'open' : filter, pages, PAGE)),
+      };
     },
     `desk.orders:${filter}:${String(pages)}:${String(reloadNonce)}`,
   );
+  const billQuery = usePurchasingQuery(
+    async (rt) => {
+      if (!bills) return { rows: [] as readonly BillRow[], hasMore: false };
+      return loadBillPages(rt, pages, PAGE);
+    },
+    `desk.bills:${String(bills)}:${String(pages)}:${String(reloadNonce)}`,
+  );
+  const loadedBills = billQuery.status === 'ready' ? billQuery.data : null;
   const loaded = query.status === 'ready' ? query.data : null;
   // Offline with the orders not on this PC: nothing to add to or pick from.
   const notHere = query.status === 'error' && query.code === 'NOT_ON_DEVICE';
@@ -73,21 +97,24 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
       if (overlayOpen()) return;
       if (event.key === 'F2') {
         event.preventDefault();
-        if (!notHere) setTask('new');
+        if (!notHere) setTask(bills ? 'newBill' : 'new');
       } else if (event.key === 'Escape' && selectedId !== null && !typingInField(event.target)) {
         closePane();
       }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [selectedId, notHere]);
+  }, [selectedId, notHere, bills]);
 
   const columns = useMemo(orderColumns, []);
+  const columnsOfBills = useMemo(billColumns, []);
   const empty =
     query.status === 'unauthorized' || query.status === 'error' ? (
       <QueryPanel query={query} onRetry={() => setReloadNonce((n) => n + 1)}>
         {() => null}
       </QueryPanel>
+    ) : bills ? (
+      <StatePanel icon={ShoppingCart} title={tp('purchasing.bill.listEmpty')} />
     ) : filter === 'done' ? (
       <StatePanel icon={ShoppingCart} title={tp('purchasing.list.emptyDone')} />
     ) : (
@@ -121,16 +148,26 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
               disabled={notHere}
               data-testid={`${testId}.openSuppliers`}
             />
-            <Button
-              label={tp('purchasing.list.new')}
-              // One filled button in view: with an open pane, its next step is the primary.
-              variant={selectedId === null ? 'primary' : 'secondary'}
-              icon={Plus}
-              shortcut="F2"
-              onClick={() => setTask('new')}
-              disabled={notHere}
-              data-testid={`${testId}.new`}
-            />
+            {bills ? (
+              <Button
+                label={tp('purchasing.bill.new')}
+                variant={selectedId === null ? 'primary' : 'secondary'}
+                icon={Plus}
+                shortcut="F2"
+                onClick={() => setTask('newBill')}
+                data-testid={`${testId}.newBill`}
+              />
+            ) : (
+              <Button
+                label={tp('purchasing.list.new')}
+                variant={selectedId === null ? 'primary' : 'secondary'}
+                icon={Plus}
+                shortcut="F2"
+                onClick={() => setTask('new')}
+                disabled={notHere}
+                data-testid={`${testId}.new`}
+              />
+            )}
           </>
         }
       />
@@ -145,53 +182,104 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
         >
           <div className="flex min-h-0 min-w-0 flex-col">
             <div className="px-6">
-              <Tabs<OrderFilter>
-                items={ORDER_FILTERS.map((value) => ({
-                  value,
-                  label: tp(value === 'open' ? 'purchasing.list.open' : 'purchasing.list.done'),
-                }))}
-                value={filter}
+              <Tabs<BelanjaTab>
+                items={[
+                  ...ORDER_FILTERS.map((value) => ({
+                    value,
+                    label: tp(value === 'open' ? 'purchasing.list.open' : 'purchasing.list.done'),
+                  })),
+                  ...(readsBills
+                    ? [{ value: 'bills' as const, label: tp('purchasing.bill.tab') }]
+                    : []),
+                ]}
+                value={bills ? 'bills' : filter === 'bills' ? 'open' : filter}
                 onChange={(next) => {
                   setPages(1);
+                  setSelectedId(null);
                   onFilterChange(next);
                 }}
                 label={tp('purchasing.list.title')}
                 testId={`${testId}.views`}
               />
             </div>
-            <DataTable
-              rows={stale ? [] : (loaded?.rows ?? [])}
-              columns={columns}
-              getRowId={(row) => row.id}
-              selectedId={selectedId}
-              onSelect={(row) => open(row.id)}
-              onActivate={() => paneRef.current?.querySelector<HTMLElement>('section')?.focus()}
-              bodyRef={tableRef}
-              // Pages load as the table scrolls, so the headers do not sort what is loaded so far.
-              sortable={false}
-              scrollKey={filter}
-              onEndReached={() => {
-                if (loaded?.hasMore === true && !stale) setPages((n) => n + 1);
-              }}
-              loading={query.status === 'loading'}
-              empty={empty}
-              label={tp('purchasing.list.title')}
-              testId={`${testId}.table`}
-            />
+            {bills ? (
+              <DataTable
+                rows={loadedBills?.rows ?? []}
+                columns={columnsOfBills}
+                getRowId={(row) => row.id}
+                selectedId={selectedId}
+                onSelect={(row) => open(row.id)}
+                onActivate={() => paneRef.current?.querySelector<HTMLElement>('section')?.focus()}
+                bodyRef={tableRef}
+                sortable={false}
+                scrollKey="bills"
+                onEndReached={() => {
+                  if (loadedBills?.hasMore === true) setPages((n) => n + 1);
+                }}
+                loading={billQuery.status === 'loading'}
+                empty={
+                  billQuery.status === 'unauthorized' || billQuery.status === 'error' ? (
+                    <QueryPanel query={billQuery} onRetry={() => setReloadNonce((n) => n + 1)}>
+                      {() => null}
+                    </QueryPanel>
+                  ) : (
+                    empty
+                  )
+                }
+                label={tp('purchasing.bill.tab')}
+                testId={`${testId}.bills`}
+              />
+            ) : (
+              <DataTable
+                rows={stale ? [] : (loaded?.rows ?? [])}
+                columns={columns}
+                getRowId={(row) => row.id}
+                selectedId={selectedId}
+                onSelect={(row) => open(row.id)}
+                onActivate={() => paneRef.current?.querySelector<HTMLElement>('section')?.focus()}
+                bodyRef={tableRef}
+                // Pages load as the table scrolls, so the headers do not sort what is loaded so far.
+                sortable={false}
+                scrollKey={filter}
+                onEndReached={() => {
+                  if (loaded?.hasMore === true && !stale) setPages((n) => n + 1);
+                }}
+                loading={query.status === 'loading'}
+                empty={empty}
+                label={tp('purchasing.list.title')}
+                testId={`${testId}.table`}
+              />
+            )}
           </div>
           {selectedId === null ? null : (
             <div
               ref={paneRef}
               className="absolute inset-y-0 right-0 z-10 flex w-[min(440px,100%)] animate-pane-in flex-col shadow-2xl @[1080px]:static @[1080px]:w-auto @[1080px]:shadow-none"
             >
-              <OrderPane
-                // A fresh pane per order: nothing said about the last one carries over.
-                key={selectedId}
-                orderId={selectedId}
-                onClose={closePane}
-                notice={notice}
-                onClearNotice={() => setNotice(null)}
-              />
+              {bills ? (
+                <BillPane
+                  key={selectedId}
+                  billId={selectedId}
+                  onClose={closePane}
+                  notice={notice}
+                  onClearNotice={() => setNotice(null)}
+                />
+              ) : (
+                <OrderPane
+                  // A fresh pane per order: nothing said about the last one carries over.
+                  key={selectedId}
+                  orderId={selectedId}
+                  onClose={closePane}
+                  onOpenBill={(billId) => {
+                    setPages(1);
+                    setNotice(null);
+                    onFilterChange('bills');
+                    setSelectedId(billId);
+                  }}
+                  notice={notice}
+                  onClearNotice={() => setNotice(null)}
+                />
+              )}
             </div>
           )}
         </div>
@@ -205,6 +293,16 @@ export function OrdersPage({ filter, onFilterChange, place }: OrdersPageProps): 
             onFilterChange('open');
             setSelectedId(orderId);
             setNotice(placed ? 'purchasing.done.placed' : 'purchasing.done.drafted');
+          }}
+        />
+      ) : task === 'newBill' ? (
+        <BillDialog
+          start={EMPTY_BILL}
+          onClose={() => setTask('none')}
+          onDone={(billId) => {
+            setTask('none');
+            setSelectedId(billId);
+            setNotice('purchasing.done.billRecorded');
           }}
         />
       ) : task === 'suppliers' ? (
