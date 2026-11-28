@@ -768,6 +768,89 @@ function journey(world: ChainWorld): OpSpec[] {
       }),
       schemaVersion: 3,
     },
+    // pay: commission on at the store, a colleague's salary, a kasbon, a month's pay taken back
+    {
+      type: 'pay.store_commission_set',
+      entityType: 'pay_store',
+      entityId: world.storeId,
+      payload: { commissionPercent: 40 },
+    },
+    {
+      type: 'pay.terms_set',
+      entityType: 'pay_employee',
+      entityId: ASKER,
+      payload: { salary: 2_000_000, commissionPercent: null },
+    },
+    {
+      type: 'pay.advance_granted',
+      entityType: 'pay_advance',
+      entityId: id(0x800),
+      payload: {
+        userId: ASKER,
+        amount: 500_000,
+        account: 'cash',
+        reason: 'Biaya sekolah',
+        installment: 100_000,
+      },
+    },
+    {
+      type: 'pay.advance_settled',
+      entityType: 'pay_repayment',
+      entityId: id(0x801),
+      payload: { userId: ASKER, amount: 50_000, via: 'cash', payoutId: null, note: null },
+    },
+    {
+      type: 'pay.repayment_voided',
+      entityType: 'pay_repayment',
+      entityId: id(0x801),
+      payload: { reason: 'Salah catat' },
+    },
+    {
+      type: 'pay.salary_paid',
+      entityType: 'pay_payout',
+      entityId: id(0x802),
+      payload: {
+        userId: ASKER,
+        month: '2024-09',
+        salary: 2_000_000,
+        commission: 0,
+        deduction: 100_000,
+        repaymentId: id(0x803),
+        paid: 1_900_000,
+        account: 'cash',
+        note: null,
+      },
+    },
+    {
+      type: 'pay.advance_settled',
+      entityType: 'pay_repayment',
+      entityId: id(0x803),
+      payload: { userId: ASKER, amount: 100_000, via: 'salary', payoutId: id(0x802), note: null },
+    },
+    {
+      type: 'pay.payout_voided',
+      entityType: 'pay_payout',
+      entityId: id(0x802),
+      payload: { reason: 'Salah orang' },
+    },
+    {
+      type: 'pay.repayment_voided',
+      entityType: 'pay_repayment',
+      entityId: id(0x803),
+      payload: { reason: 'Salah orang' },
+    },
+    {
+      type: 'pay.commission_adjusted',
+      entityType: 'pay_adjustment',
+      entityId: id(0x804),
+      payload: { userId: ASKER, amount: -10_000, reason: 'Kembali dalam garansi' },
+    },
+    {
+      type: 'pay.advance_voided',
+      entityType: 'pay_advance',
+      entityId: id(0x800),
+      payload: { reason: 'Batal' },
+    },
     opened(cancelledTicket, formatTicketNumber(world.deviceId, 2), id(0x210)),
     {
       type: 'repair.technician_assigned',
@@ -861,7 +944,13 @@ test('every sampled op is accepted and folds on PostgreSQL', async () => {
     userId: ASKER,
     roleId: id(0x5fe),
     roleName: 'cashier',
-    permissionIds: ['approvals.use', 'repair.read', 'repair.quote_change', 'repair.intake'],
+    permissionIds: [
+      'approvals.use',
+      'pay.own',
+      'repair.read',
+      'repair.quote_change',
+      'repair.intake',
+    ],
   });
   // The other store, and the transfer it sent here (another store's device, so not in the journey).
   await db
