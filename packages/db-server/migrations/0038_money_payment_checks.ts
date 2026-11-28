@@ -5,7 +5,7 @@
 // needs no check. Every other transfer, QRIS or EDC payment carries the latest check: matched, or
 // missing with who checked it, until it is voided or checked again. The permission is seeded here
 // and granted to the owners' system-default roles of existing tenants, as provisioning grants it
-// to new ones. Merge after 0038: the migrator refuses an earlier number later.
+// to new ones.
 import { sql, type Kysely } from 'kysely';
 
 const PERMISSION = {
