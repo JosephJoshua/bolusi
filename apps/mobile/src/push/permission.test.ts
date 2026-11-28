@@ -47,7 +47,7 @@ describe('notification permission ask', () => {
     expect(await shouldAskForNotifications(port)).toBe(false);
   });
 
-  test('"Nyalakan" records the answer before the OS prompt, so a failing prompt never nags', async () => {
+  test('"Aktifkan" records the answer before the OS prompt, so a failing prompt never nags', async () => {
     const { port, calls } = fakePort({ failRequest: true });
     await answerNotificationAsk(port, true);
     expect(calls).toEqual(['writeAsked', 'request']);

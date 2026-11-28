@@ -20,7 +20,7 @@ describe('the take step', () => {
   test('says the rest are a search away only once the list is full', () => {
     expect(moreHint({ fitting: [], rest: rows(PICK_LIMIT - 1) })).toBeNull();
     expect(moreHint({ fitting: rows(3), rest: rows(PICK_LIMIT) })).toBe(
-      'Cari untuk lihat sparepart lain.',
+      'Cari untuk melihat sparepart lain.',
     );
   });
 

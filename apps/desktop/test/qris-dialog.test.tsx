@@ -111,7 +111,7 @@ describe('the QR at the counter', () => {
       .mockResolvedValueOnce(charge('waiting'));
     const handlers = show(port({ createCharge, charge: () => new Promise(() => undefined) }));
     expect((await screen.findByTestId('money.desk.qris.failed')).textContent).toContain(
-      'Xendit belum bisa dihubungi',
+      'Xendit belum dapat dihubungi',
     );
     fireEvent.click(screen.getByTestId('money.desk.qris.byHand'));
     expect(handlers.onTakeByHand).toHaveBeenCalledTimes(1);

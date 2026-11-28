@@ -1,14 +1,14 @@
 {
   "action": {
     "archive": "Arsipkan",
-    "attachPhoto": "Lampirkan Foto",
-    "new": "Catatan Baru"
+    "attachPhoto": "Lampirkan foto",
+    "new": "Catatan baru"
   },
   "badge": {
     "archived": "Diarsipkan"
   },
   "confirm": {
-    "archive": "Arsipkan catatan ini? Catatan tidak dihapus, hanya dipindah ke arsip."
+    "archive": "Arsipkan catatan ini? Catatan tidak dihapus."
   },
   "editor": {
     "bodyField": "Isi",
@@ -29,7 +29,7 @@
     "noteArchived": "Catatan diarsipkan"
   },
   "list": {
-    "empty": "Belum ada catatan. Ketuk “Catatan Baru” untuk mulai.",
+    "empty": "Belum ada catatan. Ketuk “Catatan baru” untuk memulai.",
     "emptyArchived": "Belum ada catatan arsip.",
     "title": "Catatan"
   },
