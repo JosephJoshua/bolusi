@@ -258,6 +258,7 @@ export interface MoneyAccounts {
   id: string | null;
   kind: string;
   name: string;
+  roleIdsJson: string | null;
   storeId: string | null;
   storeIdsJson: string | null;
   tenantId: string;
@@ -273,6 +274,7 @@ export interface MoneyEntries {
   documentId: string | null;
   documentKind: string | null;
   documentLabel: string | null;
+  drawer: string | null;
   id: string | null;
   kind: string;
   reason: string | null;
