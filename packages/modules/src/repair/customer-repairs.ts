@@ -8,7 +8,7 @@ import { amountOwed, ticketStatus } from './flows.js';
 import { statusLabel } from './labels.js';
 import type { TicketSummaryRow } from './queries.js';
 
-/** How many of the customer's servisan are read: `listTickets` pages at 100. */
+/** How many of the customer's servisan each read asks for: `listTickets` pages at 100. */
 export const PAST_REPAIRS_LIMIT = 100;
 /** How many show before "Tampilkan semua". */
 export const PAST_REPAIRS_SHOWN = 5;

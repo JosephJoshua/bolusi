@@ -229,14 +229,24 @@ export function useCustomerRepairs(
   customerId: string,
   ticketId: string,
 ): QueryState<readonly TicketSummaryRow[]> {
-  return useRepairQuery(
-    async (rt) =>
-      otherRepairs(
-        (await rt.query('listTickets', { filter: { customerId }, limit: PAST_REPAIRS_LIMIT })).rows,
-        ticketId,
-      ),
-    `customerRepairs:${customerId}:${ticketId}`,
-  );
+  return useRepairQuery(async (rt) => {
+    // Every page, so "Tampilkan semua" lists and counts them all, however regular the customer.
+    let rows: readonly TicketSummaryRow[] = [];
+    let cursor: string | null = null;
+    do {
+      const page: {
+        readonly rows: readonly TicketSummaryRow[];
+        readonly nextCursor: string | null;
+      } = await rt.query('listTickets', {
+        filter: { customerId },
+        limit: PAST_REPAIRS_LIMIT,
+        ...(cursor === null ? {} : { cursor }),
+      });
+      rows = [...rows, ...page.rows];
+      cursor = page.nextCursor;
+    } while (cursor !== null);
+    return otherRepairs(rows, ticketId);
+  }, `customerRepairs:${customerId}:${ticketId}`);
 }
 
 /**
