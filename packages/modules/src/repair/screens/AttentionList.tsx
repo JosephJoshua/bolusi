@@ -11,10 +11,10 @@ import {
   FreshGlow,
   Icon,
   ListRow,
+  Rows,
   Text,
   bleedMargins,
   bleedPadding,
-  border,
   color,
   numeric,
   size,
@@ -117,7 +117,7 @@ export function AttentionList({
                   title={tn('repair.attention.requests', { count: attention.requests.length })}
                   testID={`${testID}.requests`}
                 >
-                  <View style={bleedMargins(bleed)}>
+                  <Rows style={bleedMargins(bleed)}>
                     {attention.requests.map((row) => (
                       <RequestRow
                         key={row.request.id}
@@ -127,7 +127,7 @@ export function AttentionList({
                         testID={`${testID}.request.${row.request.id}`}
                       />
                     ))}
-                  </View>
+                  </Rows>
                 </Section>
               )}
               {lists.length === 0 ? null : (
@@ -136,7 +136,7 @@ export function AttentionList({
                   title={tn('repair.attention.elsewhere')}
                   testID={`${testID}.lists`}
                 >
-                  <View style={bleedMargins(bleed)}>
+                  <Rows style={bleedMargins(bleed)}>
                     {lists.map((list) => (
                       <ListRow
                         key={list.key}
@@ -150,7 +150,7 @@ export function AttentionList({
                         testID={`${testID}.list.${list.key}`}
                       />
                     ))}
-                  </View>
+                  </Rows>
                 </Section>
               )}
             </>
@@ -234,8 +234,6 @@ const styles = StyleSheet.create({
     minHeight: touch.rowMin,
     paddingVertical: space.md,
     gap: space.xs,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
   },
   line: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
   kind: { ...type.bodyBold, color: color.text, flex: 1 },
