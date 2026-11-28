@@ -3,12 +3,13 @@
 import type { Page } from '@playwright/test';
 
 import { expect, shoot as check, test } from './qa';
+import { toServisan } from './shell.js';
 
 type Role = 'owner' | 'counter' | 'storeOwner';
 
 async function openPrices(page: Page, role: Role, tablet = false): Promise<void> {
   await page.goto(`/?screen=repair&state=${role}${tablet ? '&frame=tablet' : ''}`);
-  await expect(page.getByTestId('repair.board')).toBeVisible();
+  await toServisan(page);
   await tap(page, 'repair.sections.prices');
   await expect(page.getByTestId('repair.prices.items')).toBeVisible();
 }
