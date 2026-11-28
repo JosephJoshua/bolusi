@@ -503,14 +503,12 @@ const TicketRow = memo(function TicketRow({
       <FreshGlow id={row.id} testID={`${testID}.fresh`} />
       <View style={styles.rowBody}>
         <View style={repairStyles.row}>
-          <ValueText lines={1} style={[styles.customer, repairStyles.rowText]}>
+          <Text style={[styles.customer, repairStyles.rowText]} testID={`${testID}.customer`}>
             {row.customerName}
-          </ValueText>
+          </Text>
           <Amount value={amount} testID={`${testID}.amount`} />
         </View>
-        <ValueText lines={2} style={styles.details}>
-          {details}
-        </ValueText>
+        <Text style={styles.details}>{details}</Text>
         {reason === null || reason === '' ? null : (
           <ValueText lines={2} style={styles.reason} testID={`${testID}.reason`}>
             {reason}

@@ -36,7 +36,7 @@ import {
 import type { OrderDetailRow, SupplierRow } from '../queries.js';
 import { usePurchasingQuery, usePurchasingRuntime } from '../runtime.js';
 
-function discardCopy(): DiscardCopy {
+export function discardCopy(): DiscardCopy {
   return {
     title: tp('purchasing.discard.title'),
     message: tp('purchasing.discard.message'),

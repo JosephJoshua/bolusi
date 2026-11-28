@@ -7,4 +7,5 @@ export {
 } from '../runtime.js';
 export { PURCHASING_PERMISSION, opensPurchasing } from '../constants.js';
 export type { OrderFilter } from '../queries.js';
+export type { BelanjaTab } from '../bills/bill-form.js';
 export { OrdersPage, type OrdersPageProps } from './OrdersPage.js';

@@ -1,7 +1,8 @@
 /**
  * PurchasingSurface — "Belanja": this store's orders to suppliers and everything reached from them
  * (an order, a new one or a draft being finished, picking its parts, receiving what arrived, the
- * suppliers), as local navigation like PartsSurface: the Belanja section of the Barang place. The
+ * suppliers, and for owners the suppliers' bills), as local navigation like PartsSurface: the
+ * Belanja section of the Barang place. The
  * order being written lives here, so a trip to pick a part or add a supplier comes back to it.
  * While anything is open it publishes a `PlaceStep`, so back closes the open step first.
  */
@@ -12,7 +13,19 @@ import type { DiscardGuard, PlaceStep } from '../../screen-kit/index.js';
 import type { PlaceHeader, ScreenChrome } from '../../screen-kit/screens/views.js';
 import { tp, type PurchasingKey } from '../i18n.js';
 import { EMPTY_ORDER, addLine, draftChanged, draftOf, type OrderDraft } from '../order-form.js';
-import type { OrderDetailRow, OrderFilter, ReceiptCostRow, SupplierRow } from '../queries.js';
+import type { OrderDetailRow, ReceiptCostRow, SupplierRow } from '../queries.js';
+import {
+  EMPTY_BILL,
+  addBillLine,
+  billDraftChanged,
+  billDraftFromOrder,
+  billDraftOf,
+  type BelanjaTab,
+  type BillDraft,
+} from '../bills/bill-form.js';
+import type { BillDetailRow } from '../bills/queries.js';
+import { BillDetail, VoidBillStep } from './BillDetail.js';
+import { BillForm } from './BillForm.js';
 import { PriceStep } from './OrderCosts.js';
 import { OrderDetail } from './OrderDetail.js';
 import { PickPartStep } from '../../inventory/screens/PickPartStep.js';
@@ -27,9 +40,21 @@ interface Writing {
   readonly from: OrderDraft;
 }
 
+/** The bill form open: new (from an order, or on its own), or a bill being corrected. */
+interface BillWriting {
+  readonly billId?: string | undefined;
+  /** Where back leads: the order it was opened from, or the list. */
+  readonly orderId?: string | undefined;
+  readonly from: BillDraft;
+}
+
 type View =
   | { readonly kind: 'list' }
   | { readonly kind: 'order'; readonly orderId: string }
+  | { readonly kind: 'bill'; readonly billId: string }
+  | { readonly kind: 'billForm' }
+  | { readonly kind: 'billPick' }
+  | { readonly kind: 'billVoid'; readonly bill: BillDetailRow }
   | { readonly kind: 'form' }
   | { readonly kind: 'pick' }
   | { readonly kind: 'formSupplier' }
@@ -52,11 +77,13 @@ export function PurchasingSurface({
   onRegisterDiscardGuard,
 }: PurchasingSurfaceProps): React.JSX.Element {
   const [view, setView] = useState<View>({ kind: 'list' });
-  const [filter, setFilter] = useState<OrderFilter>('open');
+  const [filter, setFilter] = useState<BelanjaTab>('open');
   const [notice, setNotice] = useState<PurchasingKey | null>(null);
   const [supplierNotice, setSupplierNotice] = useState<string | null>(null);
   const [writing, setWriting] = useState<Writing | null>(null);
   const [draft, setDraft] = useState<OrderDraft>(EMPTY_ORDER);
+  const [billWriting, setBillWriting] = useState<BillWriting | null>(null);
+  const [billDraft, setBillDraft] = useState<BillDraft>(EMPTY_BILL);
   const guardRef = useRef<DiscardGuard | null>(null);
   const registerGuard = useCallback(
     (guard: DiscardGuard | null): void => {
@@ -75,9 +102,20 @@ export function PurchasingSurface({
     setView(to);
   }, [writing]);
 
+  const closeBillForm = useCallback((): void => {
+    const to: View =
+      billWriting?.billId !== undefined
+        ? { kind: 'bill', billId: billWriting.billId }
+        : billWriting?.orderId !== undefined
+          ? { kind: 'order', orderId: billWriting.orderId }
+          : { kind: 'list' };
+    setBillWriting(null);
+    setView(to);
+  }, [billWriting]);
+
   // On a wide screen the list stays beside the open order. Writing or receiving an order is a task
   // of its own and keeps the whole screen, so a tap on the list never throws away a half-done one.
-  const beside = view.kind === 'list' || view.kind === 'order';
+  const beside = view.kind === 'list' || view.kind === 'order' || view.kind === 'bill';
   const split = useListDetailSplit() && beside;
 
   useEffect(() => {
@@ -88,8 +126,21 @@ export function PurchasingSurface({
     const back = (): void => {
       switch (view.kind) {
         case 'order':
+        case 'bill':
         case 'suppliers':
           setView({ kind: 'list' });
+          return;
+        case 'billForm': {
+          const guard = guardRef.current;
+          if (guard === null) closeBillForm();
+          else guard(closeBillForm);
+          return;
+        }
+        case 'billPick':
+          setView({ kind: 'billForm' });
+          return;
+        case 'billVoid':
+          setView({ kind: 'bill', billId: view.bill.id });
           return;
         case 'form': {
           // A half-written order asks first, through the form's discard sheet.
@@ -115,7 +166,7 @@ export function PurchasingSurface({
     };
     onRegisterPlaceStep?.({ back, listBeside: split });
     return () => onRegisterPlaceStep?.(null);
-  }, [view, split, closeForm, onRegisterPlaceStep]);
+  }, [view, split, closeForm, closeBillForm, onRegisterPlaceStep]);
 
   const openOrder = (orderId: string, done: PurchasingKey | null = null): void => {
     setNotice(done);
@@ -126,10 +177,19 @@ export function PurchasingSurface({
     setDraft(from);
     setView({ kind: 'form' });
   };
+  const openBill = (billId: string, done: PurchasingKey | null = null): void => {
+    setNotice(done);
+    setView({ kind: 'bill', billId });
+  };
+  const writeBill = (writing: BillWriting): void => {
+    setBillWriting(writing);
+    setBillDraft(writing.from);
+    setView({ kind: 'billForm' });
+  };
 
   // The list's header carries the sync chip and the avatar; the pane beside it keeps neither.
   const paneChrome: ScreenChrome = split ? { syncChip: null, avatar: null } : chrome;
-  const openId = view.kind === 'order' ? view.orderId : null;
+  const openId = view.kind === 'order' ? view.orderId : view.kind === 'bill' ? view.billId : null;
 
   const list = (
     <OrderList
@@ -141,6 +201,10 @@ export function PurchasingSurface({
         if (orderId !== openId) openOrder(orderId);
       }}
       onNewOrder={() => write(EMPTY_ORDER)}
+      onOpenBill={(billId) => {
+        if (billId !== openId) openBill(billId);
+      }}
+      onNewBill={() => writeBill({ from: EMPTY_BILL })}
       onOpenSuppliers={() => {
         setSupplierNotice(null);
         setView({ kind: 'suppliers' });
@@ -160,11 +224,28 @@ export function PurchasingSurface({
         onEdit={(order) => write(draftOf(order), order.id)}
         onReceive={(order) => setView({ kind: 'receive', order })}
         onPrice={(line) => setView({ kind: 'price', orderId: view.orderId, line })}
+        onNewBill={(order) => writeBill({ orderId: order.id, from: billDraftFromOrder(order) })}
+        onOpenBill={(billId) => openBill(billId)}
+        notice={notice}
+        onClearNotice={() => setNotice(null)}
+      />
+    ) : view.kind === 'bill' ? (
+      <BillDetail
+        key={view.billId}
+        billId={view.billId}
+        chrome={paneChrome}
+        hideBack={split}
+        onBack={() => setView({ kind: 'list' })}
+        onEdit={(bill) => writeBill({ billId: bill.id, from: billDraftOf(bill, Date.now()) })}
+        onVoid={(bill) => setView({ kind: 'billVoid', bill })}
         notice={notice}
         onClearNotice={() => setNotice(null)}
       />
     ) : split ? (
-      <EmptyState title={tp('purchasing.list.pickOrder')} testID="purchasing.noOrderOpen" />
+      <EmptyState
+        title={tp(filter === 'bills' ? 'purchasing.bill.pickOne' : 'purchasing.list.pickOrder')}
+        testID="purchasing.noOrderOpen"
+      />
     ) : null;
 
   return (
@@ -183,7 +264,52 @@ export function PurchasingSurface({
     switch (view.kind) {
       case 'list':
       case 'order':
+      case 'bill':
         return null;
+      case 'billForm':
+        return (
+          <BillForm
+            chrome={chrome}
+            billId={billWriting?.billId}
+            draft={billDraft}
+            onChange={setBillDraft}
+            onPickPart={() => setView({ kind: 'billPick' })}
+            onDone={(billId) => {
+              const edited = billWriting?.billId !== undefined;
+              setBillWriting(null);
+              openBill(
+                billId,
+                edited ? 'purchasing.done.billSaved' : 'purchasing.done.billRecorded',
+              );
+            }}
+            onCancel={closeBillForm}
+            dirty={billWriting !== null && billDraftChanged(billDraft, billWriting.from)}
+            onRegisterDiscardGuard={registerGuard}
+          />
+        );
+      case 'billPick':
+        return (
+          <PickPartStep
+            chrome={chrome}
+            title={tp('purchasing.pick.title')}
+            testID="purchasing.pick"
+            picked={new Set(billDraft.lines.map((line) => line.itemId))}
+            onPick={(item) => {
+              setBillDraft((now) => addBillLine(now, item));
+              setView({ kind: 'billForm' });
+            }}
+            onCancel={() => setView({ kind: 'billForm' })}
+          />
+        );
+      case 'billVoid':
+        return (
+          <VoidBillStep
+            chrome={chrome}
+            bill={view.bill}
+            onDone={() => openBill(view.bill.id, 'purchasing.done.billVoided')}
+            onCancel={() => setView({ kind: 'bill', billId: view.bill.id })}
+          />
+        );
       case 'receive':
         return (
           <ReceiveStep

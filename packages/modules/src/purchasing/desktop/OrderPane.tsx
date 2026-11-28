@@ -24,24 +24,30 @@ import { INVENTORY_PERMISSION } from '../../inventory/constants.js';
 import type { OrderDetailRow, ReceiptCostRow } from '../queries.js';
 import { OrderCostsSection, PriceDialog } from './costs.js';
 import { useOrderStoreName, usePurchasingQuery, usePurchasingRuntime } from '../runtime.js';
+import { opensBills } from '../constants.js';
+import { billDraftFromOrder } from '../bills/bill-form.js';
+import { BillDialog, OrderBillsSection } from './bills.js';
 import { OrderDialog, ReceiveDialog } from './dialogs.js';
 import { STAGE_ICON } from './stage.js';
 
 export interface OrderPaneProps {
   readonly orderId: string;
   readonly onClose: () => void;
+  /** One of the order's bills, opened in the Tagihan list. */
+  readonly onOpenBill: (billId: string) => void;
   /** What the list's last task did ("Pesanan dipesan."), shown until dismissed. */
   readonly notice: PurchasingKey | null;
   readonly onClearNotice: () => void;
 }
 
 type Task =
-  | { readonly kind: 'none' | 'edit' | 'receive' | 'cancel' }
+  | { readonly kind: 'none' | 'edit' | 'receive' | 'cancel' | 'bill' }
   | { readonly kind: 'price'; readonly line: ReceiptCostRow };
 
 export function OrderPane({
   orderId,
   onClose,
+  onOpenBill,
   notice,
   onClearNotice,
 }: OrderPaneProps): React.JSX.Element {
@@ -50,7 +56,8 @@ export function OrderPane({
   const storeName = useOrderStoreName();
   const [reloadNonce, setReloadNonce] = useState(0);
   const [task, setTaskState] = useState<Task>({ kind: 'none' });
-  const setTask = (kind: 'none' | 'edit' | 'receive' | 'cancel'): void => setTaskState({ kind });
+  const setTask = (kind: 'none' | 'edit' | 'receive' | 'cancel' | 'bill'): void =>
+    setTaskState({ kind });
   const seesCosts = runtime.hasPermission(INVENTORY_PERMISSION.readCost);
   const [done, setDone] = useState<PurchasingKey | null>(null);
   const say = (key: PurchasingKey | null): void => {
@@ -281,6 +288,18 @@ export function OrderPane({
           </ul>
         </Section>
 
+        {opensBills(runtime) && row.stage !== 'draft' ? (
+          <OrderBillsSection
+            order={row}
+            onNewBill={() => {
+              say(null);
+              setTask('bill');
+            }}
+            onOpenBill={onOpenBill}
+            testId={`${testId}.bills`}
+          />
+        ) : null}
+
         {row.receipts.length === 0 || !seesCosts ? null : (
           <OrderCostsSection
             orderId={row.id}
@@ -355,6 +374,17 @@ export function OrderPane({
             onDone={(_, placed) => {
               setTask('none');
               setDone(placed ? 'purchasing.done.placed' : 'purchasing.done.drafted');
+            }}
+          />
+        );
+      case 'bill':
+        return (
+          <BillDialog
+            start={billDraftFromOrder(row)}
+            onClose={() => setTask('none')}
+            onDone={() => {
+              setTask('none');
+              setDone('purchasing.done.billRecorded');
             }}
           />
         );

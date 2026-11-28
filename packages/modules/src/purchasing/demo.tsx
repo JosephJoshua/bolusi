@@ -8,7 +8,8 @@ import { DomainError } from '@bolusi/core';
 
 import { INVENTORY_PERMISSION } from '../inventory/constants.js';
 import type { DemoInventoryRuntime } from '../inventory/demo.js';
-import { PURCHASING_PERMISSION, type OrderStatus } from './constants.js';
+import { PURCHASING_PERMISSION, type BillStatus, type OrderStatus } from './constants.js';
+import { billTotal, type BillDetailRow, type BillRow } from './bills/queries.js';
 import {
   orderStage,
   type OrderDetailRow,
@@ -44,6 +45,23 @@ interface DemoOrder {
   orderedAt: number | null;
   cancelledAt: number | null;
   lines: { itemId: string; name: string; qty: number }[];
+}
+
+interface DemoBill {
+  id: string;
+  billNumber: string;
+  supplierId: string;
+  orderId: string | null;
+  supplierRef: string | null;
+  billedOn: number;
+  dueOn: number | null;
+  charges: number;
+  note: string | null;
+  status: BillStatus;
+  createdAt: number;
+  voidedAt: number | null;
+  voidReason: string | null;
+  lines: { itemId: string; name: string; qty: number; unitPrice: number }[];
 }
 
 type Input = Record<string, unknown>;
@@ -83,6 +101,10 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
   })[] = [];
   let counter = 0;
   const nextNumber = (): string => `PO-W4M-${String((counter += 1)).padStart(4, '0')}`;
+
+  const bills: DemoBill[] = [];
+  let billCounter = 0;
+  const nextBillNumber = (): string => `TG-W4M-${String((billCounter += 1)).padStart(4, '0')}`;
 
   const itemName = async (itemId: string): Promise<string> =>
     (await inventory.query('getItem', { itemId })).rows[0]?.name ?? itemId;
@@ -140,6 +162,92 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
   const named = async (lines: readonly Line[]) =>
     Promise.all(lines.map(async (line) => ({ ...line, name: await itemName(line.itemId) })));
 
+  const billRow = (bill: DemoBill): BillRow => ({
+    id: bill.id,
+    billNumber: bill.billNumber,
+    supplierId: bill.supplierId,
+    supplierName: suppliers.find((s) => s.id === bill.supplierId)?.name ?? '',
+    supplierRef: bill.supplierRef,
+    orderId: bill.orderId,
+    orderNumber: orders.find((o) => o.id === bill.orderId)?.orderNumber ?? null,
+    billedOn: bill.billedOn,
+    dueOn: bill.dueOn,
+    status: bill.status,
+    total: billTotal(bill.lines, bill.charges),
+  });
+  const billDetail = (bill: DemoBill): BillDetailRow => {
+    const order = orders.find((o) => o.id === bill.orderId);
+    const onOrder = order === undefined ? undefined : linesOf(order);
+    return {
+      ...billRow(bill),
+      charges: bill.charges,
+      note: bill.note,
+      createdBy: actor().userId,
+      createdByName: actor().name,
+      createdAt: bill.createdAt,
+      voidedAt: bill.voidedAt,
+      voidedByName: bill.voidedAt === null ? null : actor().name,
+      voidReason: bill.voidReason,
+      lines: bill.lines.map((line) => {
+        const ordered = onOrder?.find((one) => one.itemId === line.itemId);
+        return {
+          itemId: line.itemId,
+          name: line.name,
+          qty: line.qty,
+          unitPrice: line.unitPrice,
+          amount: line.qty * line.unitPrice,
+          ordered: onOrder === undefined ? null : (ordered?.qty ?? null),
+          received: onOrder === undefined ? null : (ordered?.received ?? 0),
+          billedElsewhere: bills
+            .filter((b) => b.id !== bill.id && b.status === 'open' && b.orderId === bill.orderId)
+            .flatMap((b) => b.lines)
+            .filter((l) => l.itemId === line.itemId)
+            .reduce((sum, l) => sum + l.qty, 0),
+        };
+      }),
+    };
+  };
+  const findBill = (billId: unknown): DemoBill => {
+    const bill = bills.find((b) => b.id === billId);
+    if (bill === undefined) throw new DomainError('ENTITY_NOT_FOUND', { entityId: String(billId) });
+    if (bill.status === 'void') throw invalid('billId', 'bill is void');
+    return bill;
+  };
+  /** The bill's details as the commands take them, each part named as the list names it. */
+  const billFields = async (input: Input) => {
+    const ref = typeof input['supplierRef'] === 'string' ? input['supplierRef'].trim() : '';
+    const dueOn = (input['dueOn'] as number | null | undefined) ?? null;
+    if (dueOn !== null && dueOn < Number(input['billedOn'])) {
+      throw invalid('dueOn', 'due before the bill date');
+    }
+    return {
+      supplierId: String(input['supplierId']),
+      orderId: (input['orderId'] as string | null | undefined) ?? null,
+      supplierRef: ref === '' ? null : ref,
+      billedOn: Number(input['billedOn']),
+      dueOn,
+      charges: Number(input['charges'] ?? 0),
+      note: (input['note'] as string | null | undefined) ?? null,
+      lines: await Promise.all(
+        (input['lines'] as { itemId: string; qty: number; unitPrice: number }[]).map(
+          async (line) => ({ ...line, name: await itemName(line.itemId) }),
+        ),
+      ),
+    };
+  };
+  const notaTwice = (
+    fields: { supplierId: string; supplierRef: string | null },
+    id: string | null,
+  ) =>
+    fields.supplierRef !== null &&
+    bills.some(
+      (b) =>
+        b.id !== id &&
+        b.status === 'open' &&
+        b.supplierId === fields.supplierId &&
+        b.supplierRef?.toLowerCase() === fields.supplierRef?.toLowerCase(),
+    );
+
   const receive = (
     order: DemoOrder,
     lines: readonly Line[],
@@ -185,6 +293,26 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
         .filter((o) => ['draft', 'ordered', 'partial'].includes(o.stage) === open)
         .sort((a, b) => b.createdAt - a.createdAt);
       return Promise.resolve({ rows, nextCursor: null });
+    },
+    listBills: (input) => {
+      const rows = bills
+        .filter((b) => input['filter'] !== 'open' || b.status === 'open')
+        .filter(
+          (b) =>
+            input['orderId'] === undefined ||
+            input['orderId'] === null ||
+            b.orderId === input['orderId'],
+        )
+        .sort((a, b) => b.billedOn - a.billedOn || b.createdAt - a.createdAt)
+        .map(billRow);
+      return Promise.resolve({ rows, nextCursor: null });
+    },
+    getBill: (input) => {
+      const bill = bills.find((b) => b.id === input['billId']);
+      return Promise.resolve({
+        rows: bill === undefined ? [] : [billDetail(bill)],
+        nextCursor: null,
+      });
     },
     orderCosts: (input) => {
       if (!actor().permissions.includes(INVENTORY_PERMISSION.readCost)) {
@@ -277,6 +405,35 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
       order.cancelledAt = clock();
       return Promise.resolve({ orderId: order.id });
     },
+    recordBill: async (input) => {
+      const fields = await billFields(input);
+      if (notaTwice(fields, null)) throw invalid('supplierRef', 'already recorded');
+      const bill: DemoBill = {
+        id: newId('bill'),
+        billNumber: nextBillNumber(),
+        ...fields,
+        status: 'open',
+        createdAt: clock(),
+        voidedAt: null,
+        voidReason: null,
+      };
+      bills.push(bill);
+      return { billId: bill.id, billNumber: bill.billNumber };
+    },
+    editBill: async (input) => {
+      const bill = findBill(input['billId']);
+      const fields = await billFields(input);
+      if (notaTwice(fields, bill.id)) throw invalid('supplierRef', 'already recorded');
+      Object.assign(bill, fields);
+      return { billId: bill.id };
+    },
+    voidBill: (input) => {
+      const bill = findBill(input['billId']);
+      bill.status = 'void';
+      bill.voidedAt = clock();
+      bill.voidReason = String(input['reason']).trim();
+      return Promise.resolve({ billId: bill.id });
+    },
     receiveOrder: (input) => {
       const order = find(input['orderId']);
       if (order.status !== 'ordered') throw invalid('orderId', `order is ${order.status}`);
@@ -351,6 +508,75 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
       null,
     );
     await make('sup-1', [[5, 2]], 'ordered', 0);
+    // Bills: the done order's nota on 30 days, the half-in order billed in full ahead of its
+    // parts, a cash buy with no order, and one entered twice and voided.
+    const day = (daysAgo: number): number => {
+      const date = new Date(now - daysAgo * DAY);
+      date.setHours(0, 0, 0, 0);
+      return date.getTime();
+    };
+    const bill = (
+      fields: Omit<
+        DemoBill,
+        'id' | 'billNumber' | 'createdAt' | 'voidedAt' | 'voidReason' | 'status'
+      >,
+      status: BillStatus = 'open',
+    ): void => {
+      bills.push({
+        id: newId('bill'),
+        billNumber: nextBillNumber(),
+        ...fields,
+        status,
+        createdAt: fields.billedOn + 10 * 3_600_000,
+        voidedAt: status === 'void' ? fields.billedOn + 11 * 3_600_000 : null,
+        voidReason: status === 'void' ? 'Nota dicatat dua kali' : null,
+      });
+    };
+    const priced = (order: DemoOrder, prices: readonly number[]) =>
+      order.lines.map((line, i) => ({ ...line, unitPrice: prices[i] ?? 0 }));
+    bill({
+      supplierId: done.supplierId,
+      orderId: done.id,
+      supplierRef: 'INV/MP/2611',
+      billedOn: day(5),
+      dueOn: day(5) + 30 * DAY,
+      charges: 45_000,
+      note: null,
+      lines: priced(done, [185_000, 65_000]),
+    });
+    bill({
+      supplierId: half.supplierId,
+      orderId: half.id,
+      supplierRef: 'SJ-0912',
+      billedOn: day(2),
+      dueOn: day(2) + 14 * DAY,
+      charges: 0,
+      note: 'Nota datang duluan',
+      lines: priced(half, [350_000, 120_000, 25_000]),
+    });
+    bill({
+      supplierId: 'sup-3',
+      orderId: null,
+      supplierRef: null,
+      billedOn: day(1),
+      dueOn: null,
+      charges: 0,
+      note: null,
+      lines: [{ itemId: pick(2).id, name: pick(2).name, qty: 10, unitPrice: 15_000 }],
+    });
+    bill(
+      {
+        supplierId: done.supplierId,
+        orderId: done.id,
+        supplierRef: 'INV/MP/2611-B',
+        billedOn: day(5),
+        dueOn: null,
+        charges: 0,
+        note: null,
+        lines: priced(done, [185_000, 65_000]),
+      },
+      'void',
+    );
     await make(
       'sup-3',
       [
@@ -369,7 +595,10 @@ export function demoPurchasingRuntime(options: DemoPurchasingOptions): Purchasin
     },
     query: async (name: string, input: Input) => {
       await seeded;
-      if (!actor().permissions.includes(PURCHASING_PERMISSION.buy)) {
+      const reads = ['listBills', 'getBill'].includes(name)
+        ? PURCHASING_PERMISSION.bills
+        : PURCHASING_PERMISSION.buy;
+      if (!actor().permissions.includes(reads)) {
         throw new DomainError('PERMISSION_DENIED', {});
       }
       return queries[name]!(input);
