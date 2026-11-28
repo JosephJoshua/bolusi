@@ -59,7 +59,7 @@ it('asks an owner for a cancelled servisan’s fee beyond the manager’s limit'
   fireEvent.change(fee, { target: { value: '90000' } });
   await waitFor(() =>
     expect(byTestId('repair.desk.cancelFee.asks').textContent).toBe(
-      'Melebihi batasmu, jadi perlu persetujuan.',
+      'Melebihi batas Anda, jadi perlu persetujuan.',
     ),
   );
   expect(byTestId('repair.desk.cancelFee.submit').textContent).toBe('Minta persetujuan');

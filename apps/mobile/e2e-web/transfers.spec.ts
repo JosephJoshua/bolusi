@@ -39,7 +39,7 @@ for (const [size, viewport] of Object.entries(SIZES)) {
     await openTransfers(page);
     await expect(rowWith(page, 'Dalam perjalanan')).toBeVisible();
     await expect(rowWith(page, 'Sebagian sampai')).toBeVisible();
-    await expect(rowWith(page, 'Perlu dicek')).toBeVisible();
+    await expect(rowWith(page, 'Perlu diperiksa')).toBeVisible();
     await shoot(page, `${size}-01-list`);
     await rowWith(page, 'Sebagian sampai').click();
     await expect(page.getByTestId('inventory.transfer.stage')).toContainText('Sebagian sampai');
@@ -64,7 +64,7 @@ test('parts sent here are received into stock', async ({ page }) => {
 test('an owner sends parts to another store', async ({ page }) => {
   await openTransfers(page);
   await tap(page, 'inventory.transfers.new');
-  await expect(page.getByText('Pilih toko tujuan dan sparepartnya dulu.')).toBeVisible();
+  await expect(page.getByText('Pilih toko tujuan dan sparepart terlebih dahulu.')).toBeVisible();
   await tap(page, 'inventory.send.store.store-jayapura');
   await tap(page, 'inventory.send.addPart');
   await page.locator('[data-testid^="inventory.send.pick.choice."]').first().click();
@@ -88,7 +88,7 @@ test('what never arrived is settled, and a write-off asks for its reason', async
   await line.locator('[data-testid$=".back"] [aria-label="Kurangi"]').first().click();
   await line.locator('[data-testid$=".lost"] [aria-label="Tambah"]').first().click();
   await expect(page.getByTestId('inventory.settle.reason')).toBeVisible();
-  await expect(page.getByText('Tulis alasannya dulu.')).toBeVisible();
+  await expect(page.getByText('Tulis alasan terlebih dahulu.')).toBeVisible();
   await shoot(page, 'phone-07-settle-lost');
   await page
     .getByTestId('inventory.settle.reason')
@@ -105,7 +105,7 @@ test('what never arrived is settled, and a write-off asks for its reason', async
 
 test('an excess counted in at the other store is settled as arrived', async ({ page }) => {
   await openTransfers(page);
-  await rowWith(page, 'Perlu dicek').click();
+  await rowWith(page, 'Perlu diperiksa').click();
   await expect(page.getByTestId('inventory.transfer.overHint')).toBeVisible();
   await tap(page, 'inventory.transfer.settle');
   await expect(page.getByText('Lebih 1')).toBeVisible();

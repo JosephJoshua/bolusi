@@ -62,8 +62,8 @@ describe('locale round-trip (07-i18n §1)', () => {
     expect(t('auth.pin.attemptsLeft', { count: 3 })).toBe('3 tries left.');
 
     setLocale('id');
-    expect(t('auth.pin.attemptsLeft', { count: 1 })).toBe('Sisa 1 kali coba.');
-    expect(t('auth.pin.attemptsLeft', { count: 3 })).toBe('Sisa 3 kali coba.');
+    expect(t('auth.pin.attemptsLeft', { count: 1 })).toBe('Sisa 1 kali percobaan.');
+    expect(t('auth.pin.attemptsLeft', { count: 3 })).toBe('Sisa 3 kali percobaan.');
   });
 
   it('falls back zh → id, since zh is scaffolded with no catalog (§1, §6)', () => {
@@ -116,7 +116,7 @@ describe('missing keys (07-i18n §6)', () => {
     const instance = initI18n({ locale: 'id', logger: { warn } });
 
     const rendered = instance.t('auth.pin.attemptsLeft' as never, { count: 1 });
-    expect(rendered).toBe('Sisa 1 kali coba.');
+    expect(rendered).toBe('Sisa 1 kali percobaan.');
 
     // A key in no catalog at all: the emergency degradation path.
     const absent = instance.t('auth.pin.neverDefined' as never);

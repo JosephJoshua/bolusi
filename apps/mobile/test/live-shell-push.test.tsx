@@ -590,7 +590,7 @@ function fakeNotificationPermission(asked = false) {
 }
 
 describe('the shell asks for notifications once, after unlock, with the reason first', () => {
-  test('the sheet shows on the work screen and "Nyalakan" opens the OS prompt', async () => {
+  test('the sheet shows on the work screen and "Aktifkan" opens the OS prompt', async () => {
     fixture = await bootFixture();
     const permission = fakeNotificationPermission();
     const screen = await liveShellWithSession(fixture, { notificationPermission: permission.port });

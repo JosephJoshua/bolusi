@@ -97,7 +97,7 @@ describe('the words', () => {
   it('says the phone is ready, where, its number and the total', () => {
     expect(customerMessage('ready', repaired, 'Bolusi Cell Sorong')).toBe(
       [
-        'Halo Kak Yohanes, HP Samsung Galaxy A15 sudah selesai diservis dan bisa diambil di Bolusi Cell Sorong.',
+        'Halo Yohanes, HP Samsung Galaxy A15 sudah selesai diperbaiki dan dapat diambil di Bolusi Cell Sorong.',
         'No. servisan: K7Q-0042',
         'Total: Rp\u00A0950.000',
         'Terima kasih.',
@@ -107,7 +107,7 @@ describe('the words', () => {
 
   it('takes a down payment off what is left to pay', () => {
     const text = customerMessage('ready', { ...repaired, downPayment: 200_000 }, null);
-    expect(text).toContain('bisa diambil.');
+    expect(text).toContain('dapat diambil.');
     expect(text).toContain('DP: Rp\u00A0200.000\nSisa bayar: Rp\u00A0750.000');
   });
 
@@ -139,11 +139,11 @@ describe('the words', () => {
     };
     expect(customerMessage('priceChange', waiting, 'Bolusi Cell')).toBe(
       [
-        'Halo Kak Yohanes, ada perubahan biaya untuk servisan HP Samsung Galaxy A15.',
+        'Halo Yohanes, ada perubahan biaya untuk servisan HP Samsung Galaxy A15.',
         'No. servisan: K7Q-0042',
         '- Ganti baterai: Rp\u00A0300.000',
-        'Total jadi Rp\u00A01.250.000.',
-        'Boleh kami lanjutkan, Kak?',
+        'Total menjadi Rp\u00A01.250.000.',
+        'Bolehkah kami melanjutkan?',
       ].join('\n'),
     );
   });
@@ -188,14 +188,14 @@ describe('the status link', () => {
   it('says the phone was received and where to follow it', () => {
     expect(customerMessage('statusLink', inRepair, 'Bolusi Cell Sorong', SITE)).toBe(
       [
-        'Halo Kak Yohanes, HP Samsung Galaxy A15 sudah kami terima untuk diservis di Bolusi Cell Sorong.',
+        'Halo Yohanes, HP Samsung Galaxy A15 sudah kami terima untuk diperbaiki di Bolusi Cell Sorong.',
         'No. servisan: K7Q-0042',
-        'Pantau statusnya di sini: https://bolusi.id/c/K7M2Q9XA4BRS',
+        'Pantau status servisan di sini: https://bolusi.id/c/K7M2Q9XA4BRS',
         'Terima kasih.',
       ].join('\n'),
     );
     expect(customerMessage('ready', repaired, null, SITE)).toContain(
-      'Pantau statusnya di sini: https://bolusi.id/c/K7M2Q9XA4BRS',
+      'Pantau status servisan di sini: https://bolusi.id/c/K7M2Q9XA4BRS',
     );
     expect(customerMessage('ready', repaired, null)).not.toContain('/c/');
   });
