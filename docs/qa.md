@@ -12,6 +12,9 @@ check is green. Run the fast lanes yourself; ask for the Android run before merg
 | PC app, Electron       | `pnpm --filter @bolusi/desktop e2e` (Linux: `xvfb-run -a`)                                                   | ~2 m |
 | PC layout only         | `pnpm --filter @bolusi/desktop exec playwright test -c e2e/playwright.config.ts layout`                      | <1 m |
 
+Every lane builds first (`tsc -b`, then the app or web bundle), however it is started, so a run
+never checks stale code.
+
 The phone lane runs every spec twice: project `phone` and project `large-font` (system font 1.3x).
 Screenshots land in `apps/mobile/e2e-web/artifacts/<project>/` and `apps/desktop/e2e/artifacts/`.
 Where the installed Chromium does not match the pinned Playwright (cloud containers), set
