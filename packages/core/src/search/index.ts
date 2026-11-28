@@ -13,6 +13,7 @@ export {
   normalizePhone,
   normalizeText,
   prepareDocument,
+  queryWordSimilarity,
   SCORE_PART,
   scoreDocument,
   scorePrepared,
@@ -22,9 +23,14 @@ export {
   type CompiledQuery,
   type PreparedDocument,
   type SearchDocument,
+  type SynonymLookup,
+  type Alternatives,
+  NO_ALTERNATIVES,
   type Words,
 } from './fuzzy.js';
 export { FuzzyIndex, type SearchHit } from './fuzzy-index.js';
+export { SHOP_VOCABULARY } from './shop-vocabulary.js';
+export { DEFAULT_SYNONYMS, Synonyms, type SynonymGroups } from './synonyms.js';
 export {
   searchIndexFor,
   SearchIndexCache,
