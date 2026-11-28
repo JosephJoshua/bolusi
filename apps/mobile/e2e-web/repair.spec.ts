@@ -86,6 +86,19 @@ async function skipSlip(page: Page): Promise<void> {
 /** Pay the handover's line in cash: no method is picked until the counter picks one. */
 const payCash = (page: Page) => tap(page, 'repair.handover.pay.line0.method.cash');
 
+test("a servisan lists the customer's other servisan, each a tap away", async ({ page }) => {
+  await open(page, 'counter');
+  await tap(page, 'repair.board.row.t-1');
+  const past = page.getByTestId('repair.ticket.pastRepairs');
+  await past.scrollIntoViewIfNeeded();
+  await expect(past).toContainText('Oppo A57');
+  await expect(past).toContainText('Baterai cepat habis');
+  await shoot(page, 'past-repairs');
+  await tap(page, 'repair.ticket.pastRepairs.row.t-10');
+  await expect(page.getByTestId('repair.ticket.device')).toContainText('A57');
+  await expect(page.getByTestId('repair.ticket.pastRepairs')).toContainText('Galaxy A14');
+});
+
 test('a misspelled name finds the ticket', async ({ page }) => {
   await open(page, 'counter');
   await fill(page, 'repair.board.search', 'yohanes wenda');

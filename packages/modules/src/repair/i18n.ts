@@ -712,6 +712,8 @@ export const REPAIR_KEYS = [
   'repair.warrantyClaim.of',
   'repair.warrantyClaim.claims',
   'repair.warrantyClaim.open',
+  'repair.pastRepairs.title',
+  'repair.pastRepairs.showAll',
   'repair.warrantyClaim.intakeNote',
   'repair.warrantyClaim.ended',
   'repair.warrantyClaim.replaceTitle',

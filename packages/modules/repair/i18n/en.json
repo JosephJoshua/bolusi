@@ -849,6 +849,10 @@
     "replaceConfirm": "Start claim",
     "sameDevice": "A claim is only for this phone."
   },
+  "pastRepairs": {
+    "title": "This customer’s other servisan",
+    "showAll": "Show all ({count})"
+  },
   "handoverCheck": {
     "customerTried": "Customer tried it",
     "repairWorks": "The repaired part works"

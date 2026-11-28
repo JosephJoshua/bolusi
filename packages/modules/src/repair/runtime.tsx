@@ -7,7 +7,8 @@ import type { ModulePort, PaperSettings, PrintDocument } from '@bolusi/core';
 
 import type { IntakeOptionSettings } from './intake-options.js';
 import type { DeviceModelPhoto } from './device-models.js';
-import type { CancelFees, PrintSettings } from './queries.js';
+import type { CancelFees, PrintSettings, TicketSummaryRow } from './queries.js';
+import { PAST_REPAIRS_LIMIT, otherRepairs } from './customer-repairs.js';
 import type { ApprovalsPort } from '../approvals/runtime.js';
 import type { InventoryRuntime } from '../inventory/runtime.js';
 import type { PurchasingRuntime } from '../purchasing/runtime.js';
@@ -220,6 +221,31 @@ export function useUncollectedLimit(reloadKey = 0): QueryState<{ readonly days: 
     async (rt) => (await rt.query('uncollectedDays', {})).rows[0]!,
     `uncollectedDays:${String(reloadKey)}`,
   );
+}
+
+/** The customer's other servisan in this store, newest first. */
+export function useCustomerRepairs(
+  customerId: string,
+  ticketId: string,
+): QueryState<readonly TicketSummaryRow[]> {
+  return useRepairQuery(async (rt) => {
+    // Every page, so "Tampilkan semua" lists and counts them all, however regular the customer.
+    let rows: readonly TicketSummaryRow[] = [];
+    let cursor: string | null = null;
+    do {
+      const page: {
+        readonly rows: readonly TicketSummaryRow[];
+        readonly nextCursor: string | null;
+      } = await rt.query('listTickets', {
+        filter: { customerId },
+        limit: PAST_REPAIRS_LIMIT,
+        ...(cursor === null ? {} : { cursor }),
+      });
+      rows = [...rows, ...page.rows];
+      cursor = page.nextCursor;
+    } while (cursor !== null);
+    return otherRepairs(rows, ticketId);
+  }, `customerRepairs:${customerId}:${ticketId}`);
 }
 
 /**

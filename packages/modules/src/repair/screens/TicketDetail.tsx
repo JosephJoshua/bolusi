@@ -44,6 +44,7 @@ import {
   type CustomerMessageKind,
 } from '../customer-message.js';
 import { decodeScreenLock, patternSteps } from '../screen-lock.js';
+import { PastRepairs } from './PastRepairs.js';
 import { whatsAppAppUrl, whatsAppUrl } from '../../shared/whatsapp.js';
 import type { QuoteLineRow, TicketDetailRow } from '../queries.js';
 import { rejectedCount, type DiscardGuard, type StepBack } from '../../screen-kit/index.js';
@@ -984,6 +985,13 @@ export function TicketDetail({
                 model={row.deviceModel}
                 repairs={can.work}
                 testID={`${testID}.specs`}
+              />
+
+              <PastRepairs
+                customerId={row.customerId}
+                ticketId={row.id}
+                onOpenTicket={onOpenTicket}
+                testID={`${testID}.pastRepairs`}
               />
 
               <Section title={tn('repair.ticket.history')} testID={`${testID}.history`}>
