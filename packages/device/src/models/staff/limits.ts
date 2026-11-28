@@ -22,6 +22,7 @@ export function limitsText(limits: LimitAmounts): LimitsText {
     priceDrop: String(limits.priceDrop),
     refund: String(limits.refund),
     credit: String(limits.credit),
+    advance: String(limits.advance),
   };
 }
 
@@ -38,13 +39,14 @@ export function acceptsLimitText(text: string): boolean {
   return text.replace(/\D/g, '') === '' || parseLimit(text) !== null;
 }
 
-/** The three amounts once every field is filled in; null while one is empty. */
+/** The amounts once every field is filled in; null while one is empty. */
 export function parseLimits(text: LimitsText): LimitAmounts | null {
   const priceDrop = parseLimit(text.priceDrop);
   const refund = parseLimit(text.refund);
   const credit = parseLimit(text.credit);
-  if (priceDrop === null || refund === null || credit === null) return null;
-  return { priceDrop, refund, credit };
+  const advance = parseLimit(text.advance);
+  if (priceDrop === null || refund === null || credit === null || advance === null) return null;
+  return { priceDrop, refund, credit, advance };
 }
 
 export function sameLimits(a: LimitAmounts, b: LimitAmounts): boolean {
@@ -80,6 +82,7 @@ export const LIMIT_FIELDS = [
   { kind: 'priceDrop', label: 'auth.limits.priceDrop', hint: 'auth.limits.priceDropHint' },
   { kind: 'refund', label: 'auth.limits.refund', hint: 'auth.limits.refundHint' },
   { kind: 'credit', label: 'auth.limits.credit', hint: 'auth.limits.creditHint' },
+  { kind: 'advance', label: 'auth.limits.advance', hint: 'auth.limits.advanceHint' },
 ] as const satisfies readonly {
   readonly kind: LimitKind;
   readonly label: string;

@@ -200,6 +200,7 @@ describe('a limited role’s amounts (the mirror’s `limits`)', () => {
       priceDrop: 50_000,
       refund: 20_000,
       credit: 0,
+      advance: 0,
     });
     expect(snapshot.roles.get(ROLE_STAFF)?.limits?.get(STORE_B)).toBeUndefined();
   });
@@ -215,6 +216,7 @@ describe('a limited role’s amounts (the mirror’s `limits`)', () => {
         priceDrop: 0,
         refund: 0,
         credit: 0,
+        advance: 0,
       });
     }
   });

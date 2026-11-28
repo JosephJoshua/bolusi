@@ -49,6 +49,9 @@ export const PAY_OP = {
   commissionAdjusted: 'pay.commission_adjusted',
 } as const;
 
+/** Kasbon above a Manajer's store limit, asked of an owner (approvals). */
+export const PAY_APPROVAL_KIND = { advance: 'pay.advance' } as const;
+
 export const PAY_PERMISSION = {
   /** Each person's own pay statement. Every role holds it. */
   own: 'pay.own',

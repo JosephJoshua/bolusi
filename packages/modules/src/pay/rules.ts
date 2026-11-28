@@ -59,6 +59,7 @@ export const PAY_REFUSALS = defineRefusals('pay', [
   'zeroAdjustment',
   'writeOffOwners',
   'otherStore',
+  'overLimit',
 ] as const);
 const { refuse } = PAY_REFUSALS;
 
@@ -180,6 +181,16 @@ export const advanceGrantedRule: Rule = async (op, ctx) => {
     throw refuse('installmentAboveAmount', {
       code: 'VALIDATION_FAILED',
       details: { field: 'installment', issue: `at most ${payload.amount}` },
+    });
+  }
+  // A Manajer gives kasbon up to the store's limit; above it an owner decides (approval-kinds.ts).
+  if (!(await ctx.withinLimit(op.userId, PAY_PERMISSION.advances, payload.amount))) {
+    throw refuse('overLimit', {
+      code: 'PERMISSION_DENIED',
+      details: {
+        permissionId: PAY_PERMISSION.advances,
+        issue: `above the limit for ${payload.amount}`,
+      },
     });
   }
 };

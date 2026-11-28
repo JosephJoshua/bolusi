@@ -49,7 +49,12 @@ const OWNER_ROLE = 'role-owner';
 const STORE_OWNER_ROLE = 'role-store-owner';
 const MANAGER_ROLE = 'role-manager';
 /** The manager's limits at the harness store (core authz/limits.ts). */
-export const MANAGER_LIMITS = { priceDrop: 50_000, refund: 30_000, credit: 100_000 } as const;
+export const MANAGER_LIMITS = {
+  priceDrop: 50_000,
+  refund: 30_000,
+  credit: 100_000,
+  advance: 1_000_000,
+} as const;
 // A fixed id, not one from the seeded generator: drawing another would shift every id after it.
 const MANAGER_ID = '0191e000-0000-7000-8000-00000000a11a';
 const P = REPAIR_PERMISSION;

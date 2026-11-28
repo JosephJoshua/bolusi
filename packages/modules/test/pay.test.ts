@@ -354,6 +354,37 @@ describe('kasbon', () => {
       (await h.payQuery('kasbon', { userId: h.technicianId }, h.storeOwnerId)).rows[0],
     ).toMatchObject({ balance: 0 });
   });
+
+  test('a Manajer gives kasbon up to the store limit; above it an owner approves', async () => {
+    const h = await harness(9204);
+    const input = {
+      userId: h.technicianId,
+      amount: 1_500_000,
+      account: 'cash',
+      reason: 'Biaya rumah sakit',
+      installment: 500_000,
+    };
+    await expectRefused(
+      h.pay('giveAdvance', input, h.managerId),
+      'PERMISSION_DENIED',
+      'pay.refusal.overLimit',
+    );
+    // Within the limit is the Manajer's own decision.
+    await h.pay('giveAdvance', { ...input, amount: 1_000_000 }, h.managerId);
+    const { requestId } = (await h.approvals(
+      'requestApproval',
+      { kind: 'pay.advance', input, reason: 'Darurat' },
+      h.managerId,
+    )) as { requestId: string };
+    await expectRefused(
+      h.approvals('approveRequest', { requestId }, h.managerId),
+      'PERMISSION_DENIED',
+    );
+    await h.approvals('approveRequest', { requestId }, h.storeOwnerId);
+    expect(
+      (await h.payQuery('kasbon', { userId: h.technicianId }, h.managerId)).rows[0],
+    ).toMatchObject({ balance: 2_500_000, installment: 1_000_000 });
+  });
 });
 
 describe('monthly pay', () => {

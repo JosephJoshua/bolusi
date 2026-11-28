@@ -21,7 +21,7 @@ afterEach(async () => {
   await h.close();
 });
 
-const AMOUNTS = { priceDrop: 50_000, refund: 25_000, credit: 100_000 };
+const AMOUNTS = { priceDrop: 50_000, refund: 25_000, credit: 100_000, advance: 1_000_000 };
 
 async function setup() {
   const p = await provision(h, {
@@ -68,6 +68,7 @@ test('the owner sets a store’s manager limits; that store’s bundle carries t
     priceDrop: 0,
     refund: 0,
     credit: 0,
+    advance: 0,
   });
   // A role free of limits says so.
   expect(before.find((r) => r.name === 'store_owner')?.limits).toBeNull();
@@ -81,6 +82,7 @@ test('the owner sets a store’s manager limits; that store’s bundle carries t
     priceDrop: 0,
     refund: 0,
     credit: 0,
+    advance: 0,
   });
 
   // A second change replaces the first, and both are audited.

@@ -53,6 +53,8 @@ export const PAY_PERMISSIONS = {
     isDangerous: true,
     decision: true,
     description: 'Can give staff a kasbon (an advance) and take repayments.',
+    // A Manajer's store limit covers one kasbon; above it an owner approves.
+    limit: 'advance',
   },
   [PAY_PERMISSION.pay]: {
     scope: 'store',

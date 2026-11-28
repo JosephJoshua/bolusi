@@ -28,7 +28,8 @@
     "repairCancelFeeCharged": "Change cancellation fee",
     "moneyVoidPayment": "Cancel a payment",
     "moneyRefund": "Give money back",
-    "moneyReduceCharge": "Lower the bill"
+    "moneyReduceCharge": "Lower the bill",
+    "payAdvance": "Kasbon"
   },
   "status": {
     "waiting": "Waiting",

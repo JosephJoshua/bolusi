@@ -28,7 +28,8 @@
     "repairCancelFeeCharged": "Ubah biaya pembatalan",
     "moneyVoidPayment": "Batalkan pembayaran",
     "moneyRefund": "Kembalikan uang",
-    "moneyReduceCharge": "Kurangi tagihan"
+    "moneyReduceCharge": "Kurangi tagihan",
+    "payAdvance": "Kasbon"
   },
   "status": {
     "waiting": "Menunggu",

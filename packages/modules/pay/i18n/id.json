@@ -31,6 +31,7 @@
     "paidNotTotal": "Jumlah dibayar harus gaji ditambah komisi dikurangi cicilan.",
     "zeroAdjustment": "Masukkan jumlah selain nol.",
     "writeOffOwners": "Hanya pemilik yang bisa menghapus kasbon.",
-    "otherStore": "Pengaturan ini milik toko lain."
+    "otherStore": "Pengaturan ini milik toko lain.",
+    "overLimit": "Melebihi batas kasbon Anda. Minta persetujuan pemilik toko."
   }
 }

@@ -31,6 +31,7 @@
     "paidNotTotal": "The amount paid must be salary plus commission minus the installment.",
     "zeroAdjustment": "Enter an amount other than zero.",
     "writeOffOwners": "Only an owner can write off a kasbon.",
-    "otherStore": "This setting belongs to another store."
+    "otherStore": "This setting belongs to another store.",
+    "overLimit": "Above your kasbon limit. Ask a store owner to approve it."
   }
 }

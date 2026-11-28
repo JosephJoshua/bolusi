@@ -254,6 +254,7 @@ export const DeviceBundleSchema = z
               priceDrop: zLimitAmount,
               refund: zLimitAmount,
               credit: zLimitAmount,
+              advance: zLimitAmount,
             })
             .strict()
             .nullable()
@@ -330,7 +331,7 @@ export type PutPinVerifierReq = z.infer<typeof PutPinVerifierReq>;
 /** The highest limit a store can set, in rupiah: the largest price line a servisan takes. */
 export const ROLE_LIMIT_MAX = 1_000_000_000_000;
 const zRoleLimit = z.number().int().min(0).max(ROLE_LIMIT_MAX);
-/** A limited role's three amounts at one store, replacing what was there. */
+/** A limited role's amounts at one store, replacing what was there. */
 export const PutRoleLimitsReq = z
   .object({
     storeId: z.string().uuid(),
@@ -338,6 +339,7 @@ export const PutRoleLimitsReq = z
     priceDrop: zRoleLimit,
     refund: zRoleLimit,
     credit: zRoleLimit,
+    advance: zRoleLimit,
   })
   .strict();
 export type PutRoleLimitsReq = z.infer<typeof PutRoleLimitsReq>;

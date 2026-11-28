@@ -184,6 +184,7 @@ export const LIMITED_ABILITIES = [
   'moneyRefund',
   'moneyVoid',
   'moneyCredit',
+  'payKasbon',
 ] as const satisfies readonly RoleAbilityId[];
 
 /**

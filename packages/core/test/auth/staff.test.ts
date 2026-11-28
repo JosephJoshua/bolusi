@@ -81,7 +81,7 @@ const ROLES: DeviceBundle['rolesSnapshot'] = [
     scopeType: 'store',
     isSystemDefault: true,
     permissionIds: ['repair.read', 'repair.discount'],
-    limits: { priceDrop: 50_000, refund: 0, credit: 100_000 },
+    limits: { priceDrop: 50_000, refund: 0, credit: 100_000, advance: 0 },
   },
   {
     id: 'r-staff',

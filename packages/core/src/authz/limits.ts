@@ -12,14 +12,19 @@
 // Platform-free: imports only sibling authz types.
 
 /** The kinds of limit a store sets for a limited role. */
-export const LIMIT_KINDS = ['priceDrop', 'refund', 'credit'] as const;
+export const LIMIT_KINDS = ['priceDrop', 'refund', 'credit', 'advance'] as const;
 export type LimitKind = (typeof LIMIT_KINDS)[number];
 
 /** A limited role's amounts at one store, in rupiah. */
 export type LimitAmounts = Readonly<Record<LimitKind, number>>;
 
 /** Every kind at Rp 0: what a limited role may do before its store sets anything. */
-export const NO_LIMIT_AMOUNTS: LimitAmounts = Object.freeze({ priceDrop: 0, refund: 0, credit: 0 });
+export const NO_LIMIT_AMOUNTS: LimitAmounts = Object.freeze({
+  priceDrop: 0,
+  refund: 0,
+  credit: 0,
+  advance: 0,
+});
 
 /**
  * How far someone may use a permission: not at all, or up to `limit` rupiah per servisan, where a

@@ -181,9 +181,22 @@ export async function up(db: Kysely<unknown>): Promise<void> {
     SELECT id, 'pay.advances', tenant_id FROM roles WHERE name = 'manager' AND is_system_default
     ON CONFLICT DO NOTHING
   `.execute(db);
+
+  // A kasbon above a limited role's store limit needs an owner, so a store sets that amount too.
+  await sql`ALTER TABLE role_limits DROP CONSTRAINT role_limits_kind_check`.execute(db);
+  await sql`
+    ALTER TABLE role_limits ADD CONSTRAINT role_limits_kind_check
+      CHECK (kind IN ('priceDrop', 'refund', 'credit', 'advance'))
+  `.execute(db);
 }
 
 export async function down(db: Kysely<unknown>): Promise<void> {
+  await sql`DELETE FROM role_limits WHERE kind = 'advance'`.execute(db);
+  await sql`ALTER TABLE role_limits DROP CONSTRAINT role_limits_kind_check`.execute(db);
+  await sql`
+    ALTER TABLE role_limits ADD CONSTRAINT role_limits_kind_check
+      CHECK (kind IN ('priceDrop', 'refund', 'credit'))
+  `.execute(db);
   for (const permission of PERMISSIONS) {
     await sql`DELETE FROM role_permissions WHERE permission_id = ${permission.id}`.execute(db);
     await sql`DELETE FROM permissions WHERE id = ${permission.id}`.execute(db);

@@ -23,7 +23,7 @@ const preset = (id: string, key: keyof typeof PRESET_ROLE_ABILITIES): StaffRole 
   custom: false,
   permissionIds: permissionsFor(new Set(PRESET_ROLE_ABILITIES[key])),
   ownerRole: false,
-  limits: key === 'manager' ? { priceDrop: 0, refund: 0, credit: 0 } : null,
+  limits: key === 'manager' ? { priceDrop: 0, refund: 0, credit: 0, advance: 0 } : null,
 });
 const SENIOR: StaffRole = {
   ...preset('r-senior', 'cashier'),

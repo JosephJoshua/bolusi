@@ -44,6 +44,7 @@ import { notesModule } from './notes/manifest.js';
 import { payModule } from './pay/manifest.js';
 import { purchasingModule } from './purchasing/manifest.js';
 import { purchaseReceiptSource } from './purchasing/stock-source.js';
+import { payApprovalKinds } from './pay/approval-kinds.js';
 import { repairApprovalKinds } from './repair/approval-kinds.js';
 import { repairModule } from './repair/manifest.js';
 import { REPAIR_DOCUMENT_KIND, repairMoneyDocument } from './repair/money-document.js';
@@ -75,6 +76,7 @@ export const moneyModule = createMoneyModule(moneyDocumentSources);
 export const approvalsModule: ApprovalsModule = createApprovalsModule({
   ...repairApprovalKinds,
   ...createMoneyApprovalKinds(moneyDocumentSources),
+  ...payApprovalKinds,
 });
 
 /**

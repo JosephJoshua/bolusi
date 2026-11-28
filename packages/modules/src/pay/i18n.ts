@@ -37,6 +37,7 @@ export const PAY_KEYS = [
   'pay.refusal.zeroAdjustment',
   'pay.refusal.writeOffOwners',
   'pay.refusal.otherStore',
+  'pay.refusal.overLimit',
 ] as const;
 
 export type PayKey = (typeof PAY_KEYS)[number];
