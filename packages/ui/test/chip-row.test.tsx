@@ -64,7 +64,7 @@ describe('SegmentedControl in a scrolling row', () => {
       size="compact"
       options={[
         { value: 'active', label: 'Aktif' },
-        { value: 'mine', label: 'Tugasku' },
+        { value: 'mine', label: 'Tugas saya' },
         { value: 'unassigned', label: 'Belum ada teknisi' },
         { value: 'approvals', label: 'Persetujuan (2)' },
       ]}

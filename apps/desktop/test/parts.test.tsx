@@ -124,7 +124,7 @@ describe('parts on the PC', () => {
     await waitFor(() => expect(screen.queryByTestId('inventory.desk.count')).toBeNull());
     await waitFor(() => expect(byTestId('inventory.desk.part.stock').textContent).toBe('7'));
     expect(screen.getByText('Stok dikoreksi.')).toBeTruthy();
-    expect(byTestId('inventory.desk.part.history').textContent).toContain('Dikoreksi jadi 7');
+    expect(byTestId('inventory.desk.part.history').textContent).toContain('Dikoreksi menjadi 7');
   });
 
   it('adds an item with its stock and opens it beside the list', async () => {
@@ -134,7 +134,7 @@ describe('parts on the PC', () => {
     await screen.findByTestId('inventory.desk.form');
     // Without a category the name is typed.
     fireEvent.click(byTestId('inventory.desk.form.submit'));
-    expect(await screen.findByText('Tulis nama barangnya dulu.')).toBeTruthy();
+    expect(await screen.findByText('Tulis nama barang terlebih dahulu.')).toBeTruthy();
     fireEvent.change(byTestId('inventory.desk.form.name'), {
       target: { value: 'Lem T7000 50 ml' },
     });

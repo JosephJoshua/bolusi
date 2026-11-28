@@ -263,7 +263,7 @@ describe('video player', () => {
       .mockResolvedValueOnce({ kind: 'ready', url: 'blob:arrived' });
     void dialogs.capture.play({ title: 'Video kepemilikan' }, load);
     expect((await screen.findByTestId('desktop.videoPlayer.problem')).textContent).toContain(
-      'belum tersinkron',
+      'belum disinkronkan',
     );
     fireEvent.click(screen.getByTestId('desktop.videoPlayer.retry'));
     expect(await screen.findByTestId('desktop.videoPlayer.video')).not.toBeNull();
@@ -468,7 +468,7 @@ describe('phone handoff', () => {
     );
     act(() => handoff.emit({ id: 'h5', type: 'paired' }));
     expect((await screen.findByTestId('desktop.handoff.onPhone')).textContent).toContain(
-      'Rekam videonya di HP',
+      'Rekam video di HP',
     );
     const clip = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]);
     act(() => handoff.emit({ id: 'h5', type: 'video', seq: 1, bytes: clip, mime: 'video/webm' }));

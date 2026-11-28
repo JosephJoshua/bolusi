@@ -152,7 +152,7 @@ describe('handing the phone back', () => {
     expect(event.detail).toEqual({ note: 'Casing diambil minggu depan', checklist });
     expect(eventNote(event.detail)).toBe(
       [
-        'Dicek: Sudah dicoba pelanggan, Bagian yang diperbaiki berfungsi, Charger',
+        'Diperiksa: Sudah dicoba pelanggan, Bagian yang diperbaiki berfungsi, Charger',
         'Belum: Casing',
         'Casing diambil minggu depan',
       ].join('\n'),

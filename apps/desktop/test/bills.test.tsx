@@ -97,7 +97,9 @@ describe('supplier bills on the PC', () => {
     fireEvent.keyDown(window, { key: 'F2' });
     await screen.findByTestId('purchasing.desk.billForm');
     expect(byTestId('purchasing.desk.billForm.submit')).toHaveProperty('disabled', true);
-    expect(byTestId('purchasing.desk.billForm.hint').textContent).toBe('Pilih supplier dulu.');
+    expect(byTestId('purchasing.desk.billForm.hint').textContent).toBe(
+      'Pilih supplier terlebih dahulu.',
+    );
     fireEvent.click(await screen.findByRole('radio', { name: /Toko Abadi/ }));
     const search = byTestId('purchasing.desk.billForm.part.search');
     fireEvent.change(search, { target: { value: '6941059648208' } });

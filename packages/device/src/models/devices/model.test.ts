@@ -81,7 +81,7 @@ describe('deviceList', () => {
 describe('the block confirmation', () => {
   test('names the last sync and that unsent changes go too', () => {
     const [row] = deviceList([device({ id: 'd-a' })], context).active;
-    expect(blockConsequence(row!)).toMatch(/^Terakhir disinkronkan .+belum terkirim\.$/);
+    expect(blockConsequence(row!)).toMatch(/^Terakhir disinkronkan .+belum disinkronkan\.$/);
     const [never] = deviceList([device({ id: 'd-b', lastSyncAt: null })], context).active;
     expect(blockConsequence(never!)).toBe(
       'Belum pernah disinkronkan. Saat terhubung, semua datanya dihapus.',

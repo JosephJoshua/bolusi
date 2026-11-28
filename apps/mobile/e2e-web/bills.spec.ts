@@ -40,7 +40,7 @@ test('the Tagihan list, and a bill billed ahead of its parts', async ({ page }) 
 test('an owner records a bill on its own, with terms and ongkir', async ({ page }) => {
   await openBills(page);
   await tap(page, 'purchasing.orders.newBill');
-  await expect(page.getByText('Pilih supplier dulu.')).toBeVisible();
+  await expect(page.getByText('Pilih supplier terlebih dahulu.')).toBeVisible();
   await tap(page, 'purchasing.billForm.supplier.sup-3');
   await tap(page, 'purchasing.billForm.addPart');
   await page.locator('[data-testid^="purchasing.pick.choice."]').first().click();
@@ -81,7 +81,7 @@ test('voiding a bill asks why, and keeps it in the history', async ({ page }) =>
   await openBills(page);
   await billWith(page, 'Toko Abadi').click();
   await tap(page, 'purchasing.bill.voidBill');
-  await expect(page.getByText('Tulis alasannya dulu.')).toBeVisible();
+  await expect(page.getByText('Tulis alasan terlebih dahulu.')).toBeVisible();
   await page.getByTestId('purchasing.voidBill.reason.field').first().fill('Salah supplier');
   await shoot(page, '07-void');
   await page.getByText('Batalkan tagihan', { exact: true }).last().click();
