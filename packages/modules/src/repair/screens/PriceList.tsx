@@ -8,7 +8,6 @@ import { formatMoney, t, translateErrorCode } from '@bolusi/i18n';
 import {
   AppShell,
   Banner,
-  border,
   Button,
   ChipRow,
   color,
@@ -227,6 +226,7 @@ export function PriceList({
         keyExtractor={(row) => row.id}
         onEndReached={loaded?.hasMore === true ? () => setPages((n) => n + 1) : undefined}
         renderRow={renderRow}
+        edgeToEdge
         testID={`${testID}.items`}
       />
     </AppShell>
@@ -308,8 +308,6 @@ const styles = StyleSheet.create({
     marginHorizontal: -space.lg,
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: color.border,
     backgroundColor: color.surface,
   },
   rowText: { flex: 1 },
